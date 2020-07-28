@@ -24,8 +24,8 @@ export interface StringNode       extends MatcherNode  { type: "string",    toke
 export interface StringTextNode   extends Node         { type: "text",      value: string }
 export interface StringEscapeNode extends Node         { type: "escape",    value: string }
                                           
-export interface BackRefNode      extends Node { type: "backref",   id: string }
-export interface SplatNode        extends Node { type: "splat",     backrefs: ValueNode[] }
+export interface BackRefNode      extends Node { type: "backref",   index: string }
+export interface SplatNode        extends Node { type: "splat",     backrefs: BackRefNode[] }
 export interface ObjectNode       extends Node { type: "object",    members: Member[] }
 export interface ArrayNode        extends Node { type: "array",     elements: ValueNode[] }
 export interface NumberNode       extends Node { type: "number",    value: string }

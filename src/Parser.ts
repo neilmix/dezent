@@ -1,13 +1,27 @@
+// todo:
+// - parse error line number and position (best match)
+// - package license
+// - node position for post-parse error messages (e.g. NonArraySplat)
+// - object <-> splats
+// - packrat parsing
+
+// speculative todo:
+// - error recovery
+
 import { 
     Grammar, dezentGrammar, DefineNode, ReturnNode, 
     ContextNode, RuleNode, OptionNode, RepeaterNode, CaptureNode, PartNode, 
-    ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, StringTextNode, StringEscapeNode, NumberNode, BooleanNode, NullNode
+    ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, 
+    StringTextNode, StringEscapeNode, NumberNode, BooleanNode
  } from "./Grammar";
 
 export enum ErrorCode {
     DuplicateDefine = 1001,
     MultipleReturn = 1002,
     RuleNotFound = 1003,
+    BackRefNotFound = 1004,
+    NonArraySplat = 1005,
+    SplatArraySizeMismatch = 1006,
     ArrayOverrun = 2001,
     MismatchOutputFrames = 2002,
     CaptureAlreadyInProgress = 2003,
@@ -19,6 +33,9 @@ const errorMessages = {
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
+    1004: "Back reference does not exist: $$1",
+    1005: "Back reference used in splat is not an array: $$1",
+    1006: "All arrays in a splat must be of the same length",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -58,11 +75,54 @@ export function parseTextWithGrammar(grammar:Grammar, text:string) : any {
     let parser = new Parser(ret, text, defines);
     parser.parse();
 
-    let builders = {
-        backref: null,
-        splat: null,
-        object: null,
-        array: null,
+    let builders:any = {
+        backref: (node:BackRefNode, backrefs:OutputToken[]) => {
+            if (!backrefs[node.index]) {
+                grammarError(ErrorCode.BackRefNotFound, node.index);
+            } else {
+               return buildOutput(backrefs[node.index]);
+            }
+        },
+        splat: (node:SplatNode, backrefs:OutputToken[]) => {
+            let resolved = [];
+            for (let ref of node.backrefs) {
+                let res = this.backref(node, backrefs);
+                if (!Array.isArray(res)) {
+                    grammarError(ErrorCode.NonArraySplat, ref.index);
+                }
+                resolved.push(res);
+            }
+            for (let i = 1; i < resolved.length; i++) {
+                if (resolved[i-1].length != resolved[i].length) {
+                    grammarError(ErrorCode.SplatArraySizeMismatch);
+                }
+            }
+            let ret = [];
+            for (let i = 0; i < resolved[0].length; i++) {
+                for (let j = 0; j < resolved.length; j++) {
+                    ret.push(resolved[j][i]);
+                }
+            }
+            return ret;
+        },
+        object: (node:ObjectNode, backrefs:OutputToken[]) => {
+            let ret = {};
+            for (let member of node.members) {
+                ret[this[member.name.type](member.name, backrefs)] = this[member.value.type](member.value, backrefs);
+            }
+            return ret;
+        },
+        array: (node:ArrayNode, backrefs:OutputToken[]) => {
+            let ret = [];
+            for (let elem of node.elements) {
+                if (elem.type == "splat") {
+                    ret = ret.concat(this.splat(elem, backrefs));
+                } else {
+                    ret.push(this[elem.type], backrefs);
+                }
+            }
+            return ret;
+        },
         string: (node:StringNode) => {
             return buildString(node);
         },
@@ -213,8 +273,6 @@ class Parser {
     defines: {[key:string]:DefineNode};
     output : OutputContext = new OutputContext();
 
-    get top():ParseContextFrame|null { return this.stack[this.stack.length-1] }
-
     constructor(root:ReturnNode, text:string, defines:{[key:string]:DefineNode}) {
         this.text = text;
         this.defines = defines;
@@ -226,7 +284,7 @@ class Parser {
             // find the next part
             let part;
             PART: while (true) {
-                let current = this.top;
+                let current = this.top();
                 if (current.index >= current.items.length) {
                     parserError(ErrorCode.ArrayOverrun);
                 } else {
@@ -267,9 +325,9 @@ class Parser {
                             }
                         }
                     }
-                    let consumed = part.match(this.text.substr(this.top.pos));
+                    let consumed = part.match(this.text.substr(this.top().pos));
                     if (consumed >= 0) {
-                        let current = this.top;
+                        let current = this.top();
                         this.output.addToken(current.pos, consumed);
                         current.pos += consumed;
                         if (current.index >= current.items.length - 1) {
@@ -288,7 +346,7 @@ class Parser {
     }
 
     enter(node:ContextNode) {
-        let current = this.top;
+        let current = this.top();
         let items;
 
         switch (node.type) {
@@ -346,7 +404,7 @@ class Parser {
                     break;
             }
 
-            let current = this.top;
+            let current = this.top();
             if (success) {
                 if (current.node.type in ["group", "capture"] && (<RepeaterNode>current.node).repeat in ["*","+"]) {
                     current.index = 0;
@@ -359,6 +417,10 @@ class Parser {
                 }
             }
         }
+    }
+
+    top() : ParseContextFrame|null { 
+        return this.stack[this.stack.length-1] 
     }
 }
 

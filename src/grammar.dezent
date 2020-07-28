@@ -57,7 +57,7 @@ value = { backref | object | array | string | number | boolean | null }
 	-> $1;
 
 backref = "$" { /\d+/ } 
-	-> { type: "backref", id: $1 };
+	-> { type: "backref", index: $1 };
 
 splat = 
 	"..." {backref} -> { type: "splat", backrefs: [$1] },

@@ -1,0 +1,25 @@
+{
+  "name": "dezent",
+  "version": "0.8.0",
+  "description": "Parsing with the power of regular expressions plus recursion, readability, and structure.",
+  "main": "???",
+  "scripts": {
+    "test": "npm run compile && jest",
+    "test-debug": "npm run compile-debug && node --inspect-brk=5858 ./node_modules/.bin/jest Test.js --runInBand",
+    "compile": "tsc src/*.ts --outDir ./",
+    "compile-debug": "tsc src/*.ts --inlineSourceMap --outDir .",
+    "clean": "rm *.js"
+  },
+  "author": "Neil Mix <neilmix@gmail.com>",
+  "license": "???",
+  "devDependencies": {
+    "@types/jest": "^23.3.2",
+    "jest": "^23.6.0"
+  },
+  "dependencies": {
+    "@types/node": "^9.6.31"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  }
+}
