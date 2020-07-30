@@ -61,7 +61,7 @@ backref = "$" { /\d+/ }
 
 splat = 
 	"..." {backref} -> { type: "splat", backrefs: [$1] },
-	"...(" _ {backref} ( _ "," _ {backref} )* _ ")" -> { type: "splat", backrefs: [$1, ...$2];
+	"...(" _ {backref} ( _ "," _ {backref} )* _ ")" -> { type: "splat", backrefs: [$1, ...$2] };
 
 object = "{" ( _ {member} _ "," )* _ {member}? _ "}" 
 	-> { type: "object", members: [...$1, $2] };
@@ -75,11 +75,11 @@ array = "[" ( _ {value|splat} _ "," )* _ {value}? _ "]"
 string = /"/ {escape|stringText}* /"/ 
 	-> { type: "string", tokens: $1 };
 
-stringText = /[^"\\\n]+/ 
-	-> { type: "text", value: $0 };
+stringText = { /[^"\\\n]+/ } 
+	-> { type: "text", value: $1 };
 
-number = /-?\d+(\.\d+)?([eE][-+]\d+)?/ 
-	-> { type: "number", value: $0 };
+number = { /-?\d+(\.\d+)?([eE][-+]\d+)?/ }
+	-> { type: "number", value: $1 };
 
 boolean =
 	"true"  -> { type: "boolean", value: true },
@@ -93,5 +93,5 @@ escape = /\\(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/
 
 repeat = { "*" | "+" | "?" } -> $1;
 
-identifier = /[_a-zA-Z][_a-zA-Z0-9]*/ 
-	-> $0;
+identifier = { /[_a-zA-Z][_a-zA-Z0-9]*/ }
+	-> $1;

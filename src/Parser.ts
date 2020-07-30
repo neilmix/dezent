@@ -1,12 +1,17 @@
 // todo:
 // - parse error line number and position (best match)
-// - package license
-// - node position for post-parse error messages (e.g. NonArraySplat)
 // - object <-> splats
+// - command line script
+// - node position for post-parse error messages (e.g. NonArraySplat)
+// - performance/scale testing
+// - package license
+// - release?
 // - packrat parsing
+// - $0
 
 // speculative todo:
 // - error recovery
+// - chunked parsing
 
 import { 
     Grammar, dezentGrammar, DefineNode, ReturnNode, 
@@ -16,17 +21,19 @@ import {
  } from "./Grammar";
 
 export enum ErrorCode {
-    DuplicateDefine = 1001,
-    MultipleReturn = 1002,
-    RuleNotFound = 1003,
-    BackRefNotFound = 1004,
-    NonArraySplat = 1005,
-    SplatArraySizeMismatch = 1006,
-    ArrayOverrun = 2001,
-    MismatchOutputFrames = 2002,
+    DuplicateDefine          = 1001,
+    MultipleReturn           = 1002,
+    RuleNotFound             = 1003,
+    BackRefNotFound          = 1004,
+    NonArraySplat            = 1005,
+    SplatArraySizeMismatch   = 1006,
+    MissingReturnNode        = 1007,
+
+    ArrayOverrun             = 2001,
+    MismatchOutputFrames     = 2002,
     CaptureAlreadyInProgress = 2003,
-    MismatchEndCapture = 2004,
-    EmptyOutput = 2005,
+    MismatchEndCapture       = 2004,
+    EmptyOutput              = 2005,
 }
 
 const errorMessages = {
@@ -36,6 +43,7 @@ const errorMessages = {
     1004: "Back reference does not exist: $$1",
     1005: "Back reference used in splat is not an array: $$1",
     1006: "All arrays in a splat must be of the same length",
+    1007: "Grammar does not contain a return rule",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -71,10 +79,15 @@ export function parseTextWithGrammar(grammar:Grammar, text:string) : any {
         }
     }
 
+    if (!ret) {
+        grammarError(ErrorCode.MissingReturnNode);
+    }
+
     // now parse
     let parser = new Parser(ret, text, defines);
     parser.parse();
 
+    // build our output value
     let builders:any = {
         backref: (node:BackRefNode, backrefs:OutputToken[]) => {
             if (!backrefs[node.index]) {
@@ -137,7 +150,6 @@ export function parseTextWithGrammar(grammar:Grammar, text:string) : any {
         },
     };
 
-    // build our output value
     return buildOutput(parser.output.result);
 
     function buildOutput(token:OutputToken) {
@@ -234,10 +246,12 @@ class OutputContext {
     }
 
     addTokenObject(token:OutputToken) {
-        if (this.top) {
-            this.top.captures[this.top.captureMap[this.top.captureNode.id]].push(token);
-        } else {
+        if (!this.top) {
+            // parsing is complete
             this.result = token;
+        } else if (this.top && this.top.captureNode) {
+            // store our result, but only if capturing
+            this.top.captures[this.top.captureMap[this.top.captureNode.id]].push(token);
         }
     }
 
@@ -280,7 +294,7 @@ class Parser {
     }
 
     parse() {
-        while (true) {
+        while (this.stack.length) {
             // find the next part
             let part;
             PART: while (true) {
@@ -405,7 +419,7 @@ class Parser {
             }
 
             let current = this.top();
-            if (success) {
+            if (current && success) {
                 if (current.node.type in ["group", "capture"] && (<RepeaterNode>current.node).repeat in ["*","+"]) {
                     current.index = 0;
                     current.matchCount++;
