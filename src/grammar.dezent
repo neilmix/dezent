@@ -66,8 +66,9 @@ splat =
 object = "{" ( _ {member} _ "," )* _ {member}? _ "}" 
 	-> { type: "object", members: [...$1, $2] };
 
-member = {backref|string} _ ":" _ {value} 
-	-> { name: $1, value: $2 },
+member = 
+	{splat} -> $1,
+	{backref|string} _ ":" _ {value} -> { name: $1, value: $2 };
 
 array = "[" ( _ {value|splat} _ "," )* _ {value}? _ "]" 
 	-> { type: "array", elements: [...$1, $2] };

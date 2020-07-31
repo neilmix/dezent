@@ -36,10 +36,19 @@ export interface Member { name: BackRefNode|StringNode, value: ValueNode }
 
 let kNull:NullNode = { type: "null" }
 
-export var dezentGrammar : Grammar = [
-    ret(`_ ( {returnSt|defineSt} _ )* `, "$1"),
+// This is a mini DSL that allows us to build an AST
+// that our parser uses to parse grammar files.
+// This is the same grammar as in grammar.dezent,
+// though there are some restrictions to keep the
+// amount of parsing logic under control:
+// - there can be no whitespace within a capture
+// - object splat must be written as name/value pair, e.g. "": "...$1"
+// - captures can't have multiple regex options
 
-    def("_", `_ = /\s*/`, null,
+export var dezentGrammar : Grammar = [
+    ret(`_ ( {returnSt|defineSt} _ )*`, "$1"),
+
+    def("_", `/\s*/`, null,
 			 `/\/\/[^\n]*\n/`, null,
 			 `/\/\*(.|\n)*\*\//`, null),
 
@@ -50,7 +59,7 @@ export var dezentGrammar : Grammar = [
 		{ type: "define", name: "$1", rules: ["$2", "...$3"] }),
 	
 	def("rule", `{template} _ "->" _ {value}`,
-		{ type: "rule", "...": "$1", value: "$2" }),
+		{ type: "rule", "": "...$1", value: "$2" }),
 	
 	def("template", `{templateOption} ( _ "|" _ {templateOption} )*`,
 		{ options: ["$1", "...$2"] }),
@@ -59,11 +68,11 @@ export var dezentGrammar : Grammar = [
 		{ type: "option", tokens: "$1" }),
 
 	def("capture", `"{" _ {captureTemplate} _ "}" {repeat}?`,
-		{ type: "capture", "...": "$1", repeat: "$2" }),
+		{ type: "capture", "": "...$1", repeat: "$2" }),
 
 
 	def("group", `"(" _ {template} _ ")" {repeat}?`,
-		{ type: "group", "...": "$1", repeat: "$2" }),
+		{ type: "group", "": "...$1", repeat: "$2" }),
 
 	def("captureTemplate", `{captureTemplateOption} ( _ "|" _ {captureTemplateOption} )*`,
 		{ options: ["$1", "...$2"] }),
@@ -72,7 +81,7 @@ export var dezentGrammar : Grammar = [
 		{ type: "option", tokens: "$1" }),
 
 	def("captureGroup", `"(" _ {captureTemplate} _ ")" {repeat}?`,
-		{ type: "group", "...": "$1", repeat: "$2" }),
+		{ type: "group", "": "...$1", repeat: "$2" }),
 
 	def("regex",
 		`"//"`, { type: "regex", pattern: "" },
@@ -88,8 +97,8 @@ export var dezentGrammar : Grammar = [
 		{ type: "backref", index: "$1" }),
 
 	def("splat",
-	`"..." {backref}`, { type: "splat", backrefs: ["$1"] },
-	`"...(" _ {backref} ( _ "," _ {backref} )* _ ")"`, { type: "splat", backrefs: ["$1", "...$2"] }),
+		`"..." {backref}`, { type: "splat", backrefs: ["$1"] },
+		`"...(" _ {backref} ( _ "," _ {backref} )* _ ")"`, { type: "splat", backrefs: ["$1", "...$2"] }),
 
 	def("object", `"{" ( _ {member} _ "," )* _ {member}? _ "}"`,
 		{ type: "object", members: ["...$1", "$2"] }),
@@ -135,7 +144,7 @@ function ret(template:string, output:any) : ReturnNode {
 
 function def(name:string, ...args:any) : DefineNode {
 	let rules = [];
-	for (let i = 0; i < args.length; i++) {
+	for (let i = 0; i < args.length; i += 2) {
 		rules.push(rule(args[i], args[i+1]));
 	}
 	return {
@@ -145,11 +154,11 @@ function def(name:string, ...args:any) : DefineNode {
 	}
 }
 
-function rule(template:string, output:any) : RuleNode {
+function rule(template:string, out:any) : RuleNode {
 	return {
 		type: "rule",
-		options: [ option(template.split(/\s+/)) ],
-		output: output(output)
+		options: [ option(template.split(/ +/)) ],
+		output: output(out)
 	}
 }
 
@@ -158,7 +167,7 @@ function option(tokens:string[]) : OptionNode {
 
 	for (let i = 0; i < tokens.length; i++) {
 		let token = tokens[i];
-		if (token[i] == '(') {
+		if (token == '(') {
 			let j = i;
 			while (tokens[++j][0] != ')');
 			parts.push(group(tokens.slice(i+1, j), tokens[j][1]));
@@ -197,9 +206,18 @@ function capture(token:string) : CaptureNode {
 	let repeat = null;
 	if (token[token.length - 1] != "}") {
 		repeat = token[token.length - 1];
-		token = token.substr(0, token.length - 1);
+		token = token.substr(0, token.length - 2);
 	}
-	let options = token.substr(1, token.length - 2).split('|');
+
+	// our limited DSL parsing doesn't allow multiple regex options
+	// because it gets confused when the regex contains a pipe,
+	// so only split into multiple options when not a regex
+	let options;
+	if (token[1] == '/') {
+		options = [token.substr(1, token.length - 1)];
+	} else {
+		options = token.substr(1, token.length - 1).split('|');
+	}
 	return {
 		type: "capture",
 		options: options.map((t) => option([t])),
@@ -210,7 +228,7 @@ function capture(token:string) : CaptureNode {
 function regex(token:string) : RegexNode {
 	return {
 		type: "regex",
-		pattern: token.substr(1, token.length - 2)
+		pattern: token.substr(1, token.length - 1)
 	}
 }
 
@@ -226,7 +244,7 @@ function string(token:string) : StringNode {
 
 function ruleref(token:string) : RuleRefNode {
 	if (!token.match(/^[a-zA-Z0-9_]+/)) {
-		throw new Error(`invalid identifier: $token`);
+		throw new Error(`invalid identifier: ${token}`);
 	}
 	return {
 		type: "ruleref",
@@ -234,6 +252,73 @@ function ruleref(token:string) : RuleRefNode {
 	}
 }
 
-function output(value: any) : any {
-	???
+function output(value: any) : ValueNode {
+	switch (typeof value) {
+		case 'object':
+			if (value === null) {
+				return { type: "null" };
+			} else if (Array.isArray(value)) {
+				let ret = [];
+				for (let elem of value) {
+					ret.push(output(elem));
+				}
+				return { 
+					type: "array",
+					elements: ret
+				}
+			} else {
+				let members = [];
+				for (let name of value) {
+					if (name == "") {
+						// splat
+						members.push(output(value[name]));
+					} else {
+						members.push({
+							type: "member",
+							name: output(name),
+							value: output(value[name])
+						})
+					}
+				}
+				return {
+					type: "object",
+					members: members
+				}
+			}
+		case 'string':
+			if (value.match(/^\$(\d)$/)) {
+				return {
+					type: "backref",
+					index: RegExp.$1
+				}
+			} else if (value.match(/^\.\.\.\$(\d)/)) {
+				return {
+					type: "splat",
+					backrefs: [{
+						type: "backref",
+						index: RegExp.$1
+					}]
+				}
+			} else {
+				return {
+					type: "string",
+					tokens: [{
+						type: "text",
+						value: value
+					}]
+				}
+			}
+		case 'number':
+			return {
+				type: "number",
+				value: String(value)
+			}
+		case 'boolean':
+			return {
+				type: "boolean",
+				value: !!value
+			}
+		default:
+			throw new Error("Unexpected JSON data type: " + typeof value)
+	}
 }

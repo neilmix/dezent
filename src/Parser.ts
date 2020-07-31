@@ -1,6 +1,7 @@
 // todo:
 // - parse error line number and position (best match)
 // - object <-> splats
+// - template -> pattern
 // - command line script
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - performance/scale testing
