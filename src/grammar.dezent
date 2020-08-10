@@ -13,10 +13,10 @@ return _ ( { returnSt | defineSt } _ )*
 	-> $1;
 
 _ = /\s*/ -> null,
-	/\/\/[^\n]*\n/ -> null,
-	/\/\*(.|\n)*\*\// -> null;
+	"//" /[^\n]*\n/ -> null,
+	"/*" /(.|\n)*/ "*/" -> null;
 
-returnSt = "return" _ {parse} _ ";" 
+returnSt = "return" /\s+/ {rule} _ ";" 
 	-> { type: "return", rule: $1 };
 
 defineSt = {identifier} _ "=" _ {rule} ( _ "," _ {rule} )* _ ";" 
@@ -28,14 +28,14 @@ rule = {template} _ "->" _ {value}
 template = {templateOption} ( _ "|" _ {templateOption} )* 
 	-> { options: [$1, ...$2] };
 
-templateOption = { capture | group | string | regex | ruleref }+
+templateOption = { capture | group | stringToken | regex | ruleref }+
 	-> { type: "option", tokens: $1 };
 
-capture = "{" _ {captureTemplate} _ "}" {repeat}?
-	-> { type: "capture", ...$1, repeat: $2 };
+capture = "{" _ {captureTemplate} _ "}" {modifier}
+	-> { type: "token", ...$2, descriptor: { type: "capture", ...$1 } };
 
-group = "(" _ {template} _ ")" {repeat}?
-	-> { type: "group", ...$1, repeat: $2 };
+group = "(" _ {template} _ ")" {modifier}
+	-> { type: "token", ...$2, descriptor: { type: "group", ...$1 } };
 
 captureTemplate = {captureTemplateOption} ( _ "|" _ {captureTemplateOption} )*
 	-> { options: [$1, ...$2] };
@@ -46,12 +46,20 @@ captureTemplateOption = { captureGroup | string | regex | ruleref }+
 captureGroup = "(" _ {captureTemplate} _ ")" {repeat}?
 	-> { type: "group", ...$1, repeat: $2 };
 
-regex = 
-	"//" -> { type: "regex", pattern: "" },
-	"/" { /[^/]+([^/]|\\[^/])*/ } "/" -> { type: "regex", pattern: $1 };
+regex = "/" { /[^/]+([^/]|\\[^/])*/ } "/" {modifier}
+	-> { type: "token", ...$2, descriptor: { type: "regex", pattern: $1 } };
 
-ruleref = {identifier} 
-	-> { type: "ruleref", name: $1 };
+stringToken = {string} {modifier}
+	-> { type: "token", ...$2, descriptor: $1 };
+
+ruleref = {identifier} {modifier}
+	-> {type: "token", ...$2, descriptor: { type: "ruleref", name: $1 } };
+
+modifier = 
+	"*" -> { repeat: true, required: false },
+	"+" -> { repeat: true, required: true },
+	"?" -> { repeat: false, required: false },
+	""  -> { repeat: false, required: true };
 
 value = { backref | object | array | string | number | boolean | null } 
 	-> $1;
@@ -91,8 +99,6 @@ null = "null"
 
 escape = /\\(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/
 	-> { type: "escape", value: $1 };
-
-repeat = { "*" | "+" | "?" } -> $1;
 
 identifier = { /[_a-zA-Z][_a-zA-Z0-9]*/ }
 	-> $1;

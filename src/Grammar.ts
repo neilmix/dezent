@@ -2,21 +2,20 @@ export type Grammar = (DefineNode|ReturnNode)[];
 
 export interface Node { type: string }
 export interface SelectorNode extends Node { options: OptionNode[] }
-export interface RepeaterNode extends SelectorNode { repeat: RepeatString }
-export interface MatcherNode extends Node { match?(s : string) : number; }
-export type RepeatString = "*" | "+" | "?" | null;
+export interface TokenNode extends Node { type: "token", required: boolean, repeat: boolean, descriptor: DescriptorNode }
+export interface MatcherNode extends Node { match?(s : string) : [boolean, number]; }
 
-export type PartNode = CaptureNode | GroupNode | StringNode | RegexNode | RuleRefNode;
+export type DescriptorNode = CaptureNode | GroupNode | StringNode | RegexNode | RuleRefNode;
+export type ParseNode = ReturnNode | DefineNode | RuleNode | OptionNode | TokenNode | DescriptorNode;
 export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
-export type ContextNode = ReturnNode | DefineNode | RuleNode | CaptureNode | GroupNode | OptionNode;
 
 export interface ReturnNode       extends Node         { type: "return",    rule: RuleNode }
 export interface DefineNode       extends Node         { type: "define",    name: string, rules: RuleNode[] }
 export interface RuleNode         extends SelectorNode { type: "rule",      output: ValueNode }
-export interface CaptureNode      extends RepeaterNode { type: "capture",   id?: number }
-export interface GroupNode        extends RepeaterNode { type: "group" }
-export interface OptionNode       extends Node         { type: "option",    tokens: PartNode[] }
+export interface CaptureNode      extends SelectorNode { type: "capture",   id?: number }
+export interface GroupNode        extends SelectorNode { type: "group" }
+export interface OptionNode       extends Node         { type: "option",    tokens: TokenNode[] }
 export interface RuleRefNode      extends Node         { type: "ruleref",   name: string }
 export interface RegexNode        extends MatcherNode  { type: "regex",     pattern: string }
 
@@ -48,11 +47,12 @@ let kNull:NullNode = { type: "null" }
 export var dezentGrammar : Grammar = [
     ret(`_ ( {returnSt|defineSt} _ )*`, "$1"),
 
-    def("_", `/\s*/`, null,
-			 `/\/\/[^\n]*\n/`, null,
-			 `/\/\*(.|\n)*\*\//`, null),
+	def("_", 
+		`/\\s*/`, null,
+		`"//" /[^\\n]*\\n/`, null,
+		`"/*" /(.|\\n)*/ "*/"`, null),
 
-	def("returnSt", `"return" _ {parse} _ ";"`,
+	def("returnSt", `"return" /\\s+/ {rule} _ ";"`,
 		{ type: "return", rule: "$1" }),
 
 	def("defineSt", `{identifier} _ "=" _ {rule} ( _ "," _ {rule} )* _ ";"`,
@@ -67,12 +67,11 @@ export var dezentGrammar : Grammar = [
 	def("templateOption", `{capture|group|string|regex|ruleref}+`,
 		{ type: "option", tokens: "$1" }),
 
-	def("capture", `"{" _ {captureTemplate} _ "}" {repeat}?`,
-		{ type: "capture", "": "...$1", repeat: "$2" }),
+	def("capture", `"{" _ {captureTemplate} _ "}" {modifier}`,
+		{ type: "token", "": "...$2", descriptor: { type: "capture", "": "...$1", repeat: "$2" } }),
 
-
-	def("group", `"(" _ {template} _ ")" {repeat}?`,
-		{ type: "group", "": "...$1", repeat: "$2" }),
+	def("group", `"(" _ {template} _ ")" {modifier}`,
+	{ type: "token", "": "...$2", descriptor: { type: "group", "": "...$1", repeat: "$2" } }),
 
 	def("captureTemplate", `{captureTemplateOption} ( _ "|" _ {captureTemplateOption} )*`,
 		{ options: ["$1", "...$2"] }),
@@ -83,12 +82,20 @@ export var dezentGrammar : Grammar = [
 	def("captureGroup", `"(" _ {captureTemplate} _ ")" {repeat}?`,
 		{ type: "group", "": "...$1", repeat: "$2" }),
 
-	def("regex",
-		`"//"`, { type: "regex", pattern: "" },
-		`"/" {/[^/]+([^/]|\\[^/])*/} "/"`, { type: "regex", pattern: "$1" }),
+	def("regex", `"/" {/[^/]+([^/]|\\[^/])*/} "/" {modifier}`, 
+		{ type: "token", "": "...$2", descriptor: { type: "regex", pattern: "$1" } }),
+
+	def("stringToken", `{string} {modifier}`,
+		{ type: "token", "": "...$2", descriptor: "$1" }),
 
 	def("ruleref", `{identifier}`,
-		{ type: "ruleref", name: "$1" }),
+		{ type: "token", "": "...$2", descriptor: { type: "ruleref", name: "$1" } }),
+
+	def("modifier",
+		`"*"`, { repeat: true, required: false },
+		`"+"`, { repeat: true, required: true },
+		`"?"`, { repeat: false, required: false },
+		`""`,  { repeat: false, required: true }),
 
 	def("value", `{backref|object|array|string|number|boolean|null}`,
 		"$1"),
@@ -132,7 +139,6 @@ export var dezentGrammar : Grammar = [
 
 	def("identifier", `{/[_a-zA-Z][_a-zA-Z0-9]*/}`,
 		"$1")
-
 ];
 
 function ret(template:string, output:any) : ReturnNode {
@@ -162,52 +168,56 @@ function rule(template:string, out:any) : RuleNode {
 	}
 }
 
-function option(tokens:string[]) : OptionNode {
-	let parts = [];
+function option(tokStrs:string[]) : OptionNode {
+	let tokens:TokenNode[] = [];
 
-	for (let i = 0; i < tokens.length; i++) {
-		let token = tokens[i];
-		if (token == '(') {
+	for (let i = 0; i < tokStrs.length; i++) {
+		let tokStr = tokStrs[i];
+		let node:DescriptorNode;
+		let repeat;
+		if (tokStr == '(') {
 			let j = i;
-			while (tokens[++j][0] != ')');
-			parts.push(group(tokens.slice(i+1, j), tokens[j][1]));
+			while (tokStrs[++j][0] != ')');
+			node = group(tokStrs.slice(i+1, j));
+			repeat = tokStrs[j][1];
 			i = j;
 		} else {
-			parts.push(part(token));
+			repeat = ['?','*','+'].includes(tokStr[tokStr.length - 1]) ? tokStr[tokStr.length - 1] : "";
+			if (repeat != "") {
+				tokStr = tokStr.substr(0, tokStr.length - 1);
+			}
+			switch (tokStr[0]) {
+				case "{": node = capture(tokStr); break;
+				case "/": node = regex(tokStr); break;
+				case `"`: node = string(tokStr); break;
+				default:
+					node = ruleref(tokStr); break;
+			}
 		}
+		tokens.push({
+			type: "token",
+			required: ['', '+'].includes(repeat),
+			repeat: ['*', '+'].includes(repeat),
+			descriptor: node
+		})
 	}
 
 	return {
 		type: "option",
-		tokens: parts
+		tokens: tokens
 	};
 }
 
-function part(token:string) : PartNode {
-	switch (token[0]) {
-		case "{": return capture(token);
-		case "/": return regex(token);
-		case `"`: return string(token);
-		default:
-			return ruleref(token);
-	}
-
-}
-
-function group(tokens:string[], repeat: string) : GroupNode {
+function group(tokens:string[]) : GroupNode {
 	return {
 		type: "group",
-		options: [option(tokens)],
-		repeat: <RepeatString>repeat || null
+		options: [option(tokens)]
 	}
 }
 
 function capture(token:string) : CaptureNode {
 	let repeat = null;
-	if (token[token.length - 1] != "}") {
-		repeat = token[token.length - 1];
-		token = token.substr(0, token.length - 2);
-	}
+	token = token.substr(0, token.length - 1);
 
 	// our limited DSL parsing doesn't allow multiple regex options
 	// because it gets confused when the regex contains a pipe,
@@ -221,14 +231,13 @@ function capture(token:string) : CaptureNode {
 	return {
 		type: "capture",
 		options: options.map((t) => option([t])),
-		repeat: repeat
 	}
 }
 
 function regex(token:string) : RegexNode {
 	return {
 		type: "regex",
-		pattern: token.substr(1, token.length - 1)
+		pattern: token.substr(1, token.length - 2)
 	}
 }
 
@@ -237,7 +246,7 @@ function string(token:string) : StringNode {
 		type: "string",
 		tokens: [{
 			type: "text",
-			value: token.substr(1, token.length - 1)
+			value: token.substr(1, token.length - 2)
 		}]
 	}
 }

@@ -1,25 +1,9 @@
 import "jest";
 
 import "./Parser";
-import { parseTextWithGrammar } from "./Parser";
+import { parseText } from "./Parser";
 
-test("placeholder", () => {
-    let out = parseTextWithGrammar([{
-        type: "return",
-        rule: {
-            type: "rule",
-            options: [{
-                type: "option",
-                tokens: [{
-                    type: "regex",
-                    pattern: ".*"
-                }]
-            }],
-            output: {
-                type: "boolean",
-                value: true
-            }
-        }
-    }], "anything");
+test("return values", () => {
+    let out = parseText("return /.*/ -> true;", "anything");
     expect(out).toBe(true);
 });

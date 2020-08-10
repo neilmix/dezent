@@ -2,6 +2,8 @@
 // - parse error line number and position (best match)
 // - object <-> splats
 // - template -> pattern
+// - test (/x*/)*
+// - check that consumed == text.length...
 // - command line script
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - performance/scale testing
@@ -16,7 +18,7 @@
 
 import { 
     Grammar, dezentGrammar, DefineNode, ReturnNode, 
-    ContextNode, RuleNode, OptionNode, RepeaterNode, CaptureNode, PartNode, 
+    ParseNode, RuleNode, OptionNode, CaptureNode,  TokenNode,
     ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, 
     StringTextNode, StringEscapeNode, NumberNode, BooleanNode
  } from "./Grammar";
@@ -35,6 +37,7 @@ export enum ErrorCode {
     CaptureAlreadyInProgress = 2003,
     MismatchEndCapture       = 2004,
     EmptyOutput              = 2005,
+    Unreachable              = 2006,
 }
 
 const errorMessages = {
@@ -50,17 +53,21 @@ const errorMessages = {
     2003: "Capture already in progress",
     2004: "Mismatched ending capture",
     2005: "Output frame did not contain an output token",
+    2006: "Should not be possible to reach this code",
 }
 
-export function parseText(grammarText:string, parseText:string) : any {
-    return parseTextWithGrammar(parseGrammar(grammarText), parseText);
+export function parseText(grammar:string|Grammar, text:string) : any {
+    if (typeof grammar == "string") {
+        grammar = parseGrammar(grammar);
+    }
+    return parseTextWithGrammar(grammar, text);
 }
 
 export function parseGrammar(text:string) : Grammar {
     return parseTextWithGrammar(dezentGrammar, text);
 }
 
-export function parseTextWithGrammar(grammar:Grammar, text:string) : any {
+function parseTextWithGrammar(grammar:Grammar, text:string) : any {
     // pre-process the grammar
     let defines: {[key:string]:DefineNode} = {};
     let ret:ReturnNode;
@@ -151,6 +158,7 @@ export function parseTextWithGrammar(grammar:Grammar, text:string) : any {
         },
     };
 
+    console.log(JSON.stringify(parser.output.result));
     return buildOutput(parser.output.result);
 
     function buildOutput(token:OutputToken) {
@@ -163,13 +171,19 @@ export function parseTextWithGrammar(grammar:Grammar, text:string) : any {
     }
 }
 
+enum MatchStatus {
+    Continue,
+    Pass,
+    Fail
+}
+
 type ParseContextFrame = {
-    node: ContextNode,
-    items: RuleNode[] | OptionNode[] | PartNode[],
+    status: MatchStatus,
+    node: ParseNode,
+    items: RuleNode[] | OptionNode[] | TokenNode[],
     index: number,
-    startPos: number,
     pos: number,
-    matchCount: number,
+    consumed: number,
 }
 
 type OutputContextFrame = {
@@ -208,14 +222,16 @@ class OutputContext {
 
     exit(node:ReturnNode|DefineNode, success:boolean) {
         let frame = this.stack.pop();
+        this.top = this.stack[this.stack.length - 1];
         if (frame.node != node) {
             parserError(ErrorCode.MismatchOutputFrames);
         }
-        this.top = this.stack[this.stack.length-1]
-        if (!frame.output) {
-            parserError(ErrorCode.EmptyOutput);
+        if (success) {
+            if (!frame.output) {
+                parserError(ErrorCode.EmptyOutput);
+            }
+            this.addTokenObject(frame.output);
         }
-        this.addTokenObject(frame.output);
     }
 
     startCapture(node:CaptureNode) {
@@ -287,7 +303,9 @@ class Parser {
     text : string;
     defines: {[key:string]:DefineNode};
     output : OutputContext = new OutputContext();
-
+    debugEnabled = true;
+    debugLog = [];
+    
     constructor(root:ReturnNode, text:string, defines:{[key:string]:DefineNode}) {
         this.text = text;
         this.defines = defines;
@@ -295,147 +313,216 @@ class Parser {
     }
 
     parse() {
-        while (this.stack.length) {
-            // find the next part
-            let part;
-            PART: while (true) {
+        try {
+            while (this.stack.length) {
                 let current = this.top();
-                if (current.index >= current.items.length) {
+
+                if (current.index > current.items.length) {
                     parserError(ErrorCode.ArrayOverrun);
-                } else {
-                    switch (current.node.type) {
-                        case "return":  case "define": case "rule": case "capture": case "group":
-                            this.enter((<RuleNode[]|OptionNode[]>current.items)[current.index]);
-                            break;
-                        case "option":
-                            part = (<PartNode[]>current.items)[current.index];
-                            break PART;
-                    }
                 }
-            }
 
-            // execute the part
-            switch(part.type) {
-                case "capture": case "group":
-                    this.enter(part);
-                    break;
-                case "ruleref":
-                    if (this.defines[part.name]) {
-                        this.enter(this.defines[part.name]);
-                    } else {
-                        grammarError(ErrorCode.RuleNotFound, part.name)
-                    }
-                    break;
-                case "string":
-                case "regex":
-                    if (!part.match) {
-                        if (part.type == "string") {
-                            let matchString = buildString(part);
-                            part.match = (s) => s.startsWith(matchString) ? matchString.length : -1;
-                        } else {
-                            let regex = new RegExp(`^${part.pattern}`)
-                            part.match = (s) => {
-                                let result = regex.exec(s);
-                                return result ? result[0].length : -1;
+                this.debug(
+                    this.text.substr(current.pos, 10), 
+                    [current.items.length, current.index].join(),
+                    current.status, 
+                    this.stack.length, 
+                    current.pos+":"+current.consumed,
+                    current.node.type, 
+                    current.node["pattern"]||current.node["name"]
+                );
+
+                switch (current.status) {
+                    case MatchStatus.Continue:
+                        switch (current.node.type) {
+                            default:
+                                this.enter(current.items[current.index]);
+                                break;
+                            case "ruleref":
+                                let def = this.defines[current.node.name];
+                                if (!def) {
+                                    grammarError(ErrorCode.RuleNotFound, current.node.name);
+                                }
+                                this.enter(def);
+                                break;
+                            case "string":
+                            case "regex":
+                                if (!current.node.match) {
+                                    if (current.node.type == "string") {
+                                        let matchString = buildString(current.node);
+                                        if (this.debugEnabled) {
+                                            current.node["pattern"] = matchString;
+                                        }
+                                        current.node.match = (s) => s.startsWith(matchString) ? [true, matchString.length] : [false, 0];
+                                    } else {
+                                        let regex = new RegExp(`^${current.node.pattern}`)
+                                        current.node.match = (s) => {
+                                            let result = regex.exec(s);
+                                            return result ? [true, result[0].length] : [false, 0];
+                                        }
+                                    }
+                                }
+                                let text = this.text.substr(this.top().pos);
+                                let [matched, consumed] = current.node.match(text);
+                                this.debug("MATCH", matched, consumed, current.node["pattern"], text);
+                                if (matched) {
+                                    this.debug("TOKEN add", this.text.substr(current.pos, consumed));
+                                    this.output.addToken(current.pos, consumed);
+                                    current.consumed = consumed;
+                                    current.status = MatchStatus.Pass;
+                                } else {
+                                    current.status = MatchStatus.Fail;
+                                }
+                                break;
+                        }
+                        break;
+                    case MatchStatus.Pass:
+                        let exited = this.stack.pop();
+                        let next = this.top();
+                        if (next) {
+                            next.consumed += exited.consumed;
+                            if (next.node.type == "option") {
+                                if (++next.index >= next.items.length) {
+                                    next.status = MatchStatus.Pass;
+                                } // otherwise stay at Continue
+                            } else {
+                                next.status = MatchStatus.Pass;
                             }
+                            switch (next.node.type) {
+                                case "return":
+                                case "define":
+                                    this.debug("EXIT define", next.node["name"], "true");
+                                    this.output.exit(next.node, true);
+                                    break;
+                                case "rule":
+                                    this.debug("YIELD", this.text.substr(exited.pos, exited.consumed));
+                                    this.output.yield(next.node, exited.pos, exited.consumed);
+                                    break;
+                                case "token":
+                                    if (next.node.repeat) {
+                                        this.enter(next.node.descriptor);
+                                    }
+                                    break;
+                                case "capture":
+                                    this.debug("CAPTURE end", next.node.id);
+                                    this.output.endCapture(next.node);        
+                                    break;
+                            }
+                        } else {
+                            // our parsing is complete!
                         }
-                    }
-                    let consumed = part.match(this.text.substr(this.top().pos));
-                    if (consumed >= 0) {
-                        let current = this.top();
-                        this.output.addToken(current.pos, consumed);
-                        current.pos += consumed;
-                        if (current.index >= current.items.length - 1) {
-                            // everything passed, or else we would have popped
-                            this.exit(true);
-                        }
-                    } else {
-                        this.exit(false);
-                    }
-                    break;
-            }
-        } 
-        
-        // check that consumed == text.length...
+                        break;
 
+                    case MatchStatus.Fail:
+                        exited = this.stack.pop();
+                        next = this.top();
+                        if (["define", "rule", "capture", "group"].includes(next.node.type)) {
+                            if (++next.index >= next.items.length) {
+                                next.status = MatchStatus.Fail;
+                            }
+                        } else if (next.node.type == "token") {
+                            if (!next.node.required) {
+                                // nodes that are not required always pass
+                                next.status = MatchStatus.Pass;
+                            } else if (next.status == MatchStatus.Continue) {
+                                // this node's descriptor never passed - it failed
+                                next.status = MatchStatus.Fail;
+                            } // it is already marked as Pass
+                        } else {
+                            next.status = MatchStatus.Fail;
+                        }
+                        switch (next.node.type) {
+                            case "return":
+                                this.dumpDebug();
+                                throw new Error("Document is not parsable.")
+                            case "define":
+                                if (next.status == MatchStatus.Fail) {
+                                    this.debug("EXIT define", next.node.name, "false");
+                                    this.output.exit(next.node, false);
+                                }
+                                break;
+                            case "rule":
+                                this.debug("RESET");
+                                this.output.reset();
+                                break;
+                            case "capture":
+                                if (next.status == MatchStatus.Fail) {
+                                    this.debug("CAPTURE end", next.node.id);
+                                    this.output.endCapture(next.node);        
+                                }
+                                break;
+                        }
+                        break;
+                    default:
+                        parserError(ErrorCode.Unreachable);
+                }
+            } 
+        } catch (e) {
+            if (e.message.match(/^Internal/)) {
+                this.dumpDebug();
+            }
+            throw e;
+        }
     }
 
-    enter(node:ContextNode) {
+    enter(node:ParseNode) {
         let current = this.top();
         let items;
 
         switch (node.type) {
             case "return": 
                 items = [node.rule]; 
+                this.debug("ENTER return");
                 this.output.enter(node);
                 break;
             case "define": 
-                items = node.rules; 
+                items = node.rules;
+                this.debug("ENTER define", node.name);
                 this.output.enter(node);
                 break;
             case "capture": 
                 this.output.startCapture(node);
+                this.debug("CAPTURE start", node.id);
                 // FALL THROUGH
             case "group": 
-            case "rule": items = node.options; break;
-            case "option": items = node.tokens; break;
+            case "rule": 
+                items = node.options; 
+                break;
+            case "option": 
+                items = node.tokens; 
+                break;
+            case "token":
+                items = [node.descriptor];
+                break;
+            default:
+                items = [];
+                break;
         }
         this.stack.push({
+            status: MatchStatus.Continue,
             node: node,
             items: items,
             index: 0,
-            startPos: current ? current.pos : 0,
-            pos: current ? current.pos : 0,
-            matchCount: 0,
+            pos: current ? current.pos + current.consumed : 0,
+            consumed: 0,
         })
-    }
-
-    exit(success:boolean) {
-        while (this.stack.length) {
-            let exited = this.stack.pop();
-            switch (exited.node.type) {
-                case "return":
-                case "define":
-                    this.output.exit(exited.node, success);
-                    break;
-                case "rule":
-                    if (success) {
-                        this.output.yield(exited.node, exited.startPos, exited.pos - exited.startPos);
-                    } else {
-                        this.output.reset();
-                    }
-                    break;
-                case "capture":
-                    this.output.endCapture(exited.node);
-                    // FALL THROUGH
-                case "group":
-                    let required = exited.node.repeat in [null,'+'];
-                    if (!required) success = true;
-                    if (exited.node.repeat == '*') success = true;
-                    if (exited.node.repeat == '+' && exited.matchCount > 0) success = true;
-                    break;
-                case "option":
-                    // do nothing - we'll mitigate the parent below
-                    break;
-            }
-
-            let current = this.top();
-            if (current && success) {
-                if (current.node.type in ["group", "capture"] && (<RepeaterNode>current.node).repeat in ["*","+"]) {
-                    current.index = 0;
-                    current.matchCount++;
-                    return;
-                }
-                current.index++;
-                if (current.index < current.items.length) {
-                    return;
-                }
-            }
-        }
     }
 
     top() : ParseContextFrame|null { 
         return this.stack[this.stack.length-1] 
+    }
+
+    debug(...args:any[]) {
+        if (this.debugEnabled) {
+            this.debugLog.push(args.join(' '));
+        }
+    }
+
+    dumpDebug() {
+        if (this.debugEnabled) {
+            console.error("Debug log:\n", this.debugLog.join("\n"));
+            console.error("Parser stack:\n", this.stack);
+            console.error("Output stack:\n", this.output.stack);
+        }
     }
 }
 
@@ -455,10 +542,10 @@ function buildString(node:StringNode) {
 
 function grammarError(code:ErrorCode, arg1?:string) {
     let msg = errorMessages[code].replace("$1", arg1);
-    throw new Error(`Grammar error: ${msg}`);
+    throw new Error(`Grammar error ${code}: ${msg}`);
 }    
 
 function parserError(code:ErrorCode) {
     let msg = errorMessages[code];
-    throw new Error(`Internal parser error: ${msg}`);
+    throw new Error(`Internal parser error ${code}: ${msg}`);
 }
