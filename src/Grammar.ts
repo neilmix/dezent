@@ -12,8 +12,8 @@ export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | Strin
 
 export interface ReturnNode       extends Node         { type: "return",    rule: RuleNode }
 export interface DefineNode       extends Node         { type: "define",    name: string, rules: RuleNode[] }
-export interface RuleNode         extends SelectorNode { type: "rule",      output: ValueNode }
-export interface CaptureNode      extends SelectorNode { type: "capture",   id?: number }
+export interface RuleNode         extends SelectorNode { type: "rule",      value: ValueNode, captures?: boolean[] }
+export interface CaptureNode      extends SelectorNode { type: "capture",   index?: number }
 export interface GroupNode        extends SelectorNode { type: "group" }
 export interface OptionNode       extends Node         { type: "option",    tokens: TokenNode[] }
 export interface RuleRefNode      extends Node         { type: "ruleref",   name: string }
@@ -25,13 +25,13 @@ export interface StringEscapeNode extends Node         { type: "escape",    valu
                                           
 export interface BackRefNode      extends Node { type: "backref",   index: string }
 export interface SplatNode        extends Node { type: "splat",     backrefs: BackRefNode[] }
-export interface ObjectNode       extends Node { type: "object",    members: Member[] }
+export interface ObjectNode       extends Node { type: "object",    members: (MemberNode|SplatNode)[] }
 export interface ArrayNode        extends Node { type: "array",     elements: ValueNode[] }
 export interface NumberNode       extends Node { type: "number",    value: string }
 export interface BooleanNode      extends Node { type: "boolean",   value: boolean }
 export interface NullNode         extends Node { type: "null" }
 
-export interface Member { name: BackRefNode|StringNode, value: ValueNode }
+export interface MemberNode { type: "member", name: BackRefNode|StringNode, value: ValueNode }
 
 let kNull:NullNode = { type: "null" }
 
@@ -88,7 +88,7 @@ export var dezentGrammar : Grammar = [
 	def("stringToken", `{string} {modifier}`,
 		{ type: "token", "": "...$2", descriptor: "$1" }),
 
-	def("ruleref", `{identifier}`,
+	def("ruleref", `{identifier} {modifier}`,
 		{ type: "token", "": "...$2", descriptor: { type: "ruleref", name: "$1" } }),
 
 	def("modifier",
@@ -132,7 +132,7 @@ export var dezentGrammar : Grammar = [
 	def("null", `"null"`,
 		{ type: "null" }),
 
-	def("escape", `/\\(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/`,
+	def("escape", `{/\\(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/}`,
 		{ type: "escape", value: "$1" }),
 
 	def("repeat", `{"*"|"+"|"?"}`, "$1"),
@@ -164,7 +164,7 @@ function rule(template:string, out:any) : RuleNode {
 	return {
 		type: "rule",
 		options: [ option(template.split(/ +/)) ],
-		output: output(out)
+		value: output(out)
 	}
 }
 
@@ -277,7 +277,7 @@ function output(value: any) : ValueNode {
 				}
 			} else {
 				let members = [];
-				for (let name of value) {
+				for (let name in value) {
 					if (name == "") {
 						// splat
 						members.push(output(value[name]));

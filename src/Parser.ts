@@ -2,11 +2,13 @@
 // - parse error line number and position (best match)
 // - object <-> splats
 // - template -> pattern
+// - backrefs -> outvals where appropriate
 // - test (/x*/)*
 // - check that consumed == text.length...
 // - command line script
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - performance/scale testing
+// - double-check grammar backrefs
 // - package license
 // - release?
 // - packrat parsing
@@ -20,17 +22,19 @@ import {
     Grammar, dezentGrammar, DefineNode, ReturnNode, 
     ParseNode, RuleNode, OptionNode, CaptureNode,  TokenNode,
     ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, 
-    StringTextNode, StringEscapeNode, NumberNode, BooleanNode
+    StringTextNode, StringEscapeNode, NumberNode, BooleanNode, MemberNode
  } from "./Grammar";
+import { info } from "console";
 
 export enum ErrorCode {
     DuplicateDefine          = 1001,
     MultipleReturn           = 1002,
     RuleNotFound             = 1003,
-    BackRefNotFound          = 1004,
-    NonArraySplat            = 1005,
-    SplatArraySizeMismatch   = 1006,
-    MissingReturnNode        = 1007,
+    InvalidSplat             = 1004,
+    SplatArraySizeMismatch   = 1005,
+    ReturnNotFound           = 1006,
+    CaptureCountMismatch     = 1007,
+    InvalidBackRef           = 1008,
 
     ArrayOverrun             = 2001,
     MismatchOutputFrames     = 2002,
@@ -38,23 +42,30 @@ export enum ErrorCode {
     MismatchEndCapture       = 2004,
     EmptyOutput              = 2005,
     Unreachable              = 2006,
+    BackRefNotFound          = 2007,
+    CaptureOutputNotFound    = 2008,
 }
 
 const errorMessages = {
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
-    1004: "Back reference does not exist: $$1",
-    1005: "Back reference used in splat is not an array: $$1",
-    1006: "All arrays in a splat must be of the same length",
-    1007: "Grammar does not contain a return rule",
+    1004: "Back reference used in splat is neither an array nor object: $$1",
+    1005: "All arrays in a splat must be of the same length",
+    1006: "Grammar does not contain a return rule",
+    1007: "Not all options for rule $2 of $1 have the same number of captures",
+    1008: "Invalid back reference $$3 for rule $2 of $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
     2004: "Mismatched ending capture",
     2005: "Output frame did not contain an output token",
     2006: "Should not be possible to reach this code",
+    2007: "Back reference does not exist",
+    2008: "No output was found during capture",
 }
+
+compileGrammar(dezentGrammar);
 
 export function parseText(grammar:string|Grammar, text:string) : any {
     if (typeof grammar == "string") {
@@ -64,7 +75,108 @@ export function parseText(grammar:string|Grammar, text:string) : any {
 }
 
 export function parseGrammar(text:string) : Grammar {
-    return parseTextWithGrammar(dezentGrammar, text);
+    let grammar = parseTextWithGrammar(dezentGrammar, text);
+    compileGrammar(grammar);
+    return grammar;
+}
+
+function compileGrammar(grammar:Grammar) {
+    // compile and validate
+    // - count the number of backrefs in each rule
+    // - validate that all options contain that many backrefs
+    // - validate that all backreferences are legit
+    // We have to do this up-front because not every branch
+    // of the grammar tree may be visited/executed at runtime
+    for (let item of grammar) {
+        let rules : RuleNode[];
+        if (item.type == "return") {
+            rules = [item.rule];
+        } else {
+            rules = item.rules;
+        }
+        for (let i = 0; i < rules.length; i++) {
+            let [code, captures, index] = compileRule(rules[i]);
+            if (code != 0) {
+                grammarError(code, item["name"] || item.type, String(i), index);
+            }
+            rules[i].captures = captures;
+        }
+    }
+    return grammar;
+}
+
+function compileRule(rule:RuleNode) : [ErrorCode|0, boolean[], any] {
+    // put an empty placeholder in captures so that the indices
+    // align with backrefs (which begin at 1)
+    let info = { captures: [null], repeats: 0, backrefs: [null] };
+    let i = 0;
+    let lastCount = -1;
+    do {
+        info.captures = [null];
+        visitOptionChildren(
+            rule.options[i], 
+            info, 
+            (node:TokenNode, info) => {
+                if (node.repeat) info.repeats++;
+                if (node.descriptor.type == "capture") {
+                    node.descriptor.index = info.captures.length;
+                    info.captures.push(info.repeats > 0);
+                }
+            },
+            (node:TokenNode, info) => {
+                if (node.repeat) info.repeat--;
+            }
+        );
+        if (lastCount > -1 && lastCount != info.captures.length) {
+            return [ErrorCode.CaptureCountMismatch, info.captures, null];
+        }
+        lastCount = info.captures.length;
+        i++;
+     } while (i < rule.options.length);
+
+     visitOutputNodes(rule.value, info, (node:ValueNode, info) => {
+        if (node.type == "backref") info.backrefs.push(node);
+     })
+
+     for (let i = 1; i < info.backrefs.length; i++) {
+         if (info.backrefs[i].index >= info.captures.length) {
+             return [ErrorCode.InvalidBackRef, info.captures, info.backrefs[i].index];
+         }
+     }
+    return [0, info.captures, null];
+}
+
+function visitOptionChildren(node:OptionNode, data, enter:Function, exit:Function) {
+    for (let child of node.tokens) {
+        enter(child, data);
+        let childOptions = child.descriptor["options"];
+        if (childOptions) {
+            for (let opt of childOptions) {
+                visitOptionChildren(opt, data, enter, exit);
+            }
+        }
+        exit(child, data);
+    }
+}
+
+function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
+    f(node, data);
+    let items;
+    if (node.type == "splat") {
+        items = node.backrefs;
+    } else if (node.type == "array") {
+        items = node.elements;
+    } else if (node.type == "object") {
+        items = node.members;
+    } else if (node.type == "member") {
+        visitOutputNodes(node.name, data, f);
+        items = [node.value];
+    }
+    if (items) {
+        for (let item of items) {
+            visitOutputNodes(item, data, f);
+        }
+    }
 }
 
 function parseTextWithGrammar(grammar:Grammar, text:string) : any {
@@ -88,7 +200,7 @@ function parseTextWithGrammar(grammar:Grammar, text:string) : any {
     }
 
     if (!ret) {
-        grammarError(ErrorCode.MissingReturnNode);
+        grammarError(ErrorCode.ReturnNotFound);
     }
 
     // now parse
@@ -98,26 +210,40 @@ function parseTextWithGrammar(grammar:Grammar, text:string) : any {
     // build our output value
     let builders:any = {
         backref: (node:BackRefNode, backrefs:OutputToken[]) => {
-            if (!backrefs[node.index]) {
-                grammarError(ErrorCode.BackRefNotFound, node.index);
+            if (backrefs[node.index] === undefined) {
+                parserError(ErrorCode.BackRefNotFound);
             } else {
-               return buildOutput(backrefs[node.index]);
+               return backrefs[node.index];
             }
         },
         splat: (node:SplatNode, backrefs:OutputToken[]) => {
+            // remember our backref indices start at 0
+            if (backrefs.length <= 1) {
+                return [];
+            }
+
+            // first convert to an array of arrays
             let resolved = [];
-            for (let ref of node.backrefs) {
-                let res = this.backref(node, backrefs);
-                if (!Array.isArray(res)) {
-                    grammarError(ErrorCode.NonArraySplat, ref.index);
+            for (let i = 0; i < node.backrefs.length; i++) {
+                let res = builders.backref(node.backrefs[i], backrefs);
+                if (!res || typeof res != 'object') {
+                    grammarError(ErrorCode.InvalidSplat, String(i));
                 }
-                resolved.push(res);
-            }
-            for (let i = 1; i < resolved.length; i++) {
-                if (resolved[i-1].length != resolved[i].length) {
-                    grammarError(ErrorCode.SplatArraySizeMismatch);
+                if (Array.isArray(res)) {
+                    resolved.push(res);
+                } else {
+                    let items = [];
+                    for (let name in res) {
+                        items.push(name, res[name]);
+                    }
+                    resolved.push(items);
                 }
             }
+            if (resolved.length <= 1) {
+                return resolved[0];
+            }
+            // now merge our arrays
+            // breadth-first, across then down
             let ret = [];
             for (let i = 0; i < resolved[0].length; i++) {
                 for (let j = 0; j < resolved.length; j++) {
@@ -129,7 +255,14 @@ function parseTextWithGrammar(grammar:Grammar, text:string) : any {
         object: (node:ObjectNode, backrefs:OutputToken[]) => {
             let ret = {};
             for (let member of node.members) {
-                ret[this[member.name.type](member.name, backrefs)] = this[member.value.type](member.value, backrefs);
+                if (member.type == "splat") {
+                    let items = builders.splat(member, backrefs);
+                    for (let i = 0; i < items.length; i += 2) {
+                        ret[items[i]] = items[i+1];
+                    }
+                } else {
+                    ret[builders[member.name.type](member.name, backrefs)] = builders[member.value.type](member.value, backrefs);
+                }
             }
             return ret;
         },
@@ -137,9 +270,9 @@ function parseTextWithGrammar(grammar:Grammar, text:string) : any {
             let ret = [];
             for (let elem of node.elements) {
                 if (elem.type == "splat") {
-                    ret = ret.concat(this.splat(elem, backrefs));
+                    ret = ret.concat(builders.splat(elem, backrefs));
                 } else {
-                    ret.push(this[elem.type], backrefs);
+                    ret.push(builders[elem.type](elem, backrefs));
                 }
             }
             return ret;
@@ -158,12 +291,15 @@ function parseTextWithGrammar(grammar:Grammar, text:string) : any {
         },
     };
 
-    console.log(JSON.stringify(parser.output.result));
     return buildOutput(parser.output.result);
 
-    function buildOutput(token:OutputToken) {
-        if (token.backrefs && token.value) {
-            let backrefs = token.backrefs.map((v) => buildOutput(v));
+    function buildOutput(token:OutputToken|OutputToken[]) {
+        if (Array.isArray(token)) {
+            return token.map((v) => buildOutput(v));
+        } else if (token == null) {
+            return null;
+        } else if (token.outputs && token.value) {
+            let backrefs = token.outputs.map((v) => buildOutput(v));
             return builders[token.value.type](token.value, backrefs);
         } else {
             return text.substr(token.pos, token.length);
@@ -188,23 +324,23 @@ type ParseContextFrame = {
 
 type OutputContextFrame = {
     node : ReturnNode|DefineNode,
-    captureMap : number[],
+    rule?: RuleNode,
     captureNode : CaptureNode|null,
-    captures : OutputToken[][],
+    capture: OutputToken[],
+    backrefs : (OutputToken|OutputToken[])[],
     output?: OutputToken
 }
 
 interface OutputToken {
     pos: number,
     length: number
-    backrefs?: OutputToken[],
+    outputs?: (OutputToken|OutputToken[])[],
     value?: ValueNode,
 }
 
 class OutputContext {
     stack:OutputContextFrame[] = [];
     top:OutputContextFrame = null;
-    captureIdSequence = 0;
     result:OutputToken;
 
     constructor() {
@@ -213,9 +349,9 @@ class OutputContext {
     enter(node:ReturnNode|DefineNode) {
         this.top = {
             node: node,
-            captureMap: [],
             captureNode: null,
-            captures: [],
+            capture: [],
+            backrefs: [],
         };
         this.stack.push(this.top);
     }
@@ -239,19 +375,36 @@ class OutputContext {
             parserError(ErrorCode.CaptureAlreadyInProgress);
         }
         this.top.captureNode = node;
-        if (!node.id) {
-            node.id = ++this.captureIdSequence;
-        }
-        if (!this.top.captureMap[node.id]) {
-            this.top.captureMap[node.id] = this.top.captures.length;
-            this.top.captures.push([]);
-        }
+        this.top.capture = [];
     }
 
-    endCapture(node:CaptureNode) {
+    endCapture(node:CaptureNode, success:boolean) {
         if (this.top.captureNode != node) {
             parserError(ErrorCode.MismatchEndCapture);
         }
+
+        if (success) {
+            // move our capture into an output
+            let index = this.top.captureNode.index;
+            let token:OutputToken;
+            if (this.top.capture.length > 1) {
+                token = {
+                    pos: this.top.capture[0].pos,
+                    length: this.top.capture.reduce((t, c) => t + c.length, 0)
+                };
+            } else if (this.top.capture.length == 1) {
+                token = this.top.capture[0];
+            } else {
+                // didn't match...
+            }
+
+            if (this.top.rule.captures[index]) {
+                this.top.backrefs[index]["push"](token);
+            } else {
+                this.top.backrefs[index] = token;
+            }
+        }
+
         this.top.captureNode = null;
     }
 
@@ -266,35 +419,48 @@ class OutputContext {
         if (!this.top) {
             // parsing is complete
             this.result = token;
-        } else if (this.top && this.top.captureNode) {
+        } else if (this.top && this.top.captureNode) { 
             // store our result, but only if capturing
-            this.top.captures[this.top.captureMap[this.top.captureNode.id]].push(token);
+            this.top.capture.push(token);
         }
     }
 
-    yield(node:RuleNode, startPos:number, consumed:number) {
-        let backrefs : OutputToken[] = [];
-        for (let capture of this.top.captures) {
-            if (capture.length > 1) {
-                backrefs.push({
-                    pos: capture[0].pos,
-                    length: capture.reduce((t, c) => t + c.length, 0)
-                })
+    yield(rule:RuleNode, startPos:number, consumed:number) {
+        // first item is empty so indices align...
+        let backrefs:(OutputToken|OutputToken[])[] = [null];
+        for (let i = 1; i < this.top.rule.captures.length; i++) {
+            if (this.top.rule.captures[i]) {
+                backrefs[i] = this.top.backrefs[i];
+            } else if (this.top.backrefs[i] === undefined) {
+                // optional value never matched...
+                backrefs[i] = {
+                    pos: startPos,
+                    length: consumed,
+                    outputs: [],
+                    value: { type: "null" }
+                };
             } else {
-                backrefs.push(capture[0]);
+                backrefs[i] = this.top.backrefs[i];
             }
         }
         this.top.output = {
             pos: startPos,
             length: consumed,
-            backrefs: backrefs,
-            value: node.output
+            outputs: backrefs,
+            value: rule.value
         }
     }
 
-    reset() {
-        this.top.captureMap = [];
-        this.top.captures = [];
+    reset(rule:RuleNode) {
+        this.top.rule = rule;
+        // put an empty item in the captures so that backref indices
+        // (which begin at 1) line up correctly
+        this.top.backrefs = [null];
+        for (let i = 1; i < rule.captures.length; i++) {
+            if (rule.captures[i]) {
+                this.top.backrefs[i] = [];
+            }
+        }
     }
 }
 
@@ -403,8 +569,8 @@ class Parser {
                                     }
                                     break;
                                 case "capture":
-                                    this.debug("CAPTURE end", next.node.id);
-                                    this.output.endCapture(next.node);        
+                                    this.debug("CAPTURE end", next.node.index);
+                                    this.output.endCapture(next.node, true);        
                                     break;
                             }
                         } else {
@@ -440,14 +606,10 @@ class Parser {
                                     this.output.exit(next.node, false);
                                 }
                                 break;
-                            case "rule":
-                                this.debug("RESET");
-                                this.output.reset();
-                                break;
                             case "capture":
                                 if (next.status == MatchStatus.Fail) {
-                                    this.debug("CAPTURE end", next.node.id);
-                                    this.output.endCapture(next.node);        
+                                    this.debug("CAPTURE end", next.node.index);
+                                    this.output.endCapture(next.node, false);
                                 }
                                 break;
                         }
@@ -479,12 +641,17 @@ class Parser {
                 this.debug("ENTER define", node.name);
                 this.output.enter(node);
                 break;
+            case "rule": 
+                this.debug("RESET");
+                this.output.reset(node);
+                items = node.options; 
+                break;
             case "capture": 
                 this.output.startCapture(node);
-                this.debug("CAPTURE start", node.id);
-                // FALL THROUGH
+                this.debug("CAPTURE start", node.index);
+                items = node.options; 
+                break;
             case "group": 
-            case "rule": 
                 items = node.options; 
                 break;
             case "option": 
@@ -540,8 +707,8 @@ function buildString(node:StringNode) {
     }).join("")
 }
 
-function grammarError(code:ErrorCode, arg1?:string) {
-    let msg = errorMessages[code].replace("$1", arg1);
+function grammarError(code:ErrorCode, ...args:string[]) {
+    let msg = errorMessages[code].replace(/\$([0-9])/, (match, index) => args[index-1]);
     throw new Error(`Grammar error ${code}: ${msg}`);
 }    
 
