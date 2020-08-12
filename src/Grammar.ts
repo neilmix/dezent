@@ -110,7 +110,7 @@ export var dezentGrammar : Grammar = [
 	def("object", `"{" ( _ {member} _ "," )* _ {member}? _ "}"`,
 		{ type: "object", members: ["...$1", "$2"] }),
 
-	def("member", `{backref|string} _ ":" _ {value}`,
+	def("member", `{backref|string|identifierAsStringNode} _ ":" _ {value}`,
 		{ name: "$1", value: "$2" }),
 
 	def("array", `"[" ( _ {value|splat} _ "," )* _ {value}? _ "]"`,
@@ -122,7 +122,7 @@ export var dezentGrammar : Grammar = [
 	def("stringText", `{/[^"\\\n]+/}`,
 		{ type: "text", value: "$1" }),
 
-	def("number", `{"/-?\d+(\.\d+)?([eE][-+]\d+)?/}`,
+	def("number", `{/-?\\d+(\\.\\d+)?([eE][-+]\\d+)?/}`,
 		{ type: "number", value: "$1" }),
 
 	def("boolean",
@@ -132,13 +132,16 @@ export var dezentGrammar : Grammar = [
 	def("null", `"null"`,
 		{ type: "null" }),
 
-	def("escape", `{/\\(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/}`,
+	def("escape", `{/(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/}`,
 		{ type: "escape", value: "$1" }),
 
 	def("repeat", `{"*"|"+"|"?"}`, "$1"),
 
 	def("identifier", `{/[_a-zA-Z][_a-zA-Z0-9]*/}`,
-		"$1")
+		"$1"),
+
+	def("identifierAsStringNode", `{identifier}`,
+		{ type: "string", tokens: [ {type: "text", value: "$1" } ] }),
 ];
 
 function ret(template:string, output:any) : ReturnNode {

@@ -76,7 +76,7 @@ object = "{" ( _ {member} _ "," )* _ {member}? _ "}"
 
 member = 
 	{splat} -> $1,
-	{backref|string} _ ":" _ {value} -> { name: $1, value: $2 };
+	{backref|string|identifierAsStringNode} _ ":" _ {value} -> { name: $1, value: $2 };
 
 array = "[" ( _ {value|splat} _ "," )* _ {value}? _ "]" 
 	-> { type: "array", elements: [...$1, $2] };
@@ -97,8 +97,11 @@ boolean =
 null = "null" 
 	-> { type: "null" };
 
-escape = { /\\(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/ }
+escape = { /(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/ }
 	-> { type: "escape", value: $1 };
 
 identifier = { /[_a-zA-Z][_a-zA-Z0-9]*/ }
 	-> $1;
+
+identifierAsStringNode = {identifier}
+	-> { type: "string", tokens: [ {type: "text", value: $1 } ] }
