@@ -122,9 +122,10 @@ export var dezentGrammar : Grammar = [
 	def("stringText", `{/[^"\\\n]+/}`,
 		{ type: "text", value: "$1" }),
 
-	def("number", `{/-?\\d+(\\.\\d+)?([eE][-+]\\d+)?/}`,
-		{ type: "number", value: "$1" }),
-
+	def("number", 
+		`{/-?\\d+(\\.\\d+)?([eE][-+]\\d+)?/}`, { type: "number", value: "$1" },
+		`{/-?\\.\\d+([eE][-+]\\d+)?/}`, { type: "number", value: "$1" }),
+	
 	def("boolean",
 		`"true"`, { type: "boolean", value: true },
 		`"false"`, { type: "boolean", value: false }),
