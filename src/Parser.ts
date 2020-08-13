@@ -1,22 +1,33 @@
+// tagline:
+// Parsing with the power of regular expressions plus recursion, readability, and structure.
+
 // todo:
+// - eliminate regex in favor of char classes
 // - parse error line number and position (best match)
-// - object <-> splats
+// - test string outputs
+// - test hierarchical outputs
+// - test backref outputs
+// - test every dezent grammar rule
 // - template -> pattern
-// - backrefs -> outvals where appropriate
-// - test (/x*/)*
+// - backrefs -> outputs where appropriate
 // - check that consumed == text.length...
 // - command line script
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - performance/scale testing
 // - double-check grammar backrefs
+// - constants
+// - how to deal with multiple members of same name?
+// - documentation
 // - package license
-// - release?
 // - packrat parsing
 // - $0
+// - @ values
+// - release?
 
 // speculative todo:
 // - error recovery
 // - chunked parsing
+// - macros/functions, e.g. definition(pattern1, pattern2)
 
 import { 
     Grammar, dezentGrammar, DefineNode, ReturnNode, 
@@ -281,6 +292,14 @@ class ParseManager {
                             return result ? [true, result[0].length] : [false, 0];
                         }
                     }
+                    if (node.descriptor.type == "any") {
+                        node.descriptor.match = (s) => {
+                            return s.length ? [true, 1] : [false, 0];
+                        }
+                        if (this.options.debugErrors) {
+                            node.descriptor["pattern"] = '.';
+                        }
+                    }
                 },
                 (node:TokenNode, info) => {
                     if (node.repeat) info.repeats--;
@@ -362,7 +381,7 @@ class ParseManager {
             lines.push(msg.join(" "));
         }
         console.error("Debug log:\n", lines.join("\n"));
-        if (this.compiledGrammar) {
+        if (this.rawGrammar) {
             console.error("Raw grammar:\n", JSON.stringify(this.rawGrammar));
         }
         if (this.compiledGrammar) {
@@ -633,6 +652,7 @@ class Parser {
                             break;
                         case "string":
                         case "regex":
+                        case "any":
                             let text = this.text.substr(this.top().pos);
                             let [matched, consumed] = current.node.match(text);
                             this.debug("MATCH", matched, consumed, current.node["pattern"], text);
@@ -655,7 +675,10 @@ class Parser {
                     this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], true);
                     let next = this.top();
                     if (next) {
-                        next.consumed += exited.consumed;
+                        // consume, but only if there's not a predicate
+                        if (exited.node.type != "token" || !(exited.node.and || exited.node.not)) {
+                            next.consumed += exited.consumed;
+                        }
                         if (next.node.type == "option") {
                             if (++next.index >= next.items.length) {
                                 next.status = MatchStatus.Pass;

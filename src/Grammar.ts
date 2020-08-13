@@ -2,38 +2,45 @@ export type Grammar = (DefineNode|ReturnNode)[];
 
 export interface Node { type: string }
 export interface SelectorNode extends Node { options: OptionNode[] }
-export interface TokenNode extends Node { type: "token", required: boolean, repeat: boolean, descriptor: DescriptorNode }
+export interface TokenNode extends Node { 
+	type: 'token', 
+	required: boolean, 
+	repeat: boolean, 
+	and: boolean,
+	not: boolean,
+	descriptor: DescriptorNode 
+}
 export interface MatcherNode extends Node { match?(s : string) : [boolean, number]; }
 
-export type DescriptorNode = CaptureNode | GroupNode | StringNode | RegexNode | RuleRefNode;
+export type DescriptorNode = CaptureNode | GroupNode | StringNode | RegexNode | RuleRefNode | AnyNode;
 export type ParseNode = ReturnNode | DefineNode | RuleNode | OptionNode | TokenNode | DescriptorNode;
 export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 
-export interface ReturnNode       extends Node         { type: "return",    rule: RuleNode }
-export interface DefineNode       extends Node         { type: "define",    name: string, rules: RuleNode[] }
-export interface RuleNode         extends SelectorNode { type: "rule",      value: ValueNode, captures?: boolean[], defineName?: string }
-export interface CaptureNode      extends SelectorNode { type: "capture",   index?: number }
-export interface GroupNode        extends SelectorNode { type: "group" }
-export interface OptionNode       extends Node         { type: "option",    tokens: TokenNode[] }
-export interface RuleRefNode      extends Node         { type: "ruleref",   name: string }
-export interface RegexNode        extends MatcherNode  { type: "regex",     pattern: string }
-
-export interface StringNode       extends MatcherNode  { type: "string",    tokens: (StringEscapeNode|StringTextNode)[] }
-export interface StringTextNode   extends Node         { type: "text",      value: string }
-export interface StringEscapeNode extends Node         { type: "escape",    value: string }
+export interface ReturnNode       extends Node         { type: 'return',    rule: RuleNode }
+export interface DefineNode       extends Node         { type: 'define',    name: string, rules: RuleNode[] }
+export interface RuleNode         extends SelectorNode { type: 'rule',      value: ValueNode, captures?: boolean[], defineName?: string }
+export interface CaptureNode      extends SelectorNode { type: 'capture',   index?: number }
+export interface GroupNode        extends SelectorNode { type: 'group' }
+export interface OptionNode       extends Node         { type: 'option',    tokens: TokenNode[] }
+export interface RuleRefNode      extends Node         { type: 'ruleref',   name: string }
+export interface RegexNode        extends MatcherNode  { type: 'regex',     pattern: string }
+export interface AnyNode          extends MatcherNode  { type: 'any' }
+export interface StringNode       extends MatcherNode  { type: 'string',    tokens: (StringEscapeNode|StringTextNode)[] }
+export interface StringTextNode   extends Node         { type: 'text',      value: string }
+export interface StringEscapeNode extends Node         { type: 'escape',    value: string }
                                           
-export interface BackRefNode      extends Node { type: "backref",   index: string }
-export interface SplatNode        extends Node { type: "splat",     backrefs: BackRefNode[] }
-export interface ObjectNode       extends Node { type: "object",    members: (MemberNode|SplatNode)[] }
-export interface ArrayNode        extends Node { type: "array",     elements: ValueNode[] }
-export interface NumberNode       extends Node { type: "number",    value: string }
-export interface BooleanNode      extends Node { type: "boolean",   value: boolean }
-export interface NullNode         extends Node { type: "null" }
+export interface BackRefNode      extends Node { type: 'backref',   index: string }
+export interface SplatNode        extends Node { type: 'splat',     backrefs: BackRefNode[] }
+export interface ObjectNode       extends Node { type: 'object',    members: (MemberNode|SplatNode)[] }
+export interface ArrayNode        extends Node { type: 'array',     elements: ValueNode[] }
+export interface NumberNode       extends Node { type: 'number',    value: string }
+export interface BooleanNode      extends Node { type: 'boolean',   value: boolean }
+export interface NullNode         extends Node { type: 'null' }
 
-export interface MemberNode { type: "member", name: BackRefNode|StringNode, value: ValueNode }
+export interface MemberNode { type: 'member', name: BackRefNode|StringNode, value: ValueNode }
 
-let kNull:NullNode = { type: "null" }
+let kNull:NullNode = { type: 'null' }
 
 // This is a mini DSL that allows us to build an AST
 // that our parser uses to parse grammar files.
@@ -41,113 +48,120 @@ let kNull:NullNode = { type: "null" }
 // though there are some restrictions to keep the
 // amount of parsing logic under control:
 // - there can be no whitespace within a capture
-// - object splat must be written as name/value pair, e.g. "": "...$1"
+// - object splat must be written as name/value pair, e.g. ...$1': ''
 // - captures can't have multiple regex options
 
 export var dezentGrammar : Grammar = [
-    ret(`_ ( {returnSt|defineSt} _ )*`, "$1"),
+    ret(`_ ( {returnSt|defineSt} _ )*`, '$1'),
 
-	def("_", 
+	def('_', 
 		`/\\s*/`, null,
-		`"//" /[^\\n]*\\n/`, null,
-		`"/*" /(.|\\n)*/ "*/"`, null),
+		`'//' /[^\\n]*\\n/`, null,
+		`'/*' /(.|\\n)*/ '*/'`, null),
 
-	def("returnSt", `"return" /\\s+/ {rule} _ ";"`,
-		{ type: "return", rule: "$1" }),
+	def('returnSt', `'return' /\\s+/ {rule} _ ';'`,
+		{ type: 'return', rule: '$1' }),
 
-	def("defineSt", `{identifier} _ "=" _ {rule} ( _ "," _ {rule} )* _ ";"`,
-		{ type: "define", name: "$1", rules: ["$2", "...$3"] }),
+	def('defineSt', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
+		{ type: 'define', name: '$1', rules: ['$2', '...$3'] }),
 	
-	def("rule", `{template} _ "->" _ {value}`,
-		{ type: "rule", "": "...$1", value: "$2" }),
+	def('rule', `{template} _ '->' _ {value}`,
+		{ type: 'rule', '...$1': '', value: '$2' }),
 	
-	def("template", `{templateOption} ( _ "|" _ {templateOption} )*`,
-		{ options: ["$1", "...$2"] }),
+	def('template', `{templateOption} ( _ '|' _ {templateOption} )*`,
+		{ options: ['$1', '...$2'] }),
 
-	def("templateOption", `{capture|group|string|regex|ruleref}+`,
-		{ type: "option", tokens: "$1" }),
+	def('templateOption', `{capture|group|string|regex|ruleref|any}+`,
+		{ type: 'option', tokens: '$1' }),
 
-	def("capture", `"{" _ {captureTemplate} _ "}" {modifier}`,
-		{ type: "token", "": "...$2", descriptor: { type: "capture", "": "...$1", repeat: "$2" } }),
+	def('capture', `{predicate} '{' _ {captureTemplate} _ '}' {modifier}`,
+		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'capture', '...$2': '' } }),
 
-	def("group", `"(" _ {template} _ ")" {modifier}`,
-	{ type: "token", "": "...$2", descriptor: { type: "group", "": "...$1", repeat: "$2" } }),
+	def('group', `{predicate} '(' _ {template} _ ')' {modifier}`,
+	{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
 
-	def("captureTemplate", `{captureTemplateOption} ( _ "|" _ {captureTemplateOption} )*`,
-		{ options: ["$1", "...$2"] }),
+	def('captureTemplate', `{captureTemplateOption} ( _ '|' _ {captureTemplateOption} )*`,
+		{ options: ['$1', '...$2'] }),
 
-	def("captureTemplateOption", `{captureGroup|string|regex|ruleref}+`,
-		{ type: "option", tokens: "$1" }),
+	def('captureTemplateOption', `{captureGroup|stringToken|regex|ruleref|any}+`,
+		{ type: 'option', tokens: '$1' }),
 
-	def("captureGroup", `"(" _ {captureTemplate} _ ")" {repeat}?`,
-		{ type: "group", "": "...$1", repeat: "$2" }),
+	def('captureGroup', `{predicate} '(' _ {captureTemplate} _ ')' {modifier}?`,
+		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
 
-	def("regex", `"/" {/[^/]+([^/]|\\[^/])*/} "/" {modifier}`, 
-		{ type: "token", "": "...$2", descriptor: { type: "regex", pattern: "$1" } }),
+	def('regex', `{predicate} '/' {/[^/]+([^/]|\\[^/])*/} '/' {modifier}`, 
+		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'regex', pattern: '$2' } }),
 
-	def("stringToken", `{string} {modifier}`,
-		{ type: "token", "": "...$2", descriptor: "$1" }),
+	def('any', `{predicate} '.' {modifier}`, { type: 'token', '...$2': '', '...$1': '', descriptor: { type: "any" } }),
 
-	def("ruleref", `{identifier} {modifier}`,
-		{ type: "token", "": "...$2", descriptor: { type: "ruleref", name: "$1" } }),
+	def('stringToken', `{predicate} {string} {modifier}`,
+		{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
 
-	def("modifier",
-		`"*"`, { repeat: true, required: false },
-		`"+"`, { repeat: true, required: true },
-		`"?"`, { repeat: false, required: false },
-		`""`,  { repeat: false, required: true }),
+	def('ruleref', `{predicate} {identifier} {modifier}`,
+		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'ruleref', name: '$2' } }),
 
-	def("value", `{backref|object|array|string|number|boolean|null}`,
-		"$1"),
+	def('predicate',
+		`'&'`, { and: true, not: false },
+		`'!'`, { and: false, not: true },
+		`''`,  { and: false, not: false }),
 
-	def("backref", `"$" {/\d+/}`,
-		{ type: "backref", index: "$1" }),
+	def('modifier',
+		`'*'`, { repeat: true, required: false },
+		`'+'`, { repeat: true, required: true },
+		`'?'`, { repeat: false, required: false },
+		`''`,  { repeat: false, required: true }),
 
-	def("splat",
-		`"..." {backref}`, { type: "splat", backrefs: ["$1"] },
-		`"...(" _ {backref} ( _ "," _ {backref} )* _ ")"`, { type: "splat", backrefs: ["$1", "...$2"] }),
+	def('value', `{backref|object|array|string|number|boolean|null}`,
+		'$1'),
 
-	def("object", `"{" ( _ {member} _ "," )* _ {member}? _ "}"`,
-		{ type: "object", members: ["...$1", "$2"] }),
+	def('backref', `'$' {/\\d+/}`,
+		{ type: 'backref', index: '$1' }),
 
-	def("member", `{backref|string|identifierAsStringNode} _ ":" _ {value}`,
-		{ name: "$1", value: "$2" }),
+	def('splat',
+		`'...' {backref}`, { type: 'splat', backrefs: ['$1'] },
+		`'...(' _ {backref} ( _ ',' _ {backref} )* _ ')'`, { type: 'splat', backrefs: ['$1', '...$2'] }),
 
-	def("array", `"[" ( _ {value|splat} _ "," )* _ {value}? _ "]"`,
-		{ type: "array", elements: ["...$1", "$2"] }),
+	def('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
+		{ type: 'object', members: ['...$1', '$2'] }),
 
-	def("string", `/"/ {escape|stringText}* /"/`,
-		{ type: "string", tokens: "$1" }),
+	def('member', `{backref|string|identifierAsStringNode} _ ':' _ {value}`,
+		{ name: '$1', value: '$2' }),
 
-	def("stringText", `{/[^"\\\n]+/}`,
-		{ type: "text", value: "$1" }),
+	def('array', `'[' ( _ {value|splat} _ ',' )* _ {value}? _ ']'`,
+		{ type: 'array', elements: ['...$1', '$2'] }),
 
-	def("number", 
-		`{/-?\\d+(\\.\\d+)?([eE][-+]\\d+)?/}`, { type: "number", value: "$1" },
-		`{/-?\\.\\d+([eE][-+]\\d+)?/}`, { type: "number", value: "$1" }),
+	def('string', `/'/ {escape|stringText}* /'/`,
+		{ type: 'string', tokens: '$1' }),
+
+	def('stringText', `{/[^'\\\n]+/}`,
+		{ type: 'text', value: '$1' }),
+
+	def('number', 
+		`{/-?\\d+(\\.\\d+)?([eE][-+]\\d+)?/}`, { type: 'number', value: '$1' },
+		`{/-?\\.\\d+([eE][-+]\\d+)?/}`, { type: 'number', value: '$1' }),
 	
-	def("boolean",
-		`"true"`, { type: "boolean", value: true },
-		`"false"`, { type: "boolean", value: false }),
+	def('boolean',
+		`'true'`, { type: 'boolean', value: true },
+		`'false'`, { type: 'boolean', value: false }),
 
-	def("null", `"null"`,
-		{ type: "null" }),
+	def('null', `'null'`,
+		{ type: 'null' }),
 
-	def("escape", `{/(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/}`,
-		{ type: "escape", value: "$1" }),
+	def('escape', `{/(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/}`,
+		{ type: 'escape', value: '$1' }),
 
-	def("repeat", `{"*"|"+"|"?"}`, "$1"),
+	def('repeat', `{'*'|'+'|'?'}`, '$1'),
 
-	def("identifier", `{/[_a-zA-Z][_a-zA-Z0-9]*/}`,
-		"$1"),
+	def('identifier', `{/[_a-zA-Z][_a-zA-Z0-9]*/}`,
+		'$1'),
 
-	def("identifierAsStringNode", `{identifier}`,
-		{ type: "string", tokens: [ {type: "text", value: "$1" } ] }),
+	def('identifierAsStringNode', `{identifier}`,
+		{ type: 'string', tokens: [ {type: 'text', value: '$1' } ] }),
 ];
 
 function ret(template:string, output:any) : ReturnNode {
     return {
-        type: "return",
+        type: 'return',
 		rule: rule(template, output),
     }
 }
@@ -158,7 +172,7 @@ function def(name:string, ...args:any) : DefineNode {
 		rules.push(rule(args[i], args[i+1]));
 	}
 	return {
-		type: "define",
+		type: 'define',
 		name: name,
 		rules: rules
 	}
@@ -166,7 +180,7 @@ function def(name:string, ...args:any) : DefineNode {
 
 function rule(template:string, out:any) : RuleNode {
 	return {
-		type: "rule",
+		type: 'rule',
 		options: [ option(template.split(/ +/)) ],
 		value: output(out)
 	}
@@ -179,42 +193,48 @@ function option(tokStrs:string[]) : OptionNode {
 		let tokStr = tokStrs[i];
 		let node:DescriptorNode;
 		let repeat;
-		if (tokStr == '(') {
+		let predicate = '';
+		if (['!(', '&(', '('].includes(tokStr)) {
+			if (tokStr[0] != '(') {
+				predicate = tokStr[0];
+			}
 			let j = i;
 			while (tokStrs[++j][0] != ')');
 			node = group(tokStrs.slice(i+1, j));
 			repeat = tokStrs[j][1];
 			i = j;
 		} else {
-			repeat = ['?','*','+'].includes(tokStr[tokStr.length - 1]) ? tokStr[tokStr.length - 1] : "";
-			if (repeat != "") {
+			repeat = ['?','*','+'].includes(tokStr[tokStr.length - 1]) ? tokStr[tokStr.length - 1] : '';
+			if (repeat != '') {
 				tokStr = tokStr.substr(0, tokStr.length - 1);
 			}
 			switch (tokStr[0]) {
-				case "{": node = capture(tokStr); break;
-				case "/": node = regex(tokStr); break;
-				case `"`: node = string(tokStr); break;
+				case '{': node = capture(tokStr); break;
+				case '/': node = regex(tokStr); break;
+				case `'`: node = string(tokStr); break;
 				default:
 					node = ruleref(tokStr); break;
 			}
 		}
 		tokens.push({
-			type: "token",
+			type: 'token',
 			required: ['', '+'].includes(repeat),
 			repeat: ['*', '+'].includes(repeat),
+			and: predicate == '&',
+			not: predicate == '!',
 			descriptor: node
 		})
 	}
 
 	return {
-		type: "option",
+		type: 'option',
 		tokens: tokens
 	};
 }
 
 function group(tokens:string[]) : GroupNode {
 	return {
-		type: "group",
+		type: 'group',
 		options: [option(tokens)]
 	}
 }
@@ -233,23 +253,23 @@ function capture(token:string) : CaptureNode {
 		options = token.substr(1, token.length - 1).split('|');
 	}
 	return {
-		type: "capture",
+		type: 'capture',
 		options: options.map((t) => option([t])),
 	}
 }
 
 function regex(token:string) : RegexNode {
 	return {
-		type: "regex",
+		type: 'regex',
 		pattern: token.substr(1, token.length - 2)
 	}
 }
 
 function string(token:string) : StringNode {
 	return {
-		type: "string",
+		type: 'string',
 		tokens: [{
-			type: "text",
+			type: 'text',
 			value: token.substr(1, token.length - 2)
 		}]
 	}
@@ -260,7 +280,7 @@ function ruleref(token:string) : RuleRefNode {
 		throw new Error(`invalid identifier: ${token}`);
 	}
 	return {
-		type: "ruleref",
+		type: 'ruleref',
 		name: token
 	}
 }
@@ -269,69 +289,69 @@ function output(value: any) : ValueNode {
 	switch (typeof value) {
 		case 'object':
 			if (value === null) {
-				return { type: "null" };
+				return { type: 'null' };
 			} else if (Array.isArray(value)) {
 				let ret = [];
 				for (let elem of value) {
 					ret.push(output(elem));
 				}
 				return { 
-					type: "array",
+					type: 'array',
 					elements: ret
 				}
 			} else {
 				let members = [];
 				for (let name in value) {
-					if (name == "") {
+					if (name.startsWith('...')) {
 						// splat
-						members.push(output(value[name]));
+						members.push(output(name));
 					} else {
 						members.push({
-							type: "member",
+							type: 'member',
 							name: output(name),
 							value: output(value[name])
 						})
 					}
 				}
 				return {
-					type: "object",
+					type: 'object',
 					members: members
 				}
 			}
 		case 'string':
 			if (value.match(/^\$(\d)$/)) {
 				return {
-					type: "backref",
+					type: 'backref',
 					index: RegExp.$1
 				}
 			} else if (value.match(/^\.\.\.\$(\d)/)) {
 				return {
-					type: "splat",
+					type: 'splat',
 					backrefs: [{
-						type: "backref",
+						type: 'backref',
 						index: RegExp.$1
 					}]
 				}
 			} else {
 				return {
-					type: "string",
+					type: 'string',
 					tokens: [{
-						type: "text",
+						type: 'text',
 						value: value
 					}]
 				}
 			}
 		case 'number':
 			return {
-				type: "number",
+				type: 'number',
 				value: String(value)
 			}
 		case 'boolean':
 			return {
-				type: "boolean",
+				type: 'boolean',
 				value: !!value
 			}
 		default:
-			throw new Error("Unexpected JSON data type: " + typeof value)
+			throw new Error('Unexpected JSON data type: ' + typeof value)
 	}
 }

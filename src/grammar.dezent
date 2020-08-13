@@ -1,108 +1,117 @@
-// decisions: 
-// - drop empty nodes? no - unmatched ? yields null
-// - splat - uber-flexible, e.g. arrays w/in objects and objects w/in arrays
-
-// tagline:
-// Parsing with the power of regular expressions plus recursion, readability, and structure.
-
-// todo:
-// output references
-// how to deal with multiple members of same name?
+// This is the grammar for dezent grammars -
+// the dezent parser uses this grammar to parse grammar
+// documents prior to parsing.
 
 return _ ( { returnSt | defineSt } _ )* 
 	-> $1;
 
 _ = /\s*/ -> null,
-	"//" /[^\n]*\n/ -> null,
-	"/*" /(.|\n)*/ "*/" -> null;
+	'//' /[^\n]*\n/ -> null,
+	'/*' /(.|\n)*/ '*/' -> null;
 
-returnSt = "return" /\s+/ {rule} _ ";" 
-	-> { type: "return", rule: $1 };
+returnSt = 'return' /\s+/ {rule} _ ';' 
+	-> { type: 'return', rule: $1 };
 
-defineSt = {identifier} _ "=" _ {rule} ( _ "," _ {rule} )* _ ";" 
-	-> { type: "define", name: $1, rules: [$2, ...$3] };
+defineSt = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
+	-> { type: 'define', name: $1, rules: [$2, ...$3] };
 
-rule = {template} _ "->" _ {value} 
-	-> { type: "rule", ...$1, value: $2 },
+rule = {template} _ '->' _ {value} 
+	-> { type: 'rule', ...$1, value: $2 },
 
-template = {templateOption} ( _ "|" _ {templateOption} )* 
+template = {templateOption} ( _ '|' _ {templateOption} )* 
 	-> { options: [$1, ...$2] };
 
-templateOption = { capture | group | stringToken | regex | ruleref }+
-	-> { type: "option", tokens: $1 };
+templateOption = { capture | group | stringToken | regex | class | ruleref | any }+
+	-> { type: 'option', tokens: $1 };
 
-capture = "{" _ {captureTemplate} _ "}" {modifier}
-	-> { type: "token", ...$2, descriptor: { type: "capture", ...$1 } };
+capture = {predicate} '{' _ {captureTemplate} _ '}' {modifier}
+	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'capture', ...$2 } };
 
-group = "(" _ {template} _ ")" {modifier}
-	-> { type: "token", ...$2, descriptor: { type: "group", ...$1 } };
+group = {predicate} '(' _ {template} _ ')' {modifier}
+	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };
 
-captureTemplate = {captureTemplateOption} ( _ "|" _ {captureTemplateOption} )*
+captureTemplate = {captureTemplateOption} ( _ '|' _ {captureTemplateOption} )*
 	-> { options: [$1, ...$2] };
 
-captureTemplateOption = { captureGroup | string | regex | ruleref }+
-	-> { type: "option", tokens: $1 };
+captureTemplateOption = { captureGroup | stringToken | regex | class | ruleref | any }+
+	-> { type: 'option', tokens: $1 };
 
-captureGroup = "(" _ {captureTemplate} _ ")" {repeat}?
-	-> { type: "group", ...$1, repeat: $2 };
+captureGroup = '(' _ {captureTemplate} _ ')' {repeat}?
+	-> { type: 'group', ...$1, repeat: $2 };
 
-regex = "/" { /[^/]+([^/]|\\[^/])*/ } "/" {modifier}
-	-> { type: "token", ...$2, descriptor: { type: "regex", pattern: $1 } };
+regex = {predicate} '/' { /[^/]+([^/]|\\[^/])*/ } '/' {modifier}
+	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'regex', pattern: $2 } };
 
-stringToken = {string} {modifier}
-	-> { type: "token", ...$2, descriptor: $1 };
+class = {predicate} '[' { classComponent }* ']' {modifier}
+	-> ;
 
-ruleref = {identifier} {modifier}
-	-> {type: "token", ...$2, descriptor: { type: "ruleref", name: $1 } };
+classComponent =
+	{classChar} '-' {classChar} -> ,
+	{classChar} -> ;
+
+classChar = !']' {.} -> $1;
+
+any = {predicate} '.' {modifier} -> { type: 'token', ...$2, ...$1, descriptor: { type: "any" } };
+
+stringToken = {predicate} {string} {modifier}
+	-> { type: 'token', ...$3, ...$1, descriptor: $2 };
+
+ruleref = {predicate} {identifier} {modifier}
+	-> {type: 'token', ...$3, ...$1, descriptor: { type: 'ruleref', name: $2 } };
+
+predicate =
+	'&' -> { and: true, not: false },
+	'!' -> { and: false, not: true },
+	''  -> { and: false, not: false };
 
 modifier = 
-	"*" -> { repeat: true, required: false },
-	"+" -> { repeat: true, required: true },
-	"?" -> { repeat: false, required: false },
-	""  -> { repeat: false, required: true };
+	'*' -> { repeat: true, required: false },
+	'+' -> { repeat: true, required: true },
+	'?' -> { repeat: false, required: false },
+	''  -> { repeat: false, required: true };
 
 value = { backref | object | array | string | number | boolean | null } 
 	-> $1;
 
-backref = "$" { /\d+/ } 
-	-> { type: "backref", index: $1 };
+backref = '$' { /\d+/ } 
+	-> { type: 'backref', index: $1 };
 
 splat = 
-	"..." {backref} -> { type: "splat", backrefs: [$1] },
-	"...(" _ {backref} ( _ "," _ {backref} )* _ ")" -> { type: "splat", backrefs: [$1, ...$2] };
+	'...' {backref} -> { type: 'splat', backrefs: [$1] },
+	'...(' _ {backref} ( _ ',' _ {backref} )* _ ')' -> { type: 'splat', backrefs: [$1, ...$2] };
 
-object = "{" ( _ {member} _ "," )* _ {member}? _ "}" 
-	-> { type: "object", members: [...$1, $2] };
+object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' 
+	-> { type: 'object', members: [...$1, $2] };
 
 member = 
 	{splat} -> $1,
-	{backref|string|identifierAsStringNode} _ ":" _ {value} -> { name: $1, value: $2 };
+	{backref|string|identifierAsStringNode} _ ':' _ {value} -> { name: $1, value: $2 };
 
-array = "[" ( _ {value|splat} _ "," )* _ {value}? _ "]" 
-	-> { type: "array", elements: [...$1, $2] };
+array = '[' ( _ {value|splat} _ ',' )* _ {value}? _ ']' 
+	-> { type: 'array', elements: [...$1, $2] };
 
-string = /"/ {escape|stringText}* /"/ 
-	-> { type: "string", tokens: $1 };
+string = /'/ {escape|stringText}* /'/ 
+	-> { type: 'string', tokens: $1 };
 
-stringText = { /[^"\\\n]+/ } 
-	-> { type: "text", value: $1 };
+stringText = { /[^'\\\n]+/ } 
+	-> { type: 'text', value: $1 };
 
 number = 
-	{ /-?\d+(\.\d+)?([eE][-+]\d+)?/ } -> { type: "number", value: $1 },
-	{ /-?\.\d+([eE][-+]\d+)?/ } -> { type: "number", value: $1 };
+	{ /-?\d+(\.\d+)?([eE][-+]\d+)?/ } -> { type: 'number', value: $1 },
+	{ /-?\.\d+([eE][-+]\d+)?/ } -> { type: 'number', value: $1 };
 
 boolean =
-	"true"  -> { type: "boolean", value: true },
-	"false" -> { type: "boolean", value: false };
+	'true'  -> { type: 'boolean', value: true },
+	'false' -> { type: 'boolean', value: false };
 
-null = "null" 
-	-> { type: "null" };
+null = 'null' 
+	-> { type: 'null' };
 
 escape = { /(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/ }
-	-> { type: "escape", value: $1 };
+	-> { type: 'escape', value: $1 };
 
 identifier = { /[_a-zA-Z][_a-zA-Z0-9]*/ }
 	-> $1;
 
 identifierAsStringNode = {identifier}
-	-> { type: "string", tokens: [ {type: "text", value: $1 } ] }
+	-> { type: 'string', tokens: [ {type: 'text', value: $1 } ] }

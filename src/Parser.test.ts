@@ -45,3 +45,8 @@ test("object outputs", () => {
     expect(out).toEqual([ 1, 2, 3 ]);
 
 });
+
+test("any terminal", () => {
+    let out = parseText("return {.} -> $1;", "x", {debugErrors:true});
+    expect(out).toEqual('x');
+});
