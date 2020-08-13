@@ -12,7 +12,7 @@ export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | Strin
 
 export interface ReturnNode       extends Node         { type: "return",    rule: RuleNode }
 export interface DefineNode       extends Node         { type: "define",    name: string, rules: RuleNode[] }
-export interface RuleNode         extends SelectorNode { type: "rule",      value: ValueNode, captures?: boolean[] }
+export interface RuleNode         extends SelectorNode { type: "rule",      value: ValueNode, captures?: boolean[], defineName?: string }
 export interface CaptureNode      extends SelectorNode { type: "capture",   index?: number }
 export interface GroupNode        extends SelectorNode { type: "group" }
 export interface OptionNode       extends Node         { type: "option",    tokens: TokenNode[] }

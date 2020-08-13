@@ -45,6 +45,7 @@ export enum ErrorCode {
     BackRefNotFound           = 2007,
     CaptureOutputNotFound     = 2008,
     InputConsumedBeforeResult = 2009,
+    MultipleOutputsForCapture = 2010,
 }
 
 const errorMessages = {
@@ -65,6 +66,7 @@ const errorMessages = {
     2007: "Back reference does not exist",
     2008: "No output was found during capture",
     2009: "The result does not start at input index 0",
+    2010: "Multiple outputs were found for a non-repeating capture",
 }
 
 let dezentGrammarFound = false;
@@ -237,6 +239,7 @@ class ParseManager {
                 rules = item.rules;
             }
             for (let i = 0; i < rules.length; i++) {
+                rules[i].defineName = item["name"] || "return";
                 let [code, captures, index] = this.compileRule(rules[i]);
                 if (code != 0) {
                     grammarError(code, item["name"] || item.type, String(i), index);
@@ -280,7 +283,7 @@ class ParseManager {
                     }
                 },
                 (node:TokenNode, info) => {
-                    if (node.repeat) info.repeat--;
+                    if (node.repeat) info.repeats--;
                 }
             );
             if (lastCount > -1 && lastCount != info.captures.length) {
@@ -369,6 +372,9 @@ class ParseManager {
             console.error("Parser stack:\n", this.currentParser.stack);
             console.error("Output stack:\n", this.currentParser.output.stack);
         }
+        if (this.currentParser.output.result) {
+            console.error("Output:\n", JSON.stringify(this.currentParser.output.result));
+        }
     }
 }
 
@@ -420,41 +426,44 @@ type ParseContextFrame = {
     consumed: number,
 }
 
-type OutputContextFrame = {
+type OutputFrame = {
     node : ReturnNode|DefineNode,
     rule?: RuleNode,
     captureNode : CaptureNode|null,
     capture: OutputToken[],
-    backrefs : (OutputToken|OutputToken[])[],
-    output?: OutputToken
+    tokens : OutputToken[],
+    tokensStack : OutputToken[][],
+    output?: OutputToken,
 }
 
 interface OutputToken {
+    captureIndex?: number,
     pos: number,
-    length: number
-    outputs?: (OutputToken|OutputToken[])[],
+    length: number,
+    outputs?: (OutputToken|OutputToken[])[]
     value?: ValueNode,
 }
 
 class OutputContext {
-    stack:OutputContextFrame[] = [];
-    top:OutputContextFrame = null;
+    stack:OutputFrame[] = [];
+    top:OutputFrame = null;
     result:OutputToken;
 
     constructor() {
     }
 
-    enter(node:ReturnNode|DefineNode) {
+    enterFrame(node:ReturnNode|DefineNode) {
         this.top = {
             node: node,
             captureNode: null,
             capture: [],
-            backrefs: [],
+            tokens: [],
+            tokensStack: [],
         };
         this.stack.push(this.top);
     }
 
-    exit(node:ReturnNode|DefineNode, success:boolean) {
+    exitFrame(node:ReturnNode|DefineNode, success:boolean) {
         let frame = this.stack.pop();
         this.top = this.stack[this.stack.length - 1];
         if (frame.node != node) {
@@ -462,10 +471,24 @@ class OutputContext {
         }
         if (success) {
             if (!frame.output) {
+                // whoops, yield was never called
                 parserError(ErrorCode.EmptyOutput);
             }
             this.addTokenObject(frame.output);
         }
+    }
+
+    enterGroup() {
+        this.top.tokensStack.push(this.top.tokens);
+        this.top.tokens = [];
+    }
+
+    exitGroup(success:boolean) {
+        if (success) {
+            let index = this.top.tokensStack.length - 1;
+            this.top.tokensStack[index] = this.top.tokensStack[index].concat(this.top.tokens);
+        }
+        this.top.tokens = this.top.tokensStack.pop();
     }
 
     startCapture(node:CaptureNode) {
@@ -483,23 +506,17 @@ class OutputContext {
 
         if (success) {
             // move our capture into an output
-            let index = this.top.captureNode.index;
             let token:OutputToken;
             if (this.top.capture.length > 1) {
-                token = {
+                this.top.tokens.push({
+                    captureIndex: this.top.captureNode.index,
                     pos: this.top.capture[0].pos,
                     length: this.top.capture.reduce((t, c) => t + c.length, 0)
-                };
+                });
             } else if (this.top.capture.length == 1) {
-                token = this.top.capture[0];
+                this.top.tokens.push(this.top.capture[0]);
             } else {
                 // didn't match...
-            }
-
-            if (this.top.rule.captures[index]) {
-                this.top.backrefs[index]["push"](token);
-            } else {
-                this.top.backrefs[index] = token;
             }
         }
 
@@ -510,7 +527,7 @@ class OutputContext {
         this.addTokenObject({
             pos: pos,
             length: consumed
-        })
+        });
     }
 
     addTokenObject(token:OutputToken) {
@@ -519,46 +536,51 @@ class OutputContext {
             this.result = token;
         } else if (this.top && this.top.captureNode) { 
             // store our result, but only if capturing
+            // Note that we may be changing the capture index if this is
+            // an output being transferred to another frame on exit.
+            token.captureIndex = this.top.captureNode.index;
             this.top.capture.push(token);
         }
     }
 
     yield(rule:RuleNode, startPos:number, consumed:number) {
         // first item is empty so indices align...
-        let backrefs:(OutputToken|OutputToken[])[] = [null];
-        for (let i = 1; i < this.top.rule.captures.length; i++) {
-            if (this.top.rule.captures[i]) {
-                backrefs[i] = this.top.backrefs[i];
-            } else if (this.top.backrefs[i] === undefined) {
-                // optional value never matched...
-                backrefs[i] = {
+        let outputs:(OutputToken|OutputToken[])[] = [];
+        for (let multi of this.top.rule.captures) {
+            outputs.push(multi ? [] : null);
+        }
+        for (let token of this.top.tokens) {
+            if (this.top.rule.captures[token.captureIndex]) {
+                outputs[token.captureIndex]["push"](token);
+            } else {
+                if (outputs[token.captureIndex]) {
+                    parserError(ErrorCode.MultipleOutputsForCapture);
+                }
+                outputs[token.captureIndex] = token;
+            }
+        }
+        // find optional values that never matched and mark as null
+        for (let i = 1; i < outputs.length; i++) {
+            if (!outputs[i]) {
+                outputs[i] = {
                     pos: startPos,
                     length: consumed,
                     outputs: [],
                     value: { type: "null" }
-                };
-            } else {
-                backrefs[i] = this.top.backrefs[i];
+                }
             }
         }
         this.top.output = {
             pos: startPos,
             length: consumed,
-            outputs: backrefs,
+            outputs: outputs,
             value: rule.value
         }
     }
 
     reset(rule:RuleNode) {
         this.top.rule = rule;
-        // put an empty item in the captures so that backref indices
-        // (which begin at 1) line up correctly
-        this.top.backrefs = [null];
-        for (let i = 1; i < rule.captures.length; i++) {
-            if (rule.captures[i]) {
-                this.top.backrefs[i] = [];
-            }
-        }
+        this.top.tokens = [];
     }
 }
 
@@ -627,6 +649,9 @@ class Parser {
                     break;
                 case MatchStatus.Pass:
                     let exited = this.stack.pop();
+                    if (["capture","group"].includes(exited.node.type)) {
+                        this.output.exitGroup(true);
+                    }
                     this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], true);
                     let next = this.top();
                     if (next) {
@@ -641,7 +666,7 @@ class Parser {
                         switch (next.node.type) {
                             case "return":
                             case "define":
-                                this.output.exit(next.node, true);
+                                this.output.exitFrame(next.node, true);
                                 break;
                             case "rule":
                                 this.debug("YIELD", this.text.substr(exited.pos, exited.consumed));
@@ -664,6 +689,9 @@ class Parser {
 
                 case MatchStatus.Fail:
                     exited = this.stack.pop();
+                    if (["capture","group"].includes(exited.node.type)) {
+                        this.output.exitGroup(false);
+                    }
                     this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], false);
                     next = this.top();
                     if (["define", "rule", "capture", "group"].includes(next.node.type)) {
@@ -686,7 +714,7 @@ class Parser {
                             throw new Error("Document is not parsable.")
                         case "define":
                             if (next.status == MatchStatus.Fail) {
-                                this.output.exit(next.node, false);
+                                this.output.exitFrame(next.node, false);
                             }
                             break;
                         case "capture":
@@ -721,11 +749,11 @@ class Parser {
         switch (node.type) {
             case "return": 
                 items = [node.rule]; 
-                this.output.enter(node);
+                this.output.enterFrame(node);
                 break;
             case "define": 
                 items = node.rules;
-                this.output.enter(node);
+                this.output.enterFrame(node);
                 break;
             case "rule": 
                 this.debug("RESET");
@@ -733,11 +761,13 @@ class Parser {
                 items = node.options; 
                 break;
             case "capture": 
+                this.output.enterGroup();
                 this.output.startCapture(node);
                 this.debug("CAPTURE start", node.index);
                 items = node.options; 
                 break;
             case "group": 
+                this.output.enterGroup();
                 items = node.options; 
                 break;
             case "option": 
