@@ -50,14 +50,16 @@ let kNull:NullNode = { type: 'null' }
 // - there can be no whitespace within a capture
 // - object splat must be written as name/value pair, e.g. ...$1': ''
 // - captures can't have multiple regex options
+// - grouping parens (and predicate/modifier) must be surrounded by whitespace
 
 export var dezentGrammar : Grammar = [
     ret(`_ ( {returnSt|defineSt} _ )*`, '$1'),
 
-	def('_', 
-		`/\\s*/`, null,
-		`'//' /[^\\n]*\\n/`, null,
-		`'/*' /(.|\\n)*/ '*/'`, null),
+	def('_', `( singleLineComment | multiLineComment | whitespace )*`, null),
+
+	def('singleLineComment', `'//' /[^\\n]*\\n/`,  null),
+	def('multiLineComment', `'/*' /(.|\\n)*/ '*/'`, null),
+	def('whitespace',       `/\\s*/`,               null),
 
 	def('returnSt', `'return' /\\s+/ {rule} _ ';'`,
 		{ type: 'return', rule: '$1' }),
@@ -68,10 +70,10 @@ export var dezentGrammar : Grammar = [
 	def('rule', `{template} _ '->' _ {value}`,
 		{ type: 'rule', '...$1': '', value: '$2' }),
 	
-	def('template', `{templateOption} ( _ '|' _ {templateOption} )*`,
+	def('template', `{templateOption} _ ( '|' _ {templateOption} _ )*`,
 		{ options: ['$1', '...$2'] }),
 
-	def('templateOption', `{capture|group|string|regex|ruleref|any}+`,
+	def('templateOption', `( {capture|group|string|regex|ruleref|any} _ )+`,
 		{ type: 'option', tokens: '$1' }),
 
 	def('capture', `{predicate} '{' _ {captureTemplate} _ '}' {modifier}`,
@@ -80,16 +82,16 @@ export var dezentGrammar : Grammar = [
 	def('group', `{predicate} '(' _ {template} _ ')' {modifier}`,
 	{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
 
-	def('captureTemplate', `{captureTemplateOption} ( _ '|' _ {captureTemplateOption} )*`,
+	def('captureTemplate', `{captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )*`,
 		{ options: ['$1', '...$2'] }),
 
-	def('captureTemplateOption', `{captureGroup|stringToken|regex|ruleref|any}+`,
+	def('captureTemplateOption', `( {captureGroup|stringToken|regex|ruleref|any} _ )+`,
 		{ type: 'option', tokens: '$1' }),
 
 	def('captureGroup', `{predicate} '(' _ {captureTemplate} _ ')' {modifier}?`,
 		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
 
-	def('regex', `{predicate} '/' {/[^/]+([^/]|\\[^/])*/} '/' {modifier}`, 
+	def('regex', `{predicate} '/' {/([^\\\\\\/]|\\\\.)*/} '/' {modifier}`, 
 		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'regex', pattern: '$2' } }),
 
 	def('any', `{predicate} '.' {modifier}`, { type: 'token', '...$2': '', '...$1': '', descriptor: { type: "any" } }),
@@ -124,10 +126,11 @@ export var dezentGrammar : Grammar = [
 	def('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
 		{ type: 'object', members: ['...$1', '$2'] }),
 
-	def('member', `{backref|string|identifierAsStringNode} _ ':' _ {value}`,
-		{ name: '$1', value: '$2' }),
+	def('member', 
+		`{splat}`, '$1',
+		`{backref|string|identifierAsStringNode} _ ':' _ {value}`, { name: '$1', value: '$2' }),
 
-	def('array', `'[' ( _ {value|splat} _ ',' )* _ {value}? _ ']'`,
+	def('array', `'[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']'`,
 		{ type: 'array', elements: ['...$1', '$2'] }),
 
 	def('string', `/'/ {escape|stringText}* /'/`,
@@ -147,7 +150,7 @@ export var dezentGrammar : Grammar = [
 	def('null', `'null'`,
 		{ type: 'null' }),
 
-	def('escape', `{/(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/}`,
+	def('escape', `'\\\\' {/(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/}`,
 		{ type: 'escape', value: '$1' }),
 
 	def('repeat', `{'*'|'+'|'?'}`, '$1'),
@@ -233,9 +236,18 @@ function option(tokStrs:string[]) : OptionNode {
 }
 
 function group(tokens:string[]) : GroupNode {
+	let options = [];
+	let lastOr = -1;
+	for (let i = 0; i < tokens.length; i++) {
+		if (tokens[i] == '|') {
+			options.push(option(tokens.slice(lastOr+1, i)));
+			lastOr = i;
+		}
+	}
+	options.push(option(tokens.slice(lastOr+1, tokens.length)));
 	return {
 		type: 'group',
-		options: [option(tokens)]
+		options: options
 	}
 }
 
@@ -259,6 +271,9 @@ function capture(token:string) : CaptureNode {
 }
 
 function regex(token:string) : RegexNode {
+	console.log(token);
+	console.log(token.substr(1, token.length - 2));
+	console.log(new RegExp('^' + token.substr(1, token.length - 2)));
 	return {
 		type: 'regex',
 		pattern: token.substr(1, token.length - 2)

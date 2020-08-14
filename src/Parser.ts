@@ -2,12 +2,15 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - eliminate regex in favor of char classes
 // - parse error line number and position (best match)
+// - grammar parse tree comparison test
+// - regex-like API
+// - compile to single file?
 // - test string outputs
 // - test hierarchical outputs
 // - test backref outputs
 // - test every dezent grammar rule
+// - eliminate regex in favor of char classes
 // - template -> pattern
 // - backrefs -> outputs where appropriate
 // - check that consumed == text.length...
@@ -28,6 +31,7 @@
 // - error recovery
 // - chunked parsing
 // - macros/functions, e.g. definition(pattern1, pattern2)
+// - regex-like match-finding
 
 import { 
     Grammar, dezentGrammar, DefineNode, ReturnNode, 
@@ -38,6 +42,9 @@ import {
 import { info } from "console";
 
 export enum ErrorCode {
+    TextParsingError          = 1,
+    GrammarParsingError       = 2,
+
     DuplicateDefine           = 1001,
     MultipleReturn            = 1002,
     RuleNotFound              = 1003,
@@ -60,6 +67,8 @@ export enum ErrorCode {
 }
 
 const errorMessages = {
+    1:    "Parse failed: $3\nAt line $1 char $2:\n$4\n$5^",
+    2:    "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5^",
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
@@ -229,10 +238,18 @@ class ParseManager {
     }
 
     parseAndCompileGrammar(text:string) : Grammar {
-        let grammar = this.parseTextWithGrammar(findDezentGrammar(this.options), text);
-        this.rawGrammar = grammar;
-        this.compileGrammar(grammar);
-        return grammar;
+        try {
+            let grammar = this.parseTextWithGrammar(findDezentGrammar(this.options), text);
+            this.rawGrammar = grammar;
+            this.compileGrammar(grammar);
+            return grammar;
+        } catch(e) {
+            if (e["code"] == ErrorCode.TextParsingError) {
+                parsingError(ErrorCode.GrammarParsingError, text, e["pos"], e["reason"]);
+            } else {
+                throw e;
+            }
+        }
     }
 
     compileGrammar(grammar:Grammar) {
@@ -378,7 +395,7 @@ class ParseManager {
     dumpDebug() {
         let lines = [];
         for (let msg of this.debugLog) {
-            lines.push(msg.join(" "));
+            lines.push(msg.join('\t').replace(/\n/g, '\\n'));
         }
         console.error("Debug log:\n", lines.join("\n"));
         if (this.rawGrammar) {
@@ -620,22 +637,15 @@ class Parser {
     }
 
     parse() {
+        let maxPos = 0;
+        let failedPatterns = {};
+
         while (this.stack.length) {
             let current = this.top();
 
             if (current.index > current.items.length) {
                 parserError(ErrorCode.ArrayOverrun);
             }
-
-            /*this.debug(
-                this.text.substr(current.pos, 10), 
-                [current.items.length, current.index].join(),
-                current.status, 
-                this.stack.length, 
-                current.pos+":"+current.consumed,
-                current.node.type, 
-                current.node["pattern"]||current.node["name"]
-            );*/
 
             switch (current.status) {
                 case MatchStatus.Continue:
@@ -655,9 +665,9 @@ class Parser {
                         case "any":
                             let text = this.text.substr(this.top().pos);
                             let [matched, consumed] = current.node.match(text);
-                            this.debug("MATCH", matched, consumed, current.node["pattern"], text);
+//                            this.debug("MATCH", matched, consumed, current.node["pattern"], text.substr(0,20));
                             if (matched) {
-                                this.debug("TOKEN add", this.text.substr(current.pos, consumed));
+//                                this.debug("TOKEN add", this.text.substr(current.pos, consumed));
                                 this.output.addToken(current.pos, consumed);
                                 current.consumed = consumed;
                                 current.status = MatchStatus.Pass;
@@ -669,10 +679,17 @@ class Parser {
                     break;
                 case MatchStatus.Pass:
                     let exited = this.stack.pop();
+                    if (exited.pos + exited.consumed > maxPos) {
+                        maxPos = exited.pos + exited.consumed;
+                        failedPatterns = {};
+                    }
                     if (["capture","group"].includes(exited.node.type)) {
                         this.output.exitGroup(true);
                     }
-                    this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], true);
+                    //this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], true);
+                    if (exited.node["pattern"] || exited.node.type == "ruleref") {
+                        this.debug("PASS", this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
+                    }
                     let next = this.top();
                     if (next) {
                         // consume, but only if there's not a predicate
@@ -692,16 +709,17 @@ class Parser {
                                 this.output.exitFrame(next.node, true);
                                 break;
                             case "rule":
-                                this.debug("YIELD", this.text.substr(exited.pos, exited.consumed));
+//                                this.debug("YIELD", this.text.substr(exited.pos, exited.consumed));
                                 this.output.yield(next.node, exited.pos, exited.consumed);
                                 break;
                             case "token":
-                                if (next.node.repeat) {
+                                // when repeating, make sure we consumed to avoid infinite loops
+                                if (next.node.repeat && exited.consumed > 0) {
                                     this.enter(next.node.descriptor);
                                 }
                                 break;
                             case "capture":
-                                this.debug("CAPTURE end", next.node.index);
+//                                this.debug("CAPTURE end", next.node.index);
                                 this.output.endCapture(next.node, true);        
                                 break;
                         }
@@ -712,10 +730,16 @@ class Parser {
 
                 case MatchStatus.Fail:
                     exited = this.stack.pop();
+                    if (exited.pos == maxPos && exited.node["pattern"]) {
+                        failedPatterns[exited.node["pattern"]] = true;
+                    }
                     if (["capture","group"].includes(exited.node.type)) {
                         this.output.exitGroup(false);
                     }
-                    this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], false);
+                    //this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], false);
+                    if (exited.node["pattern"] || exited.node.type == "ruleref") {
+                        this.debug("FAIL", this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
+                    }
                     next = this.top();
                     if (["define", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
@@ -734,7 +758,7 @@ class Parser {
                     }
                     switch (next.node.type) {
                         case "return":
-                            throw new Error("Document is not parsable.")
+                            parsingError(ErrorCode.TextParsingError, this.text, maxPos, buildReason());
                         case "define":
                             if (next.status == MatchStatus.Fail) {
                                 this.output.exitFrame(next.node, false);
@@ -742,7 +766,7 @@ class Parser {
                             break;
                         case "capture":
                             if (next.status == MatchStatus.Fail) {
-                                this.debug("CAPTURE end", next.node.index);
+//                                this.debug("CAPTURE end", next.node.index);
                                 this.output.endCapture(next.node, false);
                             }
                             break;
@@ -754,13 +778,20 @@ class Parser {
         } 
 
         if (!this.output.result) {
-            throw new Error("Parse did not produce output");
+            parserError(ErrorCode.EmptyOutput);
         }
         if (this.output.result.pos != 0) {
             parserError(ErrorCode.InputConsumedBeforeResult);
         }
         if (this.output.result.length != this.text.length) {
-            throw new Error("Parse did not consume all input");
+            parsingError(ErrorCode.TextParsingError, this.text, maxPos, buildReason());
+        }
+
+        function buildReason() {
+            let keys = Object.keys(failedPatterns);
+            keys = keys.map((i) => i.replace(/\n/g, '\\n'));
+            let list = [].join.call(keys, '\n\t');
+            return keys.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;        
         }
     }
 
@@ -768,7 +799,7 @@ class Parser {
         let current = this.top();
         let items;
 
-        this.debug("ENTER", node.type, node["name"]||node["pattern"]);
+        //this.debug("ENTER", node.type, node["name"]||node["pattern"]);
         switch (node.type) {
             case "return": 
                 items = [node.rule]; 
@@ -779,14 +810,14 @@ class Parser {
                 this.output.enterFrame(node);
                 break;
             case "rule": 
-                this.debug("RESET");
+//                this.debug("RESET");
                 this.output.reset(node);
                 items = node.options; 
                 break;
             case "capture": 
                 this.output.enterGroup();
                 this.output.startCapture(node);
-                this.debug("CAPTURE start", node.index);
+//                this.debug("CAPTURE start", node.index);
                 items = node.options; 
                 break;
             case "group": 
@@ -819,7 +850,7 @@ class Parser {
 
     debug(...args:any[]) {
         if (this.options.debugErrors) {
-            args.unshift(' '.repeat(this.stack.length));
+//           args.unshift(' '.repeat(this.stack.length));
             this.debugLog.push(args);
         }
     }
@@ -840,11 +871,40 @@ function buildString(node:StringNode) {
 }
 
 function grammarError(code:ErrorCode, ...args:string[]) {
-    let msg = errorMessages[code].replace(/\$([0-9])/, (match, index) => args[index-1]);
-    throw new Error(`Grammar error ${code}: ${msg}`);
+    let msg = errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index-1]);
+    let e = new Error(`Grammar error ${code}: ${msg}`);
+    e["code"] = code;
+    throw e;
 }    
 
 function parserError(code:ErrorCode) {
     let msg = errorMessages[code];
-    throw new Error(`Internal parser error ${code}: ${msg}`);
+    let e = new Error(`Internal parser error ${code}: ${msg}`);
+    e["code"] = code;
+    throw e;
+}
+
+function parsingError(code:ErrorCode, text:string, pos:number, reason:string) {
+    let lines = text.split('\n');
+    let consumed = 0, linenum = 0, charnum = 0, lineText = '';
+    for (let line of lines) {
+        linenum++;
+        if (consumed + line.length >= pos) {
+            lineText = line;
+            charnum = pos - consumed + 1;
+            break;
+        }
+        consumed += line.length + 1;
+    }
+    let detabbed = lineText.replace(/\t/g, '    ');
+    let leading = charnum - 1 + (detabbed.length - lineText.length);    
+    let backrefs = [null, linenum, charnum, reason, lineText, ' '.repeat(leading)];
+    let msg = errorMessages[code].replace(/\$([0-9])/g, (match, index) => String(backrefs[index]));
+    let e = new Error(msg);
+    e["code"] = code;
+    e["pos"] = pos;
+    e["line"] = linenum;
+    e["lineText"] = lineText;
+    e["reason"] = reason;
+    throw e;
 }

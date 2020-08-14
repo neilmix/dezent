@@ -5,7 +5,7 @@
   "main": "???",
   "scripts": {
     "compile": "tsc src/*.ts --outDir ./",
-    "compile-debug": "tsc src/*.ts --inlineSourceMap --outDir ./test",
+    "compile-debug": "tsc src/*.ts --inlineSourceMap --outDir ./test && cp src/*.dezent ./test",
     "test": "npm run compile-debug && jest test/Parser.test.js",
     "test-debug": "npm run compile-debug && node ./node_modules/.bin/jest ./test/Parser.test.js --runInBand",
     "clean": "rm -f *.js && rm -fr test"

@@ -1,7 +1,10 @@
 import "jest";
 
 import "./Parser";
-import { parseText } from "./Parser";
+import { parseText, parseGrammar, parseTextWithGrammar } from "./Parser";
+import { dezentGrammar } from "./Grammar";
+import { readFileSync } from "fs";
+import * as path from "path";
 
 test("boolean / null outputs", () => {
     let out = parseText("return /.*/ -> true;", "anything", {debugErrors:true});
@@ -46,7 +49,13 @@ test("object outputs", () => {
 
 });
 
-test("any terminal", () => {
+test("the 'any' terminal", () => {
     let out = parseText("return {.} -> $1;", "x", {debugErrors:true});
     expect(out).toEqual('x');
+});
+
+test("dezent grammar documentation", () => {
+    let docGrammar = readFileSync("./test/grammar.dezent").toString();
+    let parsedGrammar = parseGrammar(docGrammar, {debugErrors: true});
+    expect(parsedGrammar).toEqual(dezentGrammar);
 });

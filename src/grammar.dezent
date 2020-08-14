@@ -5,9 +5,11 @@
 return _ ( { returnSt | defineSt } _ )* 
 	-> $1;
 
-_ = /\s*/ -> null,
-	'//' /[^\n]*\n/ -> null,
-	'/*' /(.|\n)*/ '*/' -> null;
+_ = ( singleLineComment | multiLineComment | whitespace )* -> null;
+
+singleLineComment = '//' /[^\n]*\n/     -> null;
+multiLineComment  = '/*' /(.|\n)*/ '*/' -> null;
+whitespace        = /\s*/               -> null;
 
 returnSt = 'return' /\s+/ {rule} _ ';' 
 	-> { type: 'return', rule: $1 };
@@ -16,12 +18,13 @@ defineSt = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'
 	-> { type: 'define', name: $1, rules: [$2, ...$3] };
 
 rule = {template} _ '->' _ {value} 
-	-> { type: 'rule', ...$1, value: $2 },
+	-> { type: 'rule', ...$1, value: $2 };
 
-template = {templateOption} ( _ '|' _ {templateOption} )* 
+template = {templateOption} _ ( '|' _ {templateOption} _ )* 
 	-> { options: [$1, ...$2] };
 
-templateOption = { capture | group | stringToken | regex | class | ruleref | any }+
+// templateOption = ( { capture | group | stringToken | regex | class | ruleref | any } _ )*
+templateOption = ( { capture | group | stringToken | regex | ruleref | any } _ )+
 	-> { type: 'option', tokens: $1 };
 
 capture = {predicate} '{' _ {captureTemplate} _ '}' {modifier}
@@ -30,18 +33,20 @@ capture = {predicate} '{' _ {captureTemplate} _ '}' {modifier}
 group = {predicate} '(' _ {template} _ ')' {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };
 
-captureTemplate = {captureTemplateOption} ( _ '|' _ {captureTemplateOption} )*
+captureTemplate = {captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )+
 	-> { options: [$1, ...$2] };
 
-captureTemplateOption = { captureGroup | stringToken | regex | class | ruleref | any }+
+// captureTemplateOption = ( { captureGroup | stringToken | regex | class | ruleref | any } _ )*
+captureTemplateOption = ( { captureGroup | stringToken | regex | ruleref | any } _ )*
 	-> { type: 'option', tokens: $1 };
 
 captureGroup = '(' _ {captureTemplate} _ ')' {repeat}?
 	-> { type: 'group', ...$1, repeat: $2 };
 
-regex = {predicate} '/' { /[^/]+([^/]|\\[^/])*/ } '/' {modifier}
+regex = {predicate} '/' { /([^\\\\\\/]|\\\\.)*/ } '/' {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'regex', pattern: $2 } };
 
+/*
 class = {predicate} '[' { classComponent }* ']' {modifier}
 	-> ;
 
@@ -50,6 +55,7 @@ classComponent =
 	{classChar} -> ;
 
 classChar = !']' {.} -> $1;
+*/
 
 any = {predicate} '.' {modifier} -> { type: 'token', ...$2, ...$1, descriptor: { type: "any" } };
 
@@ -87,7 +93,7 @@ member =
 	{splat} -> $1,
 	{backref|string|identifierAsStringNode} _ ':' _ {value} -> { name: $1, value: $2 };
 
-array = '[' ( _ {value|splat} _ ',' )* _ {value}? _ ']' 
+array = '[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']' 
 	-> { type: 'array', elements: [...$1, $2] };
 
 string = /'/ {escape|stringText}* /'/ 
@@ -107,7 +113,7 @@ boolean =
 null = 'null' 
 	-> { type: 'null' };
 
-escape = { /(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/ }
+escape = '\\' { /(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/ }
 	-> { type: 'escape', value: $1 };
 
 identifier = { /[_a-zA-Z][_a-zA-Z0-9]*/ }
