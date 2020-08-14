@@ -2,18 +2,18 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - parse error line number and position (best match)
+// - eliminate regex in favor of char classes
+// - add name to ReturnNode
+// - char class escape sequences
 // - grammar parse tree comparison test
+// - refactor grammer to eliminated token redundancy
 // - regex-like API
-// - compile to single file?
 // - test string outputs
 // - test hierarchical outputs
 // - test backref outputs
 // - test every dezent grammar rule
-// - eliminate regex in favor of char classes
 // - template -> pattern
 // - backrefs -> outputs where appropriate
-// - check that consumed == text.length...
 // - command line script
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - performance/scale testing
@@ -26,6 +26,7 @@
 // - $0
 // - @ values
 // - release?
+// - error messaging for not predicates
 
 // speculative todo:
 // - error recovery
@@ -35,7 +36,7 @@
 
 import { 
     Grammar, dezentGrammar, DefineNode, ReturnNode, 
-    ParseNode, RuleNode, OptionNode, CaptureNode,  TokenNode,
+    ParseNode, RuleNode, OptionNode, CaptureNode,  TokenNode, ClassNode,
     ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, 
     StringTextNode, StringEscapeNode, NumberNode, BooleanNode, MemberNode
  } from "./Grammar";
@@ -297,9 +298,7 @@ class ParseManager {
                     }
                     if (node.descriptor.type == "string") {
                         let matchString = buildString(node.descriptor);
-                        if (this.options.debugErrors) {
-                            node.descriptor["pattern"] = matchString;
-                        }
+                        node.descriptor.pattern = matchString;
                         node.descriptor.match = (s) => s.startsWith(matchString) ? [true, matchString.length] : [false, 0];
                     }
                     if (node.descriptor.type == "regex") {
@@ -309,13 +308,23 @@ class ParseManager {
                             return result ? [true, result[0].length] : [false, 0];
                         }
                     }
+                    if (node.descriptor.type == "class") {
+                        node.descriptor.pattern = node.descriptor.ranges.map((i) => i[0] == i[1] ? i[0] : i.join('-')).join(' ');
+                        node.descriptor.match = (s) => {
+                            let cc = s.charCodeAt(0);
+                            for (let range of ((<ClassNode>node.descriptor).ranges)) {
+                                if (cc >= range[0].charCodeAt(0) && cc <= range[1].charCodeAt(0)) {
+                                    return [true, 1];
+                                }
+                            }
+                            return [false, 0];
+                        }
+                    }
                     if (node.descriptor.type == "any") {
                         node.descriptor.match = (s) => {
                             return s.length ? [true, 1] : [false, 0];
                         }
-                        if (this.options.debugErrors) {
-                            node.descriptor["pattern"] = '.';
-                        }
+                        node.descriptor.pattern = '<character>';
                     }
                 },
                 (node:TokenNode, info) => {
@@ -647,38 +656,44 @@ class Parser {
                 parserError(ErrorCode.ArrayOverrun);
             }
 
-            switch (current.status) {
-                case MatchStatus.Continue:
-                    switch (current.node.type) {
-                        default:
-                            this.enter(current.items[current.index]);
-                            break;
-                        case "ruleref":
-                            let def = this.defines[current.node.name];
-                            if (!def) {
-                                grammarError(ErrorCode.RuleNotFound, current.node.name);
-                            }
-                            this.enter(def);
-                            break;
-                        case "string":
-                        case "regex":
-                        case "any":
-                            let text = this.text.substr(this.top().pos);
-                            let [matched, consumed] = current.node.match(text);
-//                            this.debug("MATCH", matched, consumed, current.node["pattern"], text.substr(0,20));
-                            if (matched) {
-//                                this.debug("TOKEN add", this.text.substr(current.pos, consumed));
-                                this.output.addToken(current.pos, consumed);
-                                current.consumed = consumed;
-                                current.status = MatchStatus.Pass;
-                            } else {
-                                current.status = MatchStatus.Fail;
-                            }
-                            break;
-                    }
+            if (current.status == MatchStatus.Continue) {
+                switch (current.node.type) {
+                    default:
+                        this.enter(current.items[current.index]);
+                        break;
+                    case "ruleref":
+                        let def = this.defines[current.node.name];
+                        if (!def) {
+                            grammarError(ErrorCode.RuleNotFound, current.node.name);
+                        }
+                        this.enter(def);
+                        break;
+                    case "string":
+                    case "regex":
+                    case "class":
+                    case "any":
+                        let text = this.text.substr(this.top().pos);
+                        let [matched, consumed] = current.node.match(text);
+                        if (matched) {
+                            this.output.addToken(current.pos, consumed);
+                            current.consumed = consumed;
+                            current.status = MatchStatus.Pass;
+                        } else {
+                            current.status = MatchStatus.Fail;
+                        }
+                        break;
+                }
+            } else {
+                let exited = this.stack.pop();
+                let next = this.top();
+                if (!next) {
+                    // our parsing is complete!
                     break;
-                case MatchStatus.Pass:
-                    let exited = this.stack.pop();
+                }
+                if (next.node.type == "token" && next.node.not) {
+                    exited.status = exited.status == MatchStatus.Pass ? MatchStatus.Fail : MatchStatus.Pass;
+                }
+                if (exited.status == MatchStatus.Pass) {
                     if (exited.pos + exited.consumed > maxPos) {
                         maxPos = exited.pos + exited.consumed;
                         failedPatterns = {};
@@ -686,61 +701,48 @@ class Parser {
                     if (["capture","group"].includes(exited.node.type)) {
                         this.output.exitGroup(true);
                     }
-                    //this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], true);
                     if (exited.node["pattern"] || exited.node.type == "ruleref") {
                         this.debug("PASS", this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
                     }
-                    let next = this.top();
-                    if (next) {
-                        // consume, but only if there's not a predicate
-                        if (exited.node.type != "token" || !(exited.node.and || exited.node.not)) {
-                            next.consumed += exited.consumed;
-                        }
-                        if (next.node.type == "option") {
-                            if (++next.index >= next.items.length) {
-                                next.status = MatchStatus.Pass;
-                            } // otherwise stay at Continue
-                        } else {
-                            next.status = MatchStatus.Pass;
-                        }
-                        switch (next.node.type) {
-                            case "return":
-                            case "define":
-                                this.output.exitFrame(next.node, true);
-                                break;
-                            case "rule":
-//                                this.debug("YIELD", this.text.substr(exited.pos, exited.consumed));
-                                this.output.yield(next.node, exited.pos, exited.consumed);
-                                break;
-                            case "token":
-                                // when repeating, make sure we consumed to avoid infinite loops
-                                if (next.node.repeat && exited.consumed > 0) {
-                                    this.enter(next.node.descriptor);
-                                }
-                                break;
-                            case "capture":
-//                                this.debug("CAPTURE end", next.node.index);
-                                this.output.endCapture(next.node, true);        
-                                break;
-                        }
-                    } else {
-                        // our parsing is complete!
+                    // consume, but only if there's not a predicate
+                    if (exited.node.type != "token" || !(exited.node.and || exited.node.not)) {
+                        next.consumed += exited.consumed;
                     }
-                    break;
-
-                case MatchStatus.Fail:
-                    exited = this.stack.pop();
+                    if (next.node.type == "option") {
+                        if (++next.index >= next.items.length) {
+                            next.status = MatchStatus.Pass;
+                        } // otherwise stay at Continue
+                    } else {
+                        next.status = MatchStatus.Pass;
+                    }
+                    switch (next.node.type) {
+                        case "return":
+                        case "define":
+                            this.output.exitFrame(next.node, true);
+                            break;
+                        case "rule":
+                            this.output.yield(next.node, exited.pos, exited.consumed);
+                            break;
+                        case "token":
+                            // when repeating, make sure we consumed to avoid infinite loops
+                            if (next.node.repeat && exited.consumed > 0) {
+                                this.enter(next.node.descriptor);
+                            }
+                            break;
+                        case "capture":
+                            this.output.endCapture(next.node, true);        
+                            break;
+                    }
+                } else { // exited.matchStatus == MatchStatus.FAIL
                     if (exited.pos == maxPos && exited.node["pattern"]) {
                         failedPatterns[exited.node["pattern"]] = true;
                     }
                     if (["capture","group"].includes(exited.node.type)) {
                         this.output.exitGroup(false);
                     }
-                    //this.debug("EXIT", exited.node.type, exited.node["name"]||exited.node["pattern"], false);
                     if (exited.node["pattern"] || exited.node.type == "ruleref") {
                         this.debug("FAIL", this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
                     }
-                    next = this.top();
                     if (["define", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
                             next.status = MatchStatus.Fail;
@@ -766,14 +768,11 @@ class Parser {
                             break;
                         case "capture":
                             if (next.status == MatchStatus.Fail) {
-//                                this.debug("CAPTURE end", next.node.index);
                                 this.output.endCapture(next.node, false);
                             }
                             break;
                     }
-                    break;
-                default:
-                    parserError(ErrorCode.Unreachable);
+                }
             }
         } 
 
@@ -799,7 +798,6 @@ class Parser {
         let current = this.top();
         let items;
 
-        //this.debug("ENTER", node.type, node["name"]||node["pattern"]);
         switch (node.type) {
             case "return": 
                 items = [node.rule]; 
@@ -810,14 +808,12 @@ class Parser {
                 this.output.enterFrame(node);
                 break;
             case "rule": 
-//                this.debug("RESET");
                 this.output.reset(node);
                 items = node.options; 
                 break;
             case "capture": 
                 this.output.enterGroup();
                 this.output.startCapture(node);
-//                this.debug("CAPTURE start", node.index);
                 items = node.options; 
                 break;
             case "group": 
@@ -850,7 +846,6 @@ class Parser {
 
     debug(...args:any[]) {
         if (this.options.debugErrors) {
-//           args.unshift(' '.repeat(this.stack.length));
             this.debugLog.push(args);
         }
     }

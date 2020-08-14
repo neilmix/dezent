@@ -54,8 +54,23 @@ test("the 'any' terminal", () => {
     expect(out).toEqual('x');
 });
 
+test("character classes", () => {
+    let out = parseText("return {[x]} -> $1;", "x", {debugErrors:true});
+    expect(out).toEqual('x');
+    out = parseText("return {[a-z]} -> $1;", "x", {debugErrors:true});
+    expect(out).toEqual('x');
+    out = parseText("return {[0-9a-zA-Z]} -> $1;", "x", {debugErrors:true});
+    expect(out).toEqual('x');
+    out = parseText("return {[x0-9]} -> $1;", "x", {debugErrors:true});
+    expect(out).toEqual('x');
+    out = parseText("return {[qwertyx]} -> $1;", "x", {debugErrors:true});
+    expect(out).toEqual('x');
+});
+
+/*
 test("dezent grammar documentation", () => {
     let docGrammar = readFileSync("./test/grammar.dezent").toString();
     let parsedGrammar = parseGrammar(docGrammar, {debugErrors: true});
     expect(parsedGrammar).toEqual(dezentGrammar);
 });
+*/

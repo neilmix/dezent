@@ -10,9 +10,12 @@ export interface TokenNode extends Node {
 	not: boolean,
 	descriptor: DescriptorNode 
 }
-export interface MatcherNode extends Node { match?(s : string) : [boolean, number]; }
+export interface MatcherNode extends Node { 
+	pattern?: string; // for debug purposes
+	match?(s : string) : [boolean, number]; 
+}
 
-export type DescriptorNode = CaptureNode | GroupNode | StringNode | RegexNode | RuleRefNode | AnyNode;
+export type DescriptorNode = CaptureNode | GroupNode | StringNode | RegexNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = ReturnNode | DefineNode | RuleNode | OptionNode | TokenNode | DescriptorNode;
 export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
@@ -25,6 +28,7 @@ export interface GroupNode        extends SelectorNode { type: 'group' }
 export interface OptionNode       extends Node         { type: 'option',    tokens: TokenNode[] }
 export interface RuleRefNode      extends Node         { type: 'ruleref',   name: string }
 export interface RegexNode        extends MatcherNode  { type: 'regex',     pattern: string }
+export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [string, string][] }
 export interface AnyNode          extends MatcherNode  { type: 'any' }
 export interface StringNode       extends MatcherNode  { type: 'string',    tokens: (StringEscapeNode|StringTextNode)[] }
 export interface StringTextNode   extends Node         { type: 'text',      value: string }
@@ -73,7 +77,7 @@ export var dezentGrammar : Grammar = [
 	def('template', `{templateOption} _ ( '|' _ {templateOption} _ )*`,
 		{ options: ['$1', '...$2'] }),
 
-	def('templateOption', `( {capture|group|string|regex|ruleref|any} _ )+`,
+	def('templateOption', `( {capture|group|string|regex|class|ruleref|any} _ )+`,
 		{ type: 'option', tokens: '$1' }),
 
 	def('capture', `{predicate} '{' _ {captureTemplate} _ '}' {modifier}`,
@@ -85,7 +89,7 @@ export var dezentGrammar : Grammar = [
 	def('captureTemplate', `{captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )*`,
 		{ options: ['$1', '...$2'] }),
 
-	def('captureTemplateOption', `( {captureGroup|stringToken|regex|ruleref|any} _ )+`,
+	def('captureTemplateOption', `( {captureGroup|stringToken|regex|class|ruleref|any} _ )+`,
 		{ type: 'option', tokens: '$1' }),
 
 	def('captureGroup', `{predicate} '(' _ {captureTemplate} _ ')' {modifier}?`,
@@ -93,6 +97,15 @@ export var dezentGrammar : Grammar = [
 
 	def('regex', `{predicate} '/' {/([^\\\\\\/]|\\\\.)*/} '/' {modifier}`, 
 		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'regex', pattern: '$2' } }),
+
+	def('class', `{predicate} '[' {classComponent}* ']' {modifier}`,
+		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: "class", ranges: '$2' } }),
+
+	def('classComponent',
+		`{classChar} '-' {classChar}`, ['$1', '$2'],
+		`{classChar}`, ['$1', '$1']),
+
+	def('classChar', `!']' {.}`, '$1'),
 
 	def('any', `{predicate} '.' {modifier}`, { type: 'token', '...$2': '', '...$1': '', descriptor: { type: "any" } }),
 
@@ -196,16 +209,19 @@ function option(tokStrs:string[]) : OptionNode {
 		let tokStr = tokStrs[i];
 		let node:DescriptorNode;
 		let repeat;
-		let predicate = '';
-		if (['!(', '&(', '('].includes(tokStr)) {
-			if (tokStr[0] != '(') {
-				predicate = tokStr[0];
-			}
+		let and = tokStr[0] == '&';
+		let not = tokStr[0] == '!';
+		if (and || not) {
+			tokStr = tokStr.substr(1);
+		}
+		if (tokStr == '(') {
 			let j = i;
 			while (tokStrs[++j][0] != ')');
 			node = group(tokStrs.slice(i+1, j));
 			repeat = tokStrs[j][1];
 			i = j;
+		} else if (tokStr[0] == '[') {
+			throw new Error("not yet implemented");
 		} else {
 			repeat = ['?','*','+'].includes(tokStr[tokStr.length - 1]) ? tokStr[tokStr.length - 1] : '';
 			if (repeat != '') {
@@ -215,6 +231,7 @@ function option(tokStrs:string[]) : OptionNode {
 				case '{': node = capture(tokStr); break;
 				case '/': node = regex(tokStr); break;
 				case `'`: node = string(tokStr); break;
+				case '.': node = { type: 'any' }; break;
 				default:
 					node = ruleref(tokStr); break;
 			}
@@ -223,8 +240,8 @@ function option(tokStrs:string[]) : OptionNode {
 			type: 'token',
 			required: ['', '+'].includes(repeat),
 			repeat: ['*', '+'].includes(repeat),
-			and: predicate == '&',
-			not: predicate == '!',
+			and: and,
+			not: not,
 			descriptor: node
 		})
 	}
@@ -271,9 +288,6 @@ function capture(token:string) : CaptureNode {
 }
 
 function regex(token:string) : RegexNode {
-	console.log(token);
-	console.log(token.substr(1, token.length - 2));
-	console.log(new RegExp('^' + token.substr(1, token.length - 2)));
 	return {
 		type: 'regex',
 		pattern: token.substr(1, token.length - 2)

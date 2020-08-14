@@ -23,8 +23,7 @@ rule = {template} _ '->' _ {value}
 template = {templateOption} _ ( '|' _ {templateOption} _ )* 
 	-> { options: [$1, ...$2] };
 
-// templateOption = ( { capture | group | stringToken | regex | class | ruleref | any } _ )*
-templateOption = ( { capture | group | stringToken | regex | ruleref | any } _ )+
+templateOption = ( { capture | group | stringToken | regex | class | ruleref | any } _ )*
 	-> { type: 'option', tokens: $1 };
 
 capture = {predicate} '{' _ {captureTemplate} _ '}' {modifier}
@@ -36,8 +35,7 @@ group = {predicate} '(' _ {template} _ ')' {modifier}
 captureTemplate = {captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )+
 	-> { options: [$1, ...$2] };
 
-// captureTemplateOption = ( { captureGroup | stringToken | regex | class | ruleref | any } _ )*
-captureTemplateOption = ( { captureGroup | stringToken | regex | ruleref | any } _ )*
+captureTemplateOption = ( { captureGroup | stringToken | regex | class | ruleref | any } _ )*
 	-> { type: 'option', tokens: $1 };
 
 captureGroup = '(' _ {captureTemplate} _ ')' {repeat}?
@@ -46,16 +44,14 @@ captureGroup = '(' _ {captureTemplate} _ ')' {repeat}?
 regex = {predicate} '/' { /([^\\\\\\/]|\\\\.)*/ } '/' {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'regex', pattern: $2 } };
 
-/*
 class = {predicate} '[' { classComponent }* ']' {modifier}
-	-> ;
+	-> { type: 'token', ...$3, ...$1, descriptor: { type: "class", ranges: $1 } };
 
 classComponent =
-	{classChar} '-' {classChar} -> ,
-	{classChar} -> ;
+	{classChar} '-' {classChar} -> [$1, $2],
+	{classChar} -> [$1, $1];
 
 classChar = !']' {.} -> $1;
-*/
 
 any = {predicate} '.' {modifier} -> { type: 'token', ...$2, ...$1, descriptor: { type: "any" } };
 
