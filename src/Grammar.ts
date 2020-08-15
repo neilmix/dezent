@@ -77,28 +77,28 @@ export function createUncompiledDezentGrammar() {
 		def('defineSt', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
 			{ type: 'define', name: '$1', rules: ['$2', '...$3'] }),
 		
-		def('rule', `{template} _ '->' _ {value}`,
+		def('rule', `{options} _ '->' _ {value}`,
 			{ type: 'rule', '...$1': '', value: '$2' }),
 		
-		def('template', `{templateOption} _ ( '|' _ {templateOption} _ )*`,
+		def('options', `{pattern} _ ( '|' _ {pattern} _ )*`,
 			{ options: ['$1', '...$2'] }),
 
-		def('templateOption', `( {capture|group|stringToken|class|ruleref|any} _ )+`,
+		def('pattern', `( {capture|group|stringToken|class|ruleref|any} _ )+`,
 			{ type: 'option', tokens: '$1' }),
 
-		def('capture', `{predicate} '{' _ {captureTemplate} _ '}' {modifier}`,
+		def('capture', `{predicate} '{' _ {captureOptions} _ '}' {modifier}`,
 			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'capture', '...$2': '' } }),
 
-		def('group', `{predicate} '(' _ {template} _ ')' {modifier}`,
+		def('group', `{predicate} '(' _ {options} _ ')' {modifier}`,
 		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
 
-		def('captureTemplate', `{captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )*`,
+		def('captureOptions', `{capturePattern} _ ( '|' _ {capturePattern} _ )*`,
 			{ options: ['$1', '...$2'] }),
 
-		def('captureTemplateOption', `( {captureGroup|stringToken|class|ruleref|any} _ )+`,
+		def('capturePattern', `( {captureGroup|stringToken|class|ruleref|any} _ )+`,
 			{ type: 'option', tokens: '$1' }),
 
-		def('captureGroup', `{predicate} '(' _ {captureTemplate} _ ')' {modifier}?`,
+		def('captureGroup', `{predicate} '(' _ {captureOptions} _ ')' {modifier}?`,
 			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
 
 		def('class', `{predicate} '[' {classComponent}* ']' {modifier}`,
@@ -188,10 +188,10 @@ export function createUncompiledDezentGrammar() {
 	];
 }
 
-function ret(template:string, output:any) : ReturnNode {
+function ret(options:string, output:any) : ReturnNode {
     return {
         type: 'return',
-		rule: rule(template, output),
+		rule: rule(options, output),
     }
 }
 
@@ -207,10 +207,10 @@ function def(name:string, ...args:any) : DefineNode {
 	}
 }
 
-function rule(template:string, out:any) : RuleNode {
+function rule(options:string, out:any) : RuleNode {
 	return {
 		type: 'rule',
-		options: [ option(template.split(/ +/)) ],
+		options: [ option(options.split(/ +/)) ],
 		value: output(out)
 	}
 }

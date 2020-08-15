@@ -17,28 +17,28 @@ returnSt = 'return' whitespace {rule} _ ';'
 defineSt = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
 	-> { type: 'define', name: $1, rules: [$2, ...$3] };
 
-rule = {template} _ '->' _ {value} 
+rule = {options} _ '->' _ {value} 
 	-> { type: 'rule', ...$1, value: $2 };
 
-template = {templateOption} _ ( '|' _ {templateOption} _ )* 
+options = {pattern} _ ( '|' _ {pattern} _ )* 
 	-> { options: [$1, ...$2] };
 
-templateOption = ( { capture | group | stringToken | class | ruleref | any } _ )+
+pattern = ( { capture | group | stringToken | class | ruleref | any } _ )+
 	-> { type: 'option', tokens: $1 };
 
-capture = {predicate} '{' _ {captureTemplate} _ '}' {modifier}
+capture = {predicate} '{' _ {captureOptions} _ '}' {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'capture', ...$2 } };
 
-group = {predicate} '(' _ {template} _ ')' {modifier}
+group = {predicate} '(' _ {options} _ ')' {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };
 
-captureTemplate = {captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )*
+captureOptions = {capturePattern} _ ( '|' _ {capturePattern} _ )*
 	-> { options: [$1, ...$2] };
 
-captureTemplateOption = ( { captureGroup | stringToken | class | ruleref | any } _ )+
+capturePattern = ( { captureGroup | stringToken | class | ruleref | any } _ )+
 	-> { type: 'option', tokens: $1 };
 
-captureGroup = {predicate} '(' _ {captureTemplate} _ ')' {modifier}?
+captureGroup = {predicate} '(' _ {captureOptions} _ ')' {modifier}?
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };
 
 class = {predicate} '[' { classComponent }* ']' {modifier}

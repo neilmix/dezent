@@ -2,7 +2,6 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - grammar parse tree comparison test
 // - refactor grammer to eliminated token redundancy
 // - add name to ReturnNode, prevent rule named return
 // - regex-like API
@@ -10,7 +9,6 @@
 // - test hierarchical outputs
 // - test backref outputs
 // - test every dezent grammar rule
-// - template -> pattern
 // - backrefs -> outputs where appropriate
 // - command line script
 // - node position for post-parse error messages (e.g. NonArraySplat)
