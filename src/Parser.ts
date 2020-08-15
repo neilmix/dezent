@@ -23,7 +23,6 @@
 // - documentation
 // - package license
 // - packrat parsing
-// - $0
 // - @ values
 // - release?
 // - error messaging for not predicates
@@ -312,7 +311,7 @@ class ParseManager {
                         node.descriptor.pattern = node.descriptor.ranges.map((i) => i[0] == i[1] ? i[0] : i.join('-')).join(' ');
                         node.descriptor.match = (s) => {
                             let cc = s.charCodeAt(0);
-                            for (let range of ((<ClassNode>node.descriptor).ranges)) {
+                            for (let range of (<ClassNode>node.descriptor).ranges) {
                                 if (cc >= range[0].charCodeAt(0) && cc <= range[1].charCodeAt(0)) {
                                     return [true, 1];
                                 }
@@ -416,9 +415,9 @@ class ParseManager {
         if (this.currentParser) {
             console.error("Parser stack:\n", this.currentParser.stack);
             console.error("Output stack:\n", this.currentParser.output.stack);
-        }
-        if (this.currentParser.output.result) {
-            console.error("Output:\n", JSON.stringify(this.currentParser.output.result));
+            if (this.currentParser.output.result) {
+                console.error("Output:\n", JSON.stringify(this.currentParser.output.result));
+            }
         }
     }
 }
@@ -589,10 +588,10 @@ class OutputContext {
     }
 
     yield(rule:RuleNode, startPos:number, consumed:number) {
-        // first item is empty so indices align...
-        let outputs:(OutputToken|OutputToken[])[] = [];
-        for (let multi of this.top.rule.captures) {
-            outputs.push(multi ? [] : null);
+        // first item is $0...
+        let outputs:(OutputToken|OutputToken[])[] = [{ pos: startPos, length: consumed }];
+        for (let i = 1; i < this.top.rule.captures.length; i++) {
+            outputs.push(this.top.rule.captures[i] ? [] : null);
         }
         for (let token of this.top.tokens) {
             if (this.top.rule.captures[token.captureIndex]) {

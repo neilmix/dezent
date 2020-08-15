@@ -55,6 +55,7 @@ let kNull:NullNode = { type: 'null' }
 // - object splat must be written as name/value pair, e.g. ...$1': ''
 // - captures can't have multiple regex options
 // - grouping parens (and predicate/modifier) must be surrounded by whitespace
+// - character classes must always be specific as ranges, e.g. [x-x]
 
 export var dezentGrammar : Grammar = [
     ret(`_ ( {returnSt|defineSt} _ )*`, '$1'),
@@ -105,9 +106,11 @@ export var dezentGrammar : Grammar = [
 		`{classChar} '-' {classChar}`, ['$1', '$2'],
 		`{classChar}`, ['$1', '$1']),
 
-	def('classChar', `!']' {.}`, '$1'),
+	def('classChar', `!']' {char}`, 
+		'$1'),
 
-	def('any', `{predicate} '.' {modifier}`, { type: 'token', '...$2': '', '...$1': '', descriptor: { type: "any" } }),
+	def('any', `{predicate} '.' {modifier}`, 
+		{ type: 'token', '...$2': '', '...$1': '', descriptor: { type: "any" } }),
 
 	def('stringToken', `{predicate} {string} {modifier}`,
 		{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
@@ -163,13 +166,19 @@ export var dezentGrammar : Grammar = [
 	def('null', `'null'`,
 		{ type: 'null' }),
 
-	def('escape', `'\\\\' {/(u[A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9]|[^\n])/}`,
+	def('escape', `'\\\\' {unicode|char}`,
 		{ type: 'escape', value: '$1' }),
+
+	def('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`,
+		'$0'),
+
+	def('char', `!'\n' .`,
+		'$0'),
 
 	def('repeat', `{'*'|'+'|'?'}`, '$1'),
 
-	def('identifier', `{/[_a-zA-Z][_a-zA-Z0-9]*/}`,
-		'$1'),
+	def('identifier', `/[_a-zA-Z][_a-zA-Z0-9]*/`,
+		'$0'),
 
 	def('identifierAsStringNode', `{identifier}`,
 		{ type: 'string', tokens: [ {type: 'text', value: '$1' } ] }),
@@ -208,38 +217,43 @@ function option(tokStrs:string[]) : OptionNode {
 	for (let i = 0; i < tokStrs.length; i++) {
 		let tokStr = tokStrs[i];
 		let node:DescriptorNode;
-		let repeat;
 		let and = tokStr[0] == '&';
 		let not = tokStr[0] == '!';
 		if (and || not) {
 			tokStr = tokStr.substr(1);
 		}
+		let required = true, repeat = false;
 		if (tokStr == '(') {
 			let j = i;
 			while (tokStrs[++j][0] != ')');
+			if (['?','*'].includes(tokStrs[j][1])) required = false;
+			if (['+','*'].includes(tokStrs[j][1])) repeat = true;
 			node = group(tokStrs.slice(i+1, j));
-			repeat = tokStrs[j][1];
 			i = j;
-		} else if (tokStr[0] == '[') {
-			throw new Error("not yet implemented");
 		} else {
-			repeat = ['?','*','+'].includes(tokStr[tokStr.length - 1]) ? tokStr[tokStr.length - 1] : '';
-			if (repeat != '') {
+			if (['?','*'].includes(tokStr[tokStr.length-1])) required = false;
+			if (['+','*'].includes(tokStr[tokStr.length-1])) repeat = true;
+			if (!required || repeat) {
 				tokStr = tokStr.substr(0, tokStr.length - 1);
 			}
-			switch (tokStr[0]) {
-				case '{': node = capture(tokStr); break;
-				case '/': node = regex(tokStr); break;
-				case `'`: node = string(tokStr); break;
-				case '.': node = { type: 'any' }; break;
-				default:
-					node = ruleref(tokStr); break;
+			if (tokStr[0] == '[') {
+				let ranges = tokStr.substr(1,tokStr.length-1).match(/(.-.)/g).map((i) => i.split('-'));
+				node = { type: "class", ranges: <[string,string][]>ranges };
+			} else {
+				switch (tokStr[0]) {
+					case '{': node = capture(tokStr); break;
+					case '/': node = regex(tokStr); break;
+					case `'`: node = string(tokStr); break;
+					case '.': node = { type: 'any' }; break;
+					default:
+						node = ruleref(tokStr); break;
+				}
 			}
 		}
 		tokens.push({
 			type: 'token',
-			required: ['', '+'].includes(repeat),
-			repeat: ['*', '+'].includes(repeat),
+			required: required,
+			repeat: repeat,
 			and: and,
 			not: not,
 			descriptor: node
