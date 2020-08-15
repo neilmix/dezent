@@ -2,7 +2,6 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - refactor grammer to eliminated token redundancy
 // - add name to ReturnNode, prevent rule named return
 // - regex-like API
 // - test string outputs

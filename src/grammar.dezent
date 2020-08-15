@@ -23,26 +23,32 @@ rule = {options} _ '->' _ {value}
 options = {pattern} _ ( '|' _ {pattern} _ )* 
 	-> { options: [$1, ...$2] };
 
-pattern = ( { capture | group | stringToken | class | ruleref | any } _ )+
+pattern = ( { token } _ )+
 	-> { type: 'pattern', tokens: $1 };
 
-capture = {predicate} '{' _ {captureOptions} _ '}' {modifier}
-	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'capture', ...$2 } };
+token = {predicate} { capture | group | string | class | ruleref | any } {modifier}
+	-> { type: 'token', ...$3, ...$1, descriptor: $2 };
 
-group = {predicate} '(' _ {options} _ ')' {modifier}
-	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };
+capture = '{' _ {captureOptions} _ '}'
+	-> { type: 'capture', ...$1 };
+
+group = '(' _ {options} _ ')'
+	-> { type: 'group', ...$1 };
 
 captureOptions = {capturePattern} _ ( '|' _ {capturePattern} _ )*
 	-> { options: [$1, ...$2] };
 
-capturePattern = ( { captureGroup | stringToken | class | ruleref | any } _ )+
+capturePattern = ( { captureToken } _ )+
 	-> { type: 'pattern', tokens: $1 };
 
-captureGroup = {predicate} '(' _ {captureOptions} _ ')' {modifier}?
-	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };
+captureToken = {predicate} { captureGroup | string | class | ruleref | any } {modifier}
+	-> { type: 'token', ...$3, ...$1, descriptor: $2 };
+	
+captureGroup = '(' _ {captureOptions} _ ')'
+	-> { type: 'group', ...$1 };
 
-class = {predicate} '[' { classComponent }* ']' {modifier}
-	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'class', ranges: $2 } };
+class = '[' { classComponent }* ']'
+	-> { type: 'class', ranges: $1 };
 
 classComponent =
 	{classChar} '-' {classChar} -> [$1, $2],
@@ -54,14 +60,11 @@ classChar = !']' {escape|char}
 char = charstr
 	-> { type: 'char', value: $0 };
 
-any = {predicate} '.' {modifier} 
-	-> { type: 'token', ...$2, ...$1, descriptor: { type: 'any' } };
+any = '.'
+	-> { type: 'any' };
 
-stringToken = {predicate} {string} {modifier}
-	-> { type: 'token', ...$3, ...$1, descriptor: $2 };
-
-ruleref = {predicate} {identifier} {modifier}
-	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'ruleref', name: $2 } };
+ruleref = {identifier}
+	-> { type: 'ruleref', name: $1 };
 
 predicate =
 	'&' -> { and: true, not: false },

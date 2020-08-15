@@ -83,27 +83,33 @@ export function createUncompiledDezentGrammar() {
 		def('options', `{pattern} _ ( '|' _ {pattern} _ )*`,
 			{ options: ['$1', '...$2'] }),
 
-		def('pattern', `( {capture|group|stringToken|class|ruleref|any} _ )+`,
+		def('pattern', `( {token} _ )+`,
 			{ type: 'pattern', tokens: '$1' }),
 
-		def('capture', `{predicate} '{' _ {captureOptions} _ '}' {modifier}`,
-			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'capture', '...$2': '' } }),
+		def('token', `{predicate} {capture|group|string|class|ruleref|any} {modifier}`,
+			{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
+		
+		def('capture', `'{' _ {captureOptions} _ '}'`,
+			{ type: 'capture', '...$1': '' }),
 
-		def('group', `{predicate} '(' _ {options} _ ')' {modifier}`,
-		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
+		def('group', `'(' _ {options} _ ')'`,
+			{ type: 'group', '...$1': '' }),
 
 		def('captureOptions', `{capturePattern} _ ( '|' _ {capturePattern} _ )*`,
 			{ options: ['$1', '...$2'] }),
 
-		def('capturePattern', `( {captureGroup|stringToken|class|ruleref|any} _ )+`,
+		def('capturePattern', `( {captureToken} _ )+`,
 			{ type: 'pattern', tokens: '$1' }),
 
-		def('captureGroup', `{predicate} '(' _ {captureOptions} _ ')' {modifier}?`,
-			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
+		def('captureToken', `{predicate} {captureGroup|string|class|ruleref|any} {modifier}`,
+			{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
 
-		def('class', `{predicate} '[' {classComponent}* ']' {modifier}`,
-			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'class', ranges: '$2' } }),
+		def('captureGroup', `'(' _ {captureOptions} _ ')'`,
+			{ type: 'group', '...$1': '' }),
 
+		def('class', `'[' {classComponent}* ']'`,
+			{ type: 'class', ranges: '$1' }),
+		
 		def('classComponent',
 			`{classChar} '-' {classChar}`, ['$1', '$2'],
 			`{classChar}`, ['$1', '$1']),
@@ -114,14 +120,11 @@ export function createUncompiledDezentGrammar() {
 		def('char', `charstr`,
 			{ type: 'char', value: '$0' }),
 		
-		def('any', `{predicate} '.' {modifier}`, 
-			{ type: 'token', '...$2': '', '...$1': '', descriptor: { type: 'any' } }),
+		def('any', `'.'`, 
+			{ type: 'any' }),
 
-		def('stringToken', `{predicate} {string} {modifier}`,
-			{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
-
-		def('ruleref', `{predicate} {identifier} {modifier}`,
-			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'ruleref', name: '$2' } }),
+		def('ruleref', `{identifier}`,
+			{ type: 'ruleref', name: '$1' }),
 
 		def('predicate',
 			`'&'`, { and: true, not: false },
