@@ -19,7 +19,7 @@ export interface RangeNode extends Node {
 	match?: string
 }
 
-export type DescriptorNode = CaptureNode | GroupNode | StringNode | RegexNode | ClassNode | RuleRefNode | AnyNode;
+export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = ReturnNode | DefineNode | RuleNode | OptionNode | TokenNode | DescriptorNode;
 export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
@@ -31,7 +31,6 @@ export interface CaptureNode      extends SelectorNode { type: 'capture',   inde
 export interface GroupNode        extends SelectorNode { type: 'group' }
 export interface OptionNode       extends Node         { type: 'option',    tokens: TokenNode[] }
 export interface RuleRefNode      extends Node         { type: 'ruleref',   name: string }
-export interface RegexNode        extends MatcherNode  { type: 'regex',     pattern: string }
 export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [RangeNode, RangeNode][] }
 export interface AnyNode          extends MatcherNode  { type: 'any' }
 export interface StringNode       extends MatcherNode  { type: 'string',    tokens: (EscapeNode|StringTextNode)[] }
@@ -58,21 +57,19 @@ let kNull:NullNode = { type: 'null' }
 // amount of parsing logic under control:
 // - there can be no whitespace within a capture
 // - object splat must be written as name/value pair, e.g. ...$1': ''
-// - captures can't have multiple regex options
 // - grouping parens (and predicate/modifier) must be surrounded by whitespace
-// - character classes must always be specific as ranges, e.g. [x-x]
-// - character classes don't support unicode
+// - character classes don't support spaces - use \\u0020
 
 export var dezentGrammar : Grammar = [
     ret(`_ ( {returnSt|defineSt} _ )*`, '$1'),
 
-	def('_', `( singleLineComment | multiLineComment | whitespace )*`, null),
+	def('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
 
 	def('singleLineComment', `'//' ( !'\n' . )* '\n'`, null),
 	def('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, null),
-	def('whitespace',        `/\\s*/`,                 null),
+	def('whitespace',        `[\\u0020\t-\r]+`, null),
 
-	def('returnSt', `'return' /\\s+/ {rule} _ ';'`,
+	def('returnSt', `'return' whitespace {rule} _ ';'`,
 		{ type: 'return', rule: '$1' }),
 
 	def('defineSt', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
@@ -84,7 +81,7 @@ export var dezentGrammar : Grammar = [
 	def('template', `{templateOption} _ ( '|' _ {templateOption} _ )*`,
 		{ options: ['$1', '...$2'] }),
 
-	def('templateOption', `( {capture|group|stringToken|regex|class|ruleref|any} _ )+`,
+	def('templateOption', `( {capture|group|stringToken|class|ruleref|any} _ )+`,
 		{ type: 'option', tokens: '$1' }),
 
 	def('capture', `{predicate} '{' _ {captureTemplate} _ '}' {modifier}`,
@@ -96,14 +93,11 @@ export var dezentGrammar : Grammar = [
 	def('captureTemplate', `{captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )*`,
 		{ options: ['$1', '...$2'] }),
 
-	def('captureTemplateOption', `( {captureGroup|stringToken|regex|class|ruleref|any} _ )+`,
+	def('captureTemplateOption', `( {captureGroup|stringToken|class|ruleref|any} _ )+`,
 		{ type: 'option', tokens: '$1' }),
 
 	def('captureGroup', `{predicate} '(' _ {captureTemplate} _ ')' {modifier}?`,
 		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
-
-	def('regex', `{predicate} '/' {/([^\\\\\\/]|\\\\.)*/} '/' {modifier}`, 
-		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'regex', pattern: '$2' } }),
 
 	def('class', `{predicate} '[' {classComponent}* ']' {modifier}`,
 		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: "class", ranges: '$2' } }),
@@ -141,7 +135,7 @@ export var dezentGrammar : Grammar = [
 	def('value', `{backref|object|array|string|number|boolean|null}`,
 		'$1'),
 
-	def('backref', `'$' {/\\d+/}`,
+	def('backref', `'$' {[0-9]+}`,
 		{ type: 'backref', index: '$1' }),
 
 	def('splat',
@@ -158,15 +152,15 @@ export var dezentGrammar : Grammar = [
 	def('array', `'[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']'`,
 		{ type: 'array', elements: ['...$1', '$2'] }),
 
-	def('string', `/'/ {escape|stringText}* /'/`,
+	def('string', `'\'' {escape|stringText}* '\''`,
 		{ type: 'string', tokens: '$1' }),
 
 	def('stringText', `( !['-'\\\\-\\\\] . )*`,
 		{ type: 'text', value: '$0' }),
 
 	def('number', 
-		`{/-?\\d+(\\.\\d+)?([eE][-+]\\d+)?/}`, { type: 'number', value: '$1' },
-		`{/-?\\.\\d+([eE][-+]\\d+)?/}`, { type: 'number', value: '$1' }),
+		`'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?`, { type: 'number', value: '$0' },
+		`'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?`, { type: 'number', value: '$0' }),
 	
 	def('boolean',
 		`'true'`, { type: 'boolean', value: true },
@@ -186,7 +180,7 @@ export var dezentGrammar : Grammar = [
 
 	def('repeat', `{'*'|'+'|'?'}`, '$1'),
 
-	def('identifier', `/[_a-zA-Z][_a-zA-Z0-9]*/`,
+	def('identifier', `[_a-zA-Z] [_a-zA-Z0-9]*`,
 		'$0'),
 
 	def('identifierAsStringNode', `{identifier}`,
@@ -246,33 +240,10 @@ function option(tokStrs:string[]) : OptionNode {
 				tokStr = tokStr.substr(0, tokStr.length - 1);
 			}
 			if (tokStr[0] == '[') {
-				let ranges = [];
-				let j = 1;
-				while (j < tokStr.length - 1) {
-					let start, end;
-					if (tokStr[j] == '\\') {
-						j++;
-						start = { type: 'escape', value: tokStr[j] };
-					} else {
-						start = { type: 'char', value: tokStr[j] };
-					}
-					j++;
-					if (tokStr[j] != '-') throw new Error("Error parsing range in bootstrap grammar");
-					j++;
-					if (tokStr[j] == '\\') {
-						j++;
-						end = { type: 'escape', value: tokStr[j] };
-					} else {
-						end = { type: 'char', value: tokStr[j] };
-					}
-					j++;
-					ranges.push([start,end]);
-				}
-				node = { type: "class", ranges: ranges };
+				node = charClass(tokStr);
 			} else {
 				switch (tokStr[0]) {
 					case '{': node = capture(tokStr); break;
-					case '/': node = regex(tokStr); break;
 					case `'`: node = string(tokStr); break;
 					case '.': node = { type: 'any' }; break;
 					default:
@@ -316,26 +287,40 @@ function capture(token:string) : CaptureNode {
 	let repeat = null;
 	token = token.substr(0, token.length - 1);
 
-	// our limited DSL parsing doesn't allow multiple regex options
-	// because it gets confused when the regex contains a pipe,
-	// so only split into multiple options when not a regex
-	let options;
-	if (token[1] == '/') {
-		options = [token.substr(1, token.length - 1)];
-	} else {
-		options = token.substr(1, token.length - 1).split('|');
-	}
+	let options = token.substr(1, token.length - 1).split('|');
+
 	return {
 		type: 'capture',
 		options: options.map((t) => option([t])),
 	}
 }
 
-function regex(token:string) : RegexNode {
-	return {
-		type: 'regex',
-		pattern: token.substr(1, token.length - 2)
+function charClass(token:String) : ClassNode {
+	let ranges = [];
+	let j = 1;
+	let parseBound = () => {
+		let bound;
+		if (token[j] == '\\') {
+			j++;
+			let value = token[j] == 'u' ? token.substr(j, 5) : token[j];
+			j += value.length - 1;
+			bound = { type: 'escape', value: value };
+		} else {
+			bound = { type: 'char', value: token[j] };
+		}
+		j++;
+		return bound;
 	}
+	while (j < token.length - 1) {
+		let start = parseBound();
+		let end;
+		if (token[j] == '-') {
+			j++;
+			end = parseBound();
+		}
+		ranges.push([start,end||start]);
+	}
+	return { type: "class", ranges: ranges };
 }
 
 function string(token:string) : StringNode {

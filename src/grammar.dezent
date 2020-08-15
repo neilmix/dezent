@@ -5,13 +5,13 @@
 return _ ( { returnSt | defineSt } _ )* 
 	-> $1;
 
-_ = ( singleLineComment | multiLineComment | whitespace )* -> null;
+_ = ( singleLineComment | multiLineComment | whitespace? )* -> null;
 
 singleLineComment = '//' ( !'\n' . )* '\n' -> null;
 multiLineComment  = '/*' ( !'*/' . )* '*/' -> null;
-whitespace        = /\s*/                  -> null;
+whitespace        = [\\u0020\t-\r]+ -> null;
 
-returnSt = 'return' /\s+/ {rule} _ ';' 
+returnSt = 'return' whitespace {rule} _ ';' 
 	-> { type: 'return', rule: $1 };
 
 defineSt = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
@@ -23,7 +23,7 @@ rule = {template} _ '->' _ {value}
 template = {templateOption} _ ( '|' _ {templateOption} _ )* 
 	-> { options: [$1, ...$2] };
 
-templateOption = ( { capture | group | stringToken | regex | class | ruleref | any } _ )*
+templateOption = ( { capture | group | stringToken | class | ruleref | any } _ )*
 	-> { type: 'option', tokens: $1 };
 
 capture = {predicate} '{' _ {captureTemplate} _ '}' {modifier}
@@ -35,14 +35,11 @@ group = {predicate} '(' _ {template} _ ')' {modifier}
 captureTemplate = {captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )+
 	-> { options: [$1, ...$2] };
 
-captureTemplateOption = ( { captureGroup | stringToken | regex | class | ruleref | any } _ )*
+captureTemplateOption = ( { captureGroup | stringToken | class | ruleref | any } _ )*
 	-> { type: 'option', tokens: $1 };
 
 captureGroup = '(' _ {captureTemplate} _ ')' {repeat}?
 	-> { type: 'group', ...$1, repeat: $2 };
-
-regex = {predicate} '/' { /([^\\\\\\/]|\\\\.)*/ } '/' {modifier}
-	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'regex', pattern: $2 } };
 
 class = {predicate} '[' { classComponent }* ']' {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: "class", ranges: $1 } };
@@ -80,7 +77,7 @@ modifier =
 value = { backref | object | array | string | number | boolean | null } 
 	-> $1;
 
-backref = '$' { /\d+/ } 
+backref = '$' { [0-9]+ } 
 	-> { type: 'backref', index: $1 };
 
 splat = 
@@ -97,15 +94,15 @@ member =
 array = '[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']' 
 	-> { type: 'array', elements: [...$1, $2] };
 
-string = /'/ {escape|stringText}* /'/ 
+string = '\'' {escape|stringText}* '\''
 	-> { type: 'string', tokens: $1 };
 
 stringText = ( !['\\] . )*
 	-> { type: 'text', value: $0 };
 
 number = 
-	{ /-?\d+(\.\d+)?([eE][-+]\d+)?/ } -> { type: 'number', value: $1 },
-	{ /-?\.\d+([eE][-+]\d+)?/ } -> { type: 'number', value: $1 };
+	'-'? ( [0-9]+ )? '.' [0-9]+  ( [eE] [-+] [0-9]+ )? -> { type: 'number', value: $0 },
+	'-'? [0-9]+  ( [eE] [-+] [0-9]+ )? -> { type: 'number', value: $0 };
 
 boolean =
 	'true'  -> { type: 'boolean', value: true },
@@ -123,7 +120,7 @@ unicode = 'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
 charstr = !'\n' .
 	-> $0;
 
-identifier = /[_a-zA-Z][_a-zA-Z0-9]*/
+identifier = [_a-zA-Z] [_a-zA-Z0-9]*
 	-> $0;
 
 identifierAsStringNode = {identifier}

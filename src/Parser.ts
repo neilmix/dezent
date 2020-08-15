@@ -2,11 +2,9 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - eliminate regex in favor of char classes
-// - add name to ReturnNode
-// - char class escape sequences
 // - grammar parse tree comparison test
 // - refactor grammer to eliminated token redundancy
+// - add name to ReturnNode, prevent rule named return
 // - regex-like API
 // - test string outputs
 // - test hierarchical outputs
@@ -299,13 +297,6 @@ class ParseManager {
                         let matchString = buildString(node.descriptor);
                         node.descriptor.pattern = matchString;
                         node.descriptor.match = (s) => s.startsWith(matchString) ? [true, matchString.length] : [false, 0];
-                    }
-                    if (node.descriptor.type == "regex") {
-                        let regex = new RegExp(`^${node.descriptor.pattern}`)
-                        node.descriptor.match = (s) => {
-                            let result = regex.exec(s);
-                            return result ? [true, result[0].length] : [false, 0];
-                        }
                     }
                     if (node.descriptor.type == "class") {
                         for (let range of node.descriptor.ranges) {
@@ -688,7 +679,6 @@ class Parser {
                         this.enter(def);
                         break;
                     case "string":
-                    case "regex":
                     case "class":
                     case "any":
                         let text = this.text.substr(this.top().pos);
