@@ -46,12 +46,22 @@ test("object outputs", () => {
 
     out = parseText("return /.*/ -> [ 1, 2, 3 ];", "anything", {debugErrors:true});
     expect(out).toEqual([ 1, 2, 3 ]);
-
 });
 
 test("the 'any' terminal", () => {
     let out = parseText("return {.} -> $1;", "x", {debugErrors:true});
     expect(out).toEqual('x');
+});
+
+test("strings", () => {
+    let out = parseText("return 'x' -> $0;", "x", {debugErrors:true});
+    expect(out).toEqual('x');
+    out = parseText("return '\\n' -> $0;", "\n", {debugErrors:true});
+    expect(out).toEqual('\n');
+    out = parseText("return 'foo\\n\\nbar' -> $0;", "foo\n\nbar", {debugErrors:true});
+    expect(out).toEqual('foo\n\nbar');
+    out = parseText("return '\\n\\r\\t\\b\\f\\\\\\a' -> $0;", "\n\r\t\b\f\\a", {debugErrors:true});
+    expect(out).toEqual("\n\r\t\b\f\\a");
 });
 
 test("character classes", () => {
@@ -65,6 +75,12 @@ test("character classes", () => {
     expect(out).toEqual('x');
     out = parseText("return {[qwertyx]} -> $1;", "x", {debugErrors:true});
     expect(out).toEqual('x');
+    out = parseText("return [\\t] -> $0;", "\t", {debugErrors:true});
+    expect(out).toEqual('\t');
+    out = parseText("return [\\ua1b2] -> $0;", "\ua1b2", {debugErrors:true});
+    expect(out).toEqual('\ua1b2');
+    out = parseText("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2", {debugErrors:true});
+    expect(out).toEqual("\n\r\t\f\b\ua2a2");
 });
 
 /*

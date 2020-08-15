@@ -14,6 +14,10 @@ export interface MatcherNode extends Node {
 	pattern?: string; // for debug purposes
 	match?(s : string) : [boolean, number]; 
 }
+export interface RangeNode extends Node {
+	value: string,
+	match?: string
+}
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | RegexNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = ReturnNode | DefineNode | RuleNode | OptionNode | TokenNode | DescriptorNode;
@@ -28,12 +32,13 @@ export interface GroupNode        extends SelectorNode { type: 'group' }
 export interface OptionNode       extends Node         { type: 'option',    tokens: TokenNode[] }
 export interface RuleRefNode      extends Node         { type: 'ruleref',   name: string }
 export interface RegexNode        extends MatcherNode  { type: 'regex',     pattern: string }
-export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [string, string][] }
+export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [RangeNode, RangeNode][] }
 export interface AnyNode          extends MatcherNode  { type: 'any' }
-export interface StringNode       extends MatcherNode  { type: 'string',    tokens: (StringEscapeNode|StringTextNode)[] }
+export interface StringNode       extends MatcherNode  { type: 'string',    tokens: (EscapeNode|StringTextNode)[] }
 export interface StringTextNode   extends Node         { type: 'text',      value: string }
-export interface StringEscapeNode extends Node         { type: 'escape',    value: string }
-                                          
+export interface EscapeNode       extends RangeNode    { type: 'escape',    value: string }
+export interface CharNode         extends RangeNode    { type: 'char',      value: string }
+
 export interface BackRefNode      extends Node { type: 'backref',   index: string }
 export interface SplatNode        extends Node { type: 'splat',     backrefs: BackRefNode[] }
 export interface ObjectNode       extends Node { type: 'object',    members: (MemberNode|SplatNode)[] }
@@ -56,15 +61,16 @@ let kNull:NullNode = { type: 'null' }
 // - captures can't have multiple regex options
 // - grouping parens (and predicate/modifier) must be surrounded by whitespace
 // - character classes must always be specific as ranges, e.g. [x-x]
+// - character classes don't support unicode
 
 export var dezentGrammar : Grammar = [
     ret(`_ ( {returnSt|defineSt} _ )*`, '$1'),
 
 	def('_', `( singleLineComment | multiLineComment | whitespace )*`, null),
 
-	def('singleLineComment', `'//' /[^\\n]*\\n/`,  null),
-	def('multiLineComment', `'/*' /(.|\\n)*/ '*/'`, null),
-	def('whitespace',       `/\\s*/`,               null),
+	def('singleLineComment', `'//' ( !'\n' . )* '\n'`, null),
+	def('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, null),
+	def('whitespace',        `/\\s*/`,                 null),
 
 	def('returnSt', `'return' /\\s+/ {rule} _ ';'`,
 		{ type: 'return', rule: '$1' }),
@@ -78,7 +84,7 @@ export var dezentGrammar : Grammar = [
 	def('template', `{templateOption} _ ( '|' _ {templateOption} _ )*`,
 		{ options: ['$1', '...$2'] }),
 
-	def('templateOption', `( {capture|group|string|regex|class|ruleref|any} _ )+`,
+	def('templateOption', `( {capture|group|stringToken|regex|class|ruleref|any} _ )+`,
 		{ type: 'option', tokens: '$1' }),
 
 	def('capture', `{predicate} '{' _ {captureTemplate} _ '}' {modifier}`,
@@ -106,9 +112,12 @@ export var dezentGrammar : Grammar = [
 		`{classChar} '-' {classChar}`, ['$1', '$2'],
 		`{classChar}`, ['$1', '$1']),
 
-	def('classChar', `!']' {char}`, 
+	def('classChar', `!']' {escape|char}`, 
 		'$1'),
 
+	def('char', `charstr`,
+		{ type: 'char', value: '$0' }),
+	
 	def('any', `{predicate} '.' {modifier}`, 
 		{ type: 'token', '...$2': '', '...$1': '', descriptor: { type: "any" } }),
 
@@ -152,8 +161,8 @@ export var dezentGrammar : Grammar = [
 	def('string', `/'/ {escape|stringText}* /'/`,
 		{ type: 'string', tokens: '$1' }),
 
-	def('stringText', `{/[^'\\\n]+/}`,
-		{ type: 'text', value: '$1' }),
+	def('stringText', `( !['-'\\\\-\\\\] . )*`,
+		{ type: 'text', value: '$0' }),
 
 	def('number', 
 		`{/-?\\d+(\\.\\d+)?([eE][-+]\\d+)?/}`, { type: 'number', value: '$1' },
@@ -166,13 +175,13 @@ export var dezentGrammar : Grammar = [
 	def('null', `'null'`,
 		{ type: 'null' }),
 
-	def('escape', `'\\\\' {unicode|char}`,
+	def('escape', `'\\\\' {unicode|charstr}`,
 		{ type: 'escape', value: '$1' }),
 
 	def('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`,
 		'$0'),
 
-	def('char', `!'\n' .`,
+	def('charstr', `!'\n' .`,
 		'$0'),
 
 	def('repeat', `{'*'|'+'|'?'}`, '$1'),
@@ -237,8 +246,29 @@ function option(tokStrs:string[]) : OptionNode {
 				tokStr = tokStr.substr(0, tokStr.length - 1);
 			}
 			if (tokStr[0] == '[') {
-				let ranges = tokStr.substr(1,tokStr.length-1).match(/(.-.)/g).map((i) => i.split('-'));
-				node = { type: "class", ranges: <[string,string][]>ranges };
+				let ranges = [];
+				let j = 1;
+				while (j < tokStr.length - 1) {
+					let start, end;
+					if (tokStr[j] == '\\') {
+						j++;
+						start = { type: 'escape', value: tokStr[j] };
+					} else {
+						start = { type: 'char', value: tokStr[j] };
+					}
+					j++;
+					if (tokStr[j] != '-') throw new Error("Error parsing range in bootstrap grammar");
+					j++;
+					if (tokStr[j] == '\\') {
+						j++;
+						end = { type: 'escape', value: tokStr[j] };
+					} else {
+						end = { type: 'char', value: tokStr[j] };
+					}
+					j++;
+					ranges.push([start,end]);
+				}
+				node = { type: "class", ranges: ranges };
 			} else {
 				switch (tokStr[0]) {
 					case '{': node = capture(tokStr); break;
@@ -309,12 +339,25 @@ function regex(token:string) : RegexNode {
 }
 
 function string(token:string) : StringNode {
-	return {
-		type: 'string',
-		tokens: [{
-			type: 'text',
-			value: token.substr(1, token.length - 2)
-		}]
+	token = token.substr(1, token.length - 2); // strip bounding quotes
+	if (token.length == 2 && token[0] == '\\') {
+		return {
+			type: 'string',
+			tokens: [{
+				type: 'escape',
+				value: ({ 'n': '\n' })[token[1]] || token[1]
+			}]
+		};
+	} else if (token.indexOf('\\') >= 0) {
+		throw new Error("not yet implemented");
+	} else {
+		return {
+			type: 'string',
+			tokens: [{
+				type: 'text',
+				value: token
+			}]
+		}
 	}
 }
 

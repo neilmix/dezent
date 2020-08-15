@@ -37,7 +37,7 @@ import {
     Grammar, dezentGrammar, DefineNode, ReturnNode, 
     ParseNode, RuleNode, OptionNode, CaptureNode,  TokenNode, ClassNode,
     ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, 
-    StringTextNode, StringEscapeNode, NumberNode, BooleanNode, MemberNode
+    StringTextNode, EscapeNode, NumberNode, BooleanNode, MemberNode
  } from "./Grammar";
 import { info } from "console";
 
@@ -308,11 +308,31 @@ class ParseManager {
                         }
                     }
                     if (node.descriptor.type == "class") {
-                        node.descriptor.pattern = node.descriptor.ranges.map((i) => i[0] == i[1] ? i[0] : i.join('-')).join(' ');
+                        for (let range of node.descriptor.ranges) {
+                            range.map((bound) => {
+                                if (bound.type == 'escape') {
+                                    if (bound.value[0] == 'u') {
+                                        bound.match = String.fromCharCode(parseInt(bound.value.substr(1), 16));
+                                    } else {
+                                        bound.match = ({
+                                            'n': '\n',
+                                            't': '\t',
+                                            'r': '\r',
+                                            'b': '\b',
+                                            'f': '\f',
+                                        })[bound.value] || bound.value;
+                                    }
+                                } else {
+                                    bound.match = bound.value;
+                                }
+                            });
+                        }
+                        node.descriptor.pattern = node.descriptor.ranges.map((i) => {
+                            return i[0].value == i[1].value ? i[0].value : i[0].value + '-' + i[1].value;
+                        }).join(' ');
                         node.descriptor.match = (s) => {
-                            let cc = s.charCodeAt(0);
                             for (let range of (<ClassNode>node.descriptor).ranges) {
-                                if (cc >= range[0].charCodeAt(0) && cc <= range[1].charCodeAt(0)) {
+                                if (s[0] >= range[0].match && s[0] <= range[1].match) {
                                     return [true, 1];
                                 }
                             }
@@ -689,6 +709,9 @@ class Parser {
                     // our parsing is complete!
                     break;
                 }
+                if (exited.node["pattern"] || exited.node.type == "ruleref") {
+                    this.debug(exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
+                }
                 if (next.node.type == "token" && next.node.not) {
                     exited.status = exited.status == MatchStatus.Pass ? MatchStatus.Fail : MatchStatus.Pass;
                 }
@@ -699,9 +722,6 @@ class Parser {
                     }
                     if (["capture","group"].includes(exited.node.type)) {
                         this.output.exitGroup(true);
-                    }
-                    if (exited.node["pattern"] || exited.node.type == "ruleref") {
-                        this.debug("PASS", this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
                     }
                     // consume, but only if there's not a predicate
                     if (exited.node.type != "token" || !(exited.node.and || exited.node.not)) {
@@ -738,9 +758,6 @@ class Parser {
                     }
                     if (["capture","group"].includes(exited.node.type)) {
                         this.output.exitGroup(false);
-                    }
-                    if (exited.node["pattern"] || exited.node.type == "ruleref") {
-                        this.debug("FAIL", this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
                     }
                     if (["define", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
@@ -851,15 +868,17 @@ class Parser {
 }
 
 function buildString(node:StringNode) {
-    return node.tokens.map((node:StringTextNode|StringEscapeNode) => {
+    return node.tokens.map((node:StringTextNode|EscapeNode) => {
         if (node.type == "text") {
             return node.value;
         } else if (node.value[0] == 'u') {
             return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
-        } else if ("bfnrt".indexOf(node.value[1]) >= 0) {
-            return ({ b:'\b', f:'\f', n:'\n', r:'\r', t:'\t' })[node.value[1]];
+        } else if(node.value.length > 1) {
+            parserError(ErrorCode.Unreachable);
+        } else if ("bfnrt".indexOf(node.value) >= 0) {
+            return ({ b:'\b', f:'\f', n:'\n', r:'\r', t:'\t' })[node.value];
         } else {
-            return node.value.substr(1);
+            return node.value;
         }
     }).join("")
 }

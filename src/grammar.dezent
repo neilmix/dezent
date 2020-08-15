@@ -7,9 +7,9 @@ return _ ( { returnSt | defineSt } _ )*
 
 _ = ( singleLineComment | multiLineComment | whitespace )* -> null;
 
-singleLineComment = '//' /[^\n]*\n/     -> null;
-multiLineComment  = '/*' /(.|\n)*/ '*/' -> null;
-whitespace        = /\s*/               -> null;
+singleLineComment = '//' ( !'\n' . )* '\n' -> null;
+multiLineComment  = '/*' ( !'*/' . )* '*/' -> null;
+whitespace        = /\s*/                  -> null;
 
 returnSt = 'return' /\s+/ {rule} _ ';' 
 	-> { type: 'return', rule: $1 };
@@ -51,8 +51,11 @@ classComponent =
 	{classChar} '-' {classChar} -> [$1, $2],
 	{classChar} -> [$1, $1];
 
-classChar = !']' {char} 
+classChar = !']' {escape|char} 
 	-> $1;
+
+char = charstr
+	-> { type: 'char', value: $0 };
 
 any = {predicate} '.' {modifier} 
 	-> { type: 'token', ...$2, ...$1, descriptor: { type: "any" } };
@@ -97,8 +100,8 @@ array = '[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']'
 string = /'/ {escape|stringText}* /'/ 
 	-> { type: 'string', tokens: $1 };
 
-stringText = { /[^'\\\n]+/ } 
-	-> { type: 'text', value: $1 };
+stringText = ( !['\\] . )*
+	-> { type: 'text', value: $0 };
 
 number = 
 	{ /-?\d+(\.\d+)?([eE][-+]\d+)?/ } -> { type: 'number', value: $1 },
@@ -111,13 +114,13 @@ boolean =
 null = 'null' 
 	-> { type: 'null' };
 
-escape = '\\' { unicode | char }
+escape = '\\' { unicode | charstr }
 	-> { type: 'escape', value: $1 };
 
 unicode = 'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]
 	-> $0;
 
-char = !'\n' .
+charstr = !'\n' .
 	-> $0;
 
 identifier = /[_a-zA-Z][_a-zA-Z0-9]*/
