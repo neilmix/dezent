@@ -24,7 +24,7 @@ options = {pattern} _ ( '|' _ {pattern} _ )*
 	-> { options: [$1, ...$2] };
 
 pattern = ( { capture | group | stringToken | class | ruleref | any } _ )+
-	-> { type: 'option', tokens: $1 };
+	-> { type: 'pattern', tokens: $1 };
 
 capture = {predicate} '{' _ {captureOptions} _ '}' {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'capture', ...$2 } };
@@ -36,7 +36,7 @@ captureOptions = {capturePattern} _ ( '|' _ {capturePattern} _ )*
 	-> { options: [$1, ...$2] };
 
 capturePattern = ( { captureGroup | stringToken | class | ruleref | any } _ )+
-	-> { type: 'option', tokens: $1 };
+	-> { type: 'pattern', tokens: $1 };
 
 captureGroup = {predicate} '(' _ {captureOptions} _ ')' {modifier}?
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };

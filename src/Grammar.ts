@@ -1,7 +1,7 @@
 export type Grammar = (DefineNode|ReturnNode)[];
 
 export interface Node { type: string }
-export interface SelectorNode extends Node { options: OptionNode[] }
+export interface SelectorNode extends Node { options: PatternNode[] }
 export interface TokenNode extends Node { 
 	type: 'token', 
 	required: boolean, 
@@ -20,7 +20,7 @@ export interface RangeNode extends Node {
 }
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
-export type ParseNode = ReturnNode | DefineNode | RuleNode | OptionNode | TokenNode | DescriptorNode;
+export type ParseNode = ReturnNode | DefineNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
 export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 
@@ -29,7 +29,7 @@ export interface DefineNode       extends Node         { type: 'define',    name
 export interface RuleNode         extends SelectorNode { type: 'rule',      value: ValueNode, captures?: boolean[], defineName?: string }
 export interface CaptureNode      extends SelectorNode { type: 'capture',   index?: number }
 export interface GroupNode        extends SelectorNode { type: 'group' }
-export interface OptionNode       extends Node         { type: 'option',    tokens: TokenNode[] }
+export interface PatternNode      extends Node         { type: 'pattern',   tokens: TokenNode[] }
 export interface RuleRefNode      extends Node         { type: 'ruleref',   name: string }
 export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [RangeNode, RangeNode][] }
 export interface AnyNode          extends MatcherNode  { type: 'any' }
@@ -84,7 +84,7 @@ export function createUncompiledDezentGrammar() {
 			{ options: ['$1', '...$2'] }),
 
 		def('pattern', `( {capture|group|stringToken|class|ruleref|any} _ )+`,
-			{ type: 'option', tokens: '$1' }),
+			{ type: 'pattern', tokens: '$1' }),
 
 		def('capture', `{predicate} '{' _ {captureOptions} _ '}' {modifier}`,
 			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'capture', '...$2': '' } }),
@@ -96,7 +96,7 @@ export function createUncompiledDezentGrammar() {
 			{ options: ['$1', '...$2'] }),
 
 		def('capturePattern', `( {captureGroup|stringToken|class|ruleref|any} _ )+`,
-			{ type: 'option', tokens: '$1' }),
+			{ type: 'pattern', tokens: '$1' }),
 
 		def('captureGroup', `{predicate} '(' _ {captureOptions} _ ')' {modifier}?`,
 			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
@@ -210,12 +210,12 @@ function def(name:string, ...args:any) : DefineNode {
 function rule(options:string, out:any) : RuleNode {
 	return {
 		type: 'rule',
-		options: [ option(options.split(/ +/)) ],
+		options: [ pattern(options.split(/ +/)) ],
 		value: output(out)
 	}
 }
 
-function option(tokStrs:string[]) : OptionNode {
+function pattern(tokStrs:string[]) : PatternNode {
 	let tokens:TokenNode[] = [];
 
 	for (let i = 0; i < tokStrs.length; i++) {
@@ -263,7 +263,7 @@ function option(tokStrs:string[]) : OptionNode {
 	}
 
 	return {
-		type: 'option',
+		type: 'pattern',
 		tokens: tokens
 	};
 }
@@ -273,11 +273,11 @@ function group(tokens:string[]) : GroupNode {
 	let lastOr = -1;
 	for (let i = 0; i < tokens.length; i++) {
 		if (tokens[i] == '|') {
-			options.push(option(tokens.slice(lastOr+1, i)));
+			options.push(pattern(tokens.slice(lastOr+1, i)));
 			lastOr = i;
 		}
 	}
-	options.push(option(tokens.slice(lastOr+1, tokens.length)));
+	options.push(pattern(tokens.slice(lastOr+1, tokens.length)));
 	return {
 		type: 'group',
 		options: options
@@ -292,7 +292,7 @@ function capture(token:string) : CaptureNode {
 
 	return {
 		type: 'capture',
-		options: options.map((t) => option([t])),
+		options: options.map((t) => pattern([t])),
 	}
 }
 

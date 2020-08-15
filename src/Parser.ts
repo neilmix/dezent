@@ -31,7 +31,7 @@
 
 import { 
     Grammar, createUncompiledDezentGrammar, DefineNode, ReturnNode, 
-    ParseNode, RuleNode, OptionNode, CaptureNode,  TokenNode, ClassNode,
+    ParseNode, RuleNode, PatternNode, CaptureNode,  TokenNode, ClassNode,
     ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, 
     StringTextNode, EscapeNode, NumberNode, BooleanNode, MemberNode
  } from "./Grammar";
@@ -428,7 +428,7 @@ class ParseManager {
     }
 }
 
-function visitOptionChildren(node:OptionNode, data, enter:Function, exit:Function) {
+function visitOptionChildren(node:PatternNode, data, enter:Function, exit:Function) {
     for (let child of node.tokens) {
         enter(child, data);
         let childOptions = child.descriptor["options"];
@@ -470,7 +470,7 @@ enum MatchStatus {
 type ParseContextFrame = {
     status: MatchStatus,
     node: ParseNode,
-    items: RuleNode[] | OptionNode[] | TokenNode[],
+    items: RuleNode[] | PatternNode[] | TokenNode[],
     index: number,
     pos: number,
     consumed: number,
@@ -712,7 +712,7 @@ class Parser {
                     if (exited.node.type != "token" || !(exited.node.and || exited.node.not)) {
                         next.consumed += exited.consumed;
                     }
-                    if (next.node.type == "option") {
+                    if (next.node.type == "pattern") {
                         if (++next.index >= next.items.length) {
                             next.status = MatchStatus.Pass;
                         } // otherwise stay at Continue
@@ -821,7 +821,7 @@ class Parser {
                 this.output.enterGroup();
                 items = node.options; 
                 break;
-            case "option": 
+            case "pattern": 
                 items = node.tokens; 
                 break;
             case "token":
