@@ -32,7 +32,7 @@
 // - regex-like match-finding
 
 import { 
-    Grammar, dezentGrammar, DefineNode, ReturnNode, 
+    Grammar, createUncompiledDezentGrammar, DefineNode, ReturnNode, 
     ParseNode, RuleNode, OptionNode, CaptureNode,  TokenNode, ClassNode,
     ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, 
     StringTextNode, EscapeNode, NumberNode, BooleanNode, MemberNode
@@ -87,12 +87,12 @@ const errorMessages = {
     2010: "Multiple outputs were found for a non-repeating capture",
 }
 
-let dezentGrammarFound = false;
+let dezentGrammar:Grammar;
 
-function findDezentGrammar(options:ParserOptions) : Grammar{
-    if (!dezentGrammarFound) {
+export function findDezentGrammar(options?:ParserOptions) : Grammar{
+    if (!dezentGrammar) {
+        dezentGrammar = createUncompiledDezentGrammar();
         new ParseManager(options).compileGrammar(dezentGrammar);
-        dezentGrammarFound = true;
     }
     return dezentGrammar;
 }
@@ -115,16 +115,6 @@ export function parseGrammar(grammar:string, options?:ParserOptions) : Grammar {
     let mgr = new ParseManager(options);
     try {
         return mgr.parseAndCompileGrammar(grammar);
-    } catch(e) {
-        if (options && options.debugErrors) mgr.dumpDebug();
-        throw e;
-    }    
-}
-
-export function parseTextWithGrammar(grammar:Grammar, text:string, options?:ParserOptions) : any {
-    let mgr = new ParseManager(options);
-    try {
-        return mgr.parseTextWithGrammar(grammar, text);
     } catch(e) {
         if (options && options.debugErrors) mgr.dumpDebug();
         throw e;
@@ -219,7 +209,7 @@ class ParseManager {
     options:ParserOptions;
     debugLog:any[][] = [];
     currentParser:Parser;
-    rawGrammar:any;
+    rawGrammar:string;
     compiledGrammar:Grammar;
 
     constructor(options?:ParserOptions) {
@@ -238,7 +228,9 @@ class ParseManager {
     parseAndCompileGrammar(text:string) : Grammar {
         try {
             let grammar = this.parseTextWithGrammar(findDezentGrammar(this.options), text);
-            this.rawGrammar = grammar;
+            if (this.options.debugErrors) {
+                this.rawGrammar = JSON.stringify(grammar);
+            }
             this.compileGrammar(grammar);
             return grammar;
         } catch(e) {
@@ -319,7 +311,12 @@ class ParseManager {
                             });
                         }
                         node.descriptor.pattern = node.descriptor.ranges.map((i) => {
-                            return i[0].value == i[1].value ? i[0].value : i[0].value + '-' + i[1].value;
+                            let ret = (i[0].type == 'escape' ? '\\' : '') + i[0].value;
+                            if (i[0].value != i[1].value) {
+                                ret += '-';
+                                ret += (i[1].type == 'escape' ? '\\' : '') + i[1].value
+                            }
+                            return ret;
                         }).join(' ');
                         node.descriptor.match = (s) => {
                             for (let range of (<ClassNode>node.descriptor).ranges) {
@@ -418,7 +415,7 @@ class ParseManager {
         }
         console.error("Debug log:\n", lines.join("\n"));
         if (this.rawGrammar) {
-            console.error("Raw grammar:\n", JSON.stringify(this.rawGrammar));
+            console.error("Raw grammar:\n", this.rawGrammar);
         }
         if (this.compiledGrammar) {
             console.error("Compiled grammar:\n", JSON.stringify(this.compiledGrammar));

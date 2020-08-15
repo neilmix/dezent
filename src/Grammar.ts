@@ -50,142 +50,143 @@ export interface MemberNode { type: 'member', name: BackRefNode|StringNode, valu
 
 let kNull:NullNode = { type: 'null' }
 
-// This is a mini DSL that allows us to build an AST
-// that our parser uses to parse grammar files.
-// This is the same grammar as in grammar.dezent,
-// though there are some restrictions to keep the
-// amount of parsing logic under control:
-// - there can be no whitespace within a capture
-// - object splat must be written as name/value pair, e.g. ...$1': ''
-// - grouping parens (and predicate/modifier) must be surrounded by whitespace
-// - character classes don't support spaces - use \\u0020
+export function createUncompiledDezentGrammar() {
 
-export var dezentGrammar : Grammar = [
-    ret(`_ ( {returnSt|defineSt} _ )*`, '$1'),
+	// This is a mini DSL that allows us to build an AST
+	// that our parser uses to parse grammar files.
+	// This is the same grammar as in grammar.dezent,
+	// though there are some restrictions to keep the
+	// amount of parsing logic under control:
+	// - there can be no whitespace within a capture
+	// - object splat must be written as name/value pair, e.g. ...$1': ''
+	// - grouping parens (and predicate/modifier) must be surrounded by whitespace
+	// - character classes don't support spaces - use \\u0020
 
-	def('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
+	return [
+		ret(`_ ( {returnSt|defineSt} _ )*`, '$1'),
 
-	def('singleLineComment', `'//' ( !'\n' . )* '\n'`, null),
-	def('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, null),
-	def('whitespace',        `[\\u0020\t-\r]+`, null),
+		def('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
 
-	def('returnSt', `'return' whitespace {rule} _ ';'`,
-		{ type: 'return', rule: '$1' }),
+		def('singleLineComment', `'//' ( !'\\n' . )* '\\n'`, null),
+		def('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, null),
+		def('whitespace',        `[\\u0020\\t-\\r]+`, null),
 
-	def('defineSt', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
-		{ type: 'define', name: '$1', rules: ['$2', '...$3'] }),
-	
-	def('rule', `{template} _ '->' _ {value}`,
-		{ type: 'rule', '...$1': '', value: '$2' }),
-	
-	def('template', `{templateOption} _ ( '|' _ {templateOption} _ )*`,
-		{ options: ['$1', '...$2'] }),
+		def('returnSt', `'return' whitespace {rule} _ ';'`,
+			{ type: 'return', rule: '$1' }),
 
-	def('templateOption', `( {capture|group|stringToken|class|ruleref|any} _ )+`,
-		{ type: 'option', tokens: '$1' }),
+		def('defineSt', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
+			{ type: 'define', name: '$1', rules: ['$2', '...$3'] }),
+		
+		def('rule', `{template} _ '->' _ {value}`,
+			{ type: 'rule', '...$1': '', value: '$2' }),
+		
+		def('template', `{templateOption} _ ( '|' _ {templateOption} _ )*`,
+			{ options: ['$1', '...$2'] }),
 
-	def('capture', `{predicate} '{' _ {captureTemplate} _ '}' {modifier}`,
-		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'capture', '...$2': '' } }),
+		def('templateOption', `( {capture|group|stringToken|class|ruleref|any} _ )+`,
+			{ type: 'option', tokens: '$1' }),
 
-	def('group', `{predicate} '(' _ {template} _ ')' {modifier}`,
-	{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
+		def('capture', `{predicate} '{' _ {captureTemplate} _ '}' {modifier}`,
+			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'capture', '...$2': '' } }),
 
-	def('captureTemplate', `{captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )*`,
-		{ options: ['$1', '...$2'] }),
-
-	def('captureTemplateOption', `( {captureGroup|stringToken|class|ruleref|any} _ )+`,
-		{ type: 'option', tokens: '$1' }),
-
-	def('captureGroup', `{predicate} '(' _ {captureTemplate} _ ')' {modifier}?`,
+		def('group', `{predicate} '(' _ {template} _ ')' {modifier}`,
 		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
 
-	def('class', `{predicate} '[' {classComponent}* ']' {modifier}`,
-		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: "class", ranges: '$2' } }),
+		def('captureTemplate', `{captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )*`,
+			{ options: ['$1', '...$2'] }),
 
-	def('classComponent',
-		`{classChar} '-' {classChar}`, ['$1', '$2'],
-		`{classChar}`, ['$1', '$1']),
+		def('captureTemplateOption', `( {captureGroup|stringToken|class|ruleref|any} _ )+`,
+			{ type: 'option', tokens: '$1' }),
 
-	def('classChar', `!']' {escape|char}`, 
-		'$1'),
+		def('captureGroup', `{predicate} '(' _ {captureTemplate} _ ')' {modifier}?`,
+			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'group', '...$2': '' } }),
 
-	def('char', `charstr`,
-		{ type: 'char', value: '$0' }),
-	
-	def('any', `{predicate} '.' {modifier}`, 
-		{ type: 'token', '...$2': '', '...$1': '', descriptor: { type: "any" } }),
+		def('class', `{predicate} '[' {classComponent}* ']' {modifier}`,
+			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'class', ranges: '$2' } }),
 
-	def('stringToken', `{predicate} {string} {modifier}`,
-		{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
+		def('classComponent',
+			`{classChar} '-' {classChar}`, ['$1', '$2'],
+			`{classChar}`, ['$1', '$1']),
 
-	def('ruleref', `{predicate} {identifier} {modifier}`,
-		{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'ruleref', name: '$2' } }),
+		def('classChar', `!']' {escape|char}`, 
+			'$1'),
 
-	def('predicate',
-		`'&'`, { and: true, not: false },
-		`'!'`, { and: false, not: true },
-		`''`,  { and: false, not: false }),
+		def('char', `charstr`,
+			{ type: 'char', value: '$0' }),
+		
+		def('any', `{predicate} '.' {modifier}`, 
+			{ type: 'token', '...$2': '', '...$1': '', descriptor: { type: 'any' } }),
 
-	def('modifier',
-		`'*'`, { repeat: true, required: false },
-		`'+'`, { repeat: true, required: true },
-		`'?'`, { repeat: false, required: false },
-		`''`,  { repeat: false, required: true }),
+		def('stringToken', `{predicate} {string} {modifier}`,
+			{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
 
-	def('value', `{backref|object|array|string|number|boolean|null}`,
-		'$1'),
+		def('ruleref', `{predicate} {identifier} {modifier}`,
+			{ type: 'token', '...$3': '', '...$1': '', descriptor: { type: 'ruleref', name: '$2' } }),
 
-	def('backref', `'$' {[0-9]+}`,
-		{ type: 'backref', index: '$1' }),
+		def('predicate',
+			`'&'`, { and: true, not: false },
+			`'!'`, { and: false, not: true },
+			`''`,  { and: false, not: false }),
 
-	def('splat',
-		`'...' {backref}`, { type: 'splat', backrefs: ['$1'] },
-		`'...(' _ {backref} ( _ ',' _ {backref} )* _ ')'`, { type: 'splat', backrefs: ['$1', '...$2'] }),
+		def('modifier',
+			`'*'`, { repeat: true, required: false },
+			`'+'`, { repeat: true, required: true },
+			`'?'`, { repeat: false, required: false },
+			`''`,  { repeat: false, required: true }),
 
-	def('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
-		{ type: 'object', members: ['...$1', '$2'] }),
+		def('value', `{backref|object|array|string|number|boolean|null}`,
+			'$1'),
 
-	def('member', 
-		`{splat}`, '$1',
-		`{backref|string|identifierAsStringNode} _ ':' _ {value}`, { name: '$1', value: '$2' }),
+		def('backref', `'$' {[0-9]+}`,
+			{ type: 'backref', index: '$1' }),
 
-	def('array', `'[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']'`,
-		{ type: 'array', elements: ['...$1', '$2'] }),
+		def('splat',
+			`'...' {backref}`, { type: 'splat', backrefs: ['$1'] },
+			`'...(' _ {backref} ( _ ',' _ {backref} )* _ ')'`, { type: 'splat', backrefs: ['$1', '...$2'] }),
 
-	def('string', `'\'' {escape|stringText}* '\''`,
-		{ type: 'string', tokens: '$1' }),
+		def('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
+			{ type: 'object', members: ['...$1', '$2'] }),
 
-	def('stringText', `( !['-'\\\\-\\\\] . )*`,
-		{ type: 'text', value: '$0' }),
+		def('member', 
+			`{splat}`, '$1',
+			`{backref|string|identifierAsStringNode} _ ':' _ {value}`, { type: 'member', name: '$1', value: '$2' }),
 
-	def('number', 
-		`'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?`, { type: 'number', value: '$0' },
-		`'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?`, { type: 'number', value: '$0' }),
-	
-	def('boolean',
-		`'true'`, { type: 'boolean', value: true },
-		`'false'`, { type: 'boolean', value: false }),
+		def('array', `'[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']'`,
+			{ type: 'array', elements: ['...$1', '$2'] }),
 
-	def('null', `'null'`,
-		{ type: 'null' }),
+		def('string', `'\\'' {escape|stringText}* '\\''`,
+			{ type: 'string', tokens: '$1' }),
 
-	def('escape', `'\\\\' {unicode|charstr}`,
-		{ type: 'escape', value: '$1' }),
+		def('stringText', `( !['\\\\] . )+`,
+			{ type: 'text', value: '$0' }),
 
-	def('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`,
-		'$0'),
+		def('number', 
+			`'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?`, { type: 'number', value: '$0' },
+			`'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?`, { type: 'number', value: '$0' }),
+		
+		def('boolean',
+			`'true'`, { type: 'boolean', value: true },
+			`'false'`, { type: 'boolean', value: false }),
 
-	def('charstr', `!'\n' .`,
-		'$0'),
+		def('null', `'null'`,
+			{ type: 'null' }),
 
-	def('repeat', `{'*'|'+'|'?'}`, '$1'),
+		def('escape', `'\\\\' {unicode|charstr}`,
+			{ type: 'escape', value: '$1' }),
 
-	def('identifier', `[_a-zA-Z] [_a-zA-Z0-9]*`,
-		'$0'),
+		def('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`,
+			'$0'),
 
-	def('identifierAsStringNode', `{identifier}`,
-		{ type: 'string', tokens: [ {type: 'text', value: '$1' } ] }),
-];
+		def('charstr', `!'\\n' .`,
+			'$0'),
+
+		def('identifier', `[_a-zA-Z] [_a-zA-Z0-9]*`,
+			'$0'),
+
+		def('identifierAsStringNode', `{identifier}`,
+			{ type: 'string', tokens: [ {type: 'text', value: '$1' } ] }),
+	];
+}
 
 function ret(template:string, output:any) : ReturnNode {
     return {
@@ -320,7 +321,7 @@ function charClass(token:String) : ClassNode {
 		}
 		ranges.push([start,end||start]);
 	}
-	return { type: "class", ranges: ranges };
+	return { type: 'class', ranges: ranges };
 }
 
 function string(token:string) : StringNode {
@@ -330,11 +331,16 @@ function string(token:string) : StringNode {
 			type: 'string',
 			tokens: [{
 				type: 'escape',
-				value: ({ 'n': '\n' })[token[1]] || token[1]
+				value: token[1]
 			}]
 		};
 	} else if (token.indexOf('\\') >= 0) {
-		throw new Error("not yet implemented");
+		throw new Error('not yet implemented');
+	} else if (token.length == 0) {
+		return {
+			type: 'string',
+			tokens: []
+		}
 	} else {
 		return {
 			type: 'string',

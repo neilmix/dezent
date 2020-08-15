@@ -1,8 +1,8 @@
 import "jest";
 
 import "./Parser";
-import { parseText, parseGrammar, parseTextWithGrammar } from "./Parser";
-import { dezentGrammar } from "./Grammar";
+import { parseText, findDezentGrammar, parseGrammar } from "./Parser";
+import { createUncompiledDezentGrammar } from "./Grammar";
 import { readFileSync } from "fs";
 import * as path from "path";
 
@@ -84,7 +84,8 @@ test("character classes", () => {
 });
 
 test("dezent grammar documentation", () => {
-    let docGrammar = readFileSync("./test/grammar.dezent").toString();
-    let parsedGrammar = parseGrammar(docGrammar, {debugErrors: true});
-    expect(parsedGrammar).toEqual(dezentGrammar);
+    let uncompiledDezent = createUncompiledDezentGrammar();
+    let textDezent = readFileSync("./test/grammar.dezent").toString();
+    let parsedDezent = parseText(findDezentGrammar(), textDezent, {debugErrors: true});
+    expect(parsedDezent).toEqual(uncompiledDezent);
 });

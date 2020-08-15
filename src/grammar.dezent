@@ -9,7 +9,7 @@ _ = ( singleLineComment | multiLineComment | whitespace? )* -> null;
 
 singleLineComment = '//' ( !'\n' . )* '\n' -> null;
 multiLineComment  = '/*' ( !'*/' . )* '*/' -> null;
-whitespace        = [\\u0020\t-\r]+ -> null;
+whitespace        = [\u0020\t-\r]+ -> null;
 
 returnSt = 'return' whitespace {rule} _ ';' 
 	-> { type: 'return', rule: $1 };
@@ -23,7 +23,7 @@ rule = {template} _ '->' _ {value}
 template = {templateOption} _ ( '|' _ {templateOption} _ )* 
 	-> { options: [$1, ...$2] };
 
-templateOption = ( { capture | group | stringToken | class | ruleref | any } _ )*
+templateOption = ( { capture | group | stringToken | class | ruleref | any } _ )+
 	-> { type: 'option', tokens: $1 };
 
 capture = {predicate} '{' _ {captureTemplate} _ '}' {modifier}
@@ -32,17 +32,17 @@ capture = {predicate} '{' _ {captureTemplate} _ '}' {modifier}
 group = {predicate} '(' _ {template} _ ')' {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };
 
-captureTemplate = {captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )+
+captureTemplate = {captureTemplateOption} _ ( '|' _ {captureTemplateOption} _ )*
 	-> { options: [$1, ...$2] };
 
-captureTemplateOption = ( { captureGroup | stringToken | class | ruleref | any } _ )*
+captureTemplateOption = ( { captureGroup | stringToken | class | ruleref | any } _ )+
 	-> { type: 'option', tokens: $1 };
 
-captureGroup = '(' _ {captureTemplate} _ ')' {repeat}?
-	-> { type: 'group', ...$1, repeat: $2 };
+captureGroup = {predicate} '(' _ {captureTemplate} _ ')' {modifier}?
+	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'group', ...$2 } };
 
 class = {predicate} '[' { classComponent }* ']' {modifier}
-	-> { type: 'token', ...$3, ...$1, descriptor: { type: "class", ranges: $1 } };
+	-> { type: 'token', ...$3, ...$1, descriptor: { type: 'class', ranges: $2 } };
 
 classComponent =
 	{classChar} '-' {classChar} -> [$1, $2],
@@ -55,7 +55,7 @@ char = charstr
 	-> { type: 'char', value: $0 };
 
 any = {predicate} '.' {modifier} 
-	-> { type: 'token', ...$2, ...$1, descriptor: { type: "any" } };
+	-> { type: 'token', ...$2, ...$1, descriptor: { type: 'any' } };
 
 stringToken = {predicate} {string} {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: $2 };
@@ -89,7 +89,7 @@ object = '{' ( _ {member} _ ',' )* _ {member}? _ '}'
 
 member = 
 	{splat} -> $1,
-	{backref|string|identifierAsStringNode} _ ':' _ {value} -> { name: $1, value: $2 };
+	{backref|string|identifierAsStringNode} _ ':' _ {value} -> { type: 'member', name: $1, value: $2 };
 
 array = '[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']' 
 	-> { type: 'array', elements: [...$1, $2] };
@@ -97,7 +97,7 @@ array = '[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']'
 string = '\'' {escape|stringText}* '\''
 	-> { type: 'string', tokens: $1 };
 
-stringText = ( !['\\] . )*
+stringText = ( !['\\] . )+
 	-> { type: 'text', value: $0 };
 
 number = 
@@ -124,4 +124,4 @@ identifier = [_a-zA-Z] [_a-zA-Z0-9]*
 	-> $0;
 
 identifierAsStringNode = {identifier}
-	-> { type: 'string', tokens: [ {type: 'text', value: $1 } ] }
+	-> { type: 'string', tokens: [ {type: 'text', value: $1 } ] };
