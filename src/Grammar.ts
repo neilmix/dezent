@@ -1,4 +1,4 @@
-export type Grammar = (DefineNode|ReturnNode)[];
+export type Grammar = DefineNode[];
 
 export interface Node { type: string }
 export interface SelectorNode extends Node { options: PatternNode[] }
@@ -20,12 +20,12 @@ export interface RangeNode extends Node {
 }
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
-export type ParseNode = ReturnNode | DefineNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
+export type ParseNode = DefineNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
 export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 
-export interface ReturnNode       extends Node         { type: 'return',    rule: RuleNode }
 export interface DefineNode       extends Node         { type: 'define',    name: string, rules: RuleNode[] }
+export interface ReturnNode       extends DefineNode   { name: 'return' }
 export interface RuleNode         extends SelectorNode { type: 'rule',      value: ValueNode, captures?: boolean[], defineName?: string }
 export interface CaptureNode      extends SelectorNode { type: 'capture',   index?: number }
 export interface GroupNode        extends SelectorNode { type: 'group' }
@@ -72,7 +72,7 @@ export function createUncompiledDezentGrammar() {
 		def('whitespace',        `[\\u0020\\t-\\r]+`, null),
 
 		def('returnSt', `'return' whitespace {rule} _ ';'`,
-			{ type: 'return', rule: '$1' }),
+			{ type: 'define', name: 'return', rules: ['$1'] }),
 
 		def('defineSt', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
 			{ type: 'define', name: '$1', rules: ['$2', '...$3'] }),
@@ -193,8 +193,9 @@ export function createUncompiledDezentGrammar() {
 
 function ret(options:string, output:any) : ReturnNode {
     return {
-        type: 'return',
-		rule: rule(options, output),
+		type: 'define',
+		name: 'return',
+		rules: [rule(options, output)],
     }
 }
 

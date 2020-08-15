@@ -2,7 +2,6 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - add name to ReturnNode, prevent rule named return
 // - regex-like API
 // - test string outputs
 // - test hierarchical outputs
@@ -29,7 +28,7 @@
 // - regex-like match-finding
 
 import { 
-    Grammar, createUncompiledDezentGrammar, DefineNode, ReturnNode, 
+    Grammar, createUncompiledDezentGrammar, DefineNode, ReturnNode,
     ParseNode, RuleNode, PatternNode, CaptureNode,  TokenNode, ClassNode,
     ValueNode, BackRefNode, SplatNode, ObjectNode, ArrayNode, StringNode, 
     StringTextNode, EscapeNode, NumberNode, BooleanNode, MemberNode
@@ -247,12 +246,7 @@ class ParseManager {
         // We have to do this up-front because not every branch
         // of the grammar tree may be visited/executed at runtime
         for (let item of grammar) {
-            let rules : RuleNode[];
-            if (item.type == "return") {
-                rules = [item.rule];
-            } else {
-                rules = item.rules;
-            }
+            let rules = item.rules;
             for (let i = 0; i < rules.length; i++) {
                 rules[i].defineName = item["name"] || "return";
                 let [code, captures, index] = this.compileRule(rules[i]);
@@ -360,17 +354,13 @@ class ParseManager {
         let ret:ReturnNode;
     
         for (let statement of grammar) {
-            switch (statement.type) {
-                case "define":
-                    if (defines[statement.name]) {
-                        grammarError(ErrorCode.DuplicateDefine, statement.name);
-                    }
-                    defines[statement.name] = statement;
-                    break;
-                case "return":
-                    if (ret) grammarError(ErrorCode.MultipleReturn);
-                    ret = statement;
-                    break;
+            if (defines[statement.name]) {
+                grammarError(ErrorCode.DuplicateDefine, statement.name);
+            }
+            defines[statement.name] = statement;
+
+            if (statement.name == 'return') {
+                ret = <ReturnNode>statement;
             }
         }
     
@@ -476,7 +466,7 @@ type ParseContextFrame = {
 }
 
 type OutputFrame = {
-    node : ReturnNode|DefineNode,
+    node : DefineNode,
     rule?: RuleNode,
     captureNode : CaptureNode|null,
     capture: OutputToken[],
@@ -501,7 +491,7 @@ class OutputContext {
     constructor() {
     }
 
-    enterFrame(node:ReturnNode|DefineNode) {
+    enterFrame(node:DefineNode) {
         this.top = {
             node: node,
             captureNode: null,
@@ -512,7 +502,7 @@ class OutputContext {
         this.stack.push(this.top);
     }
 
-    exitFrame(node:ReturnNode|DefineNode, success:boolean) {
+    exitFrame(node:DefineNode, success:boolean) {
         let frame = this.stack.pop();
         this.top = this.stack[this.stack.length - 1];
         if (frame.node != node) {
@@ -719,7 +709,6 @@ class Parser {
                         next.status = MatchStatus.Pass;
                     }
                     switch (next.node.type) {
-                        case "return":
                         case "define":
                             this.output.exitFrame(next.node, true);
                             break;
@@ -759,9 +748,10 @@ class Parser {
                         next.status = MatchStatus.Fail;
                     }
                     switch (next.node.type) {
-                        case "return":
-                            parsingError(ErrorCode.TextParsingError, this.text, maxPos, buildReason());
                         case "define":
+                            if (next.node.name == 'return') {
+                                parsingError(ErrorCode.TextParsingError, this.text, maxPos, buildReason());
+                            }
                             if (next.status == MatchStatus.Fail) {
                                 this.output.exitFrame(next.node, false);
                             }
@@ -799,10 +789,6 @@ class Parser {
         let items;
 
         switch (node.type) {
-            case "return": 
-                items = [node.rule]; 
-                this.output.enterFrame(node);
-                break;
             case "define": 
                 items = node.rules;
                 this.output.enterFrame(node);
