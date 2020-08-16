@@ -2,11 +2,12 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - test every dezent grammar rule
-// - backrefs -> outputs where appropriate
 // - command line script
+// - error messaging examples:
+// -   `return {(. .)+}`
+// -   `return {(. .)+} -> $1`
 // - node position for post-parse error messages (e.g. NonArraySplat)
-// - double-check grammar backrefs
+// - backrefs -> outputs where appropriate
 // - constants
 // - how to deal with multiple members of same name?
 // - documentation
@@ -16,13 +17,15 @@
 // - @ values
 // - release?
 // - error messaging for not predicates
+// - string interpolation
+// - backref within pattern
 
 // speculative todo:
 // - error messaging
 // - error recovery
 // - chunked parsing
 // - macros/functions, e.g. definition(pattern1, pattern2)
-// - regex-like match-finding
+// - regex-like search-and-fine
 
 import { 
     Grammar, createUncompiledDezentGrammar, DefineNode, ReturnNode,

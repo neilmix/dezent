@@ -11,7 +11,7 @@ singleLineComment = '//' ( !'\n' . )* '\n' -> null;
 multiLineComment  = '/*' ( !'*/' . )* '*/' -> null;
 whitespace        = [\u0020\t-\r]+ -> null;
 
-returnSt = 'return' whitespace {rule} _ ';' 
+returnSt = 'return' whitespace _ {rule} _ ';' 
 	-> { type: 'define', name: 'return', rules: [$1] };
 
 defineSt = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 

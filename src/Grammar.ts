@@ -71,7 +71,7 @@ export function createUncompiledDezentGrammar() {
 		def('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, null),
 		def('whitespace',        `[\\u0020\\t-\\r]+`, null),
 
-		def('returnSt', `'return' whitespace {rule} _ ';'`,
+		def('returnSt', `'return' whitespace _ {rule} _ ';'`,
 			{ type: 'define', name: 'return', rules: ['$1'] }),
 
 		def('defineSt', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,

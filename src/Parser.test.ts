@@ -12,7 +12,18 @@ function parse(grammar:string, text:string) {
 }
 
 function expectParse(grammar:string, text?:string) {
-    return expect(parse(grammar, text||'anything - or did you forget the second argument?'));
+    return expect(parse(grammar, text||'Did you forget the second argument?'));
+}
+
+function expectGrammarFail(grammar:string) {
+    expect(() => {
+        new Dezent(grammar);
+    }).toThrow();
+}
+
+function expectParseFail(grammar:string, text?:string) {
+    let d = new Dezent(grammar);
+    expect(d.parse(text||'Did you forget the second argument?')).toBe(undefined);
 }
 
 test("boolean / null outputs", () => {
@@ -51,6 +62,7 @@ test("backref outputs", () => {
         foo = {.}{.} -> { $1: $2 };
         bar = {.}{.} -> { $1: $2 };
     `, 'abcd').toEqual([{a: 'b'}, {c: 'd'}]);
+    expectParse(`return ... -> $0;`, 'aaa').toEqual('aaa');
 });
 
 test("splat", () => {
@@ -83,6 +95,53 @@ test("character classes", () => {
     expectParse("return [\\t] -> $0;", "\t").toEqual('\t');
     expectParse("return [\\ua1b2] -> $0;", "\ua1b2").toEqual('\ua1b2');
     expectParse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2").toEqual("\n\r\t\f\b\ua2a2");
+});
+
+test('whitespace', () => {
+    expectParse(`
+        return // single line comment
+            {.} /* multi
+                   line
+                   comment
+                */ {.} -> [$1, $2];
+    `, 'ab').toEqual(['a', 'b']);
+})
+
+test('identifiers', () => {
+    expectParse(`return .* -> { _foo: 1 };`).toEqual({ _foo: 1 });
+    expectGrammarFail(`return .* -> { $foo: 1 }`);
+    expectGrammarFail('return .* -> null; foo$ = . -> null;');
+});
+
+test('capture and groups', () => {
+    expectParse(`return {.} {'x'}? {[b]}* {[a]}+ -> [$1, $2, $3, $4];`, 'aaaa')
+        .toEqual(['a', null, [], ['a', 'a', 'a']]);
+    expectParse(`return ('a'+ ({'b'})+ )+ -> $1;`, 'abaabbabbbabb')
+        .toEqual('b'.repeat(8).split(""));
+    expectParse(`return {(. .)+} -> $1;`, 'aaaa').toEqual('aaaa');
+    expectParseFail(`return {(. .)+} -> 1;`, 'aaaaa');
+    expectGrammarFail(`return {{.}} -> null;`);
+    expectGrammarFail(`return {({.})} -> null;`);
+});
+
+test('predicates', () => {
+    expectParse(`return !'a' .* -> $0;`, 'bbb').toEqual('bbb');
+    expectParseFail(`return !'a' .* -> $0;`, 'abbb');
+    expectParse(`return &'a' ... -> $0;`, 'abb').toEqual('abb');
+    expectParseFail(`return &'a' ... -> $0;`, 'baa');
+});
+
+test('input consumption', () => {
+    expectParseFail(`return .. -> $0;`, 'a');
+    expectParseFail(`return . -> $0;`, 'aa');
+    expectParse(`return .. -> $0;`, 'aa').toEqual('aa');
+});
+
+test('test modifiers', () => {
+    expectParse(`return 'a' 'b'? 'a'? 'a'* 'b'+ -> $0;`, 'aaaaabbb').toEqual('aaaaabbb');
+    expectParse(`return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;`, 'accc').toEqual('accc');
+    expectParseFail(`return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;`, 'ccc');
+    expectParseFail(`return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;`, 'abaaa');
 });
 
 test("dezent grammar documentation", () => {

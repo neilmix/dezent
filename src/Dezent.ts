@@ -22,7 +22,8 @@ export class Dezent {
     private grammar:Grammar;
 
     constructor(grammarStr:string, options?:parser.ParserOptions) {
-        this.debugErrors = options.debugErrors;
+        options = options || {};
+        this.debugErrors = !!options.debugErrors;
         this.error = null;
         this.grammar = parser.parseGrammar(grammarStr);
     }
