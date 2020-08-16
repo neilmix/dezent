@@ -11,81 +11,78 @@ function parse(grammar:string, text:string) {
     return d.parse(text);
 }
 
+function expectParse(grammar:string, text?:string) {
+    return expect(parse(grammar, text||'anything - or did you forget the second argument?'));
+}
+
 test("boolean / null outputs", () => {
-    let out = parse("return .* -> true;", "anything");
-    expect(out).toBe(true);
-
-    out = parse("return .* -> false;", "anything");
-    expect(out).toBe(false);
-
-    out = parse("return .* -> null;", "anything");
-    expect(out).toBe(null);
+    expectParse("return .* -> true;").toBe(true);
+    expectParse("return .* -> false;").toBe(false);
+    expectParse("return .* -> null;").toBe(null);
 });
 
 test("numeric outputs", () => {
-    let out = parse("return .* -> 4;", "anything");
-    expect(out).toBe(4);
+    expectParse("return .* -> 4;").toBe(4);
+    expectParse("return .* -> -4;").toBe(-4);
+    expectParse("return .* -> .543;").toBe(.543);
+    expectParse("return .* -> 0.543;").toBe(.543);
+    expectParse("return .* -> 5e+43;").toBe(5e43);
+    expectParse("return .* -> 5E+43;").toBe(5e43);
+    expectParse("return .* -> -5e-43;").toBe(-5e-43);
+});
 
-    out = parse("return .* -> -4;", "anything");
-    expect(out).toBe(-4);
-
-    out = parse("return .* -> .543;", "anything");
-    expect(out).toBe(.543);
-
-    out = parse("return .* -> 0.543;", "anything");
-    expect(out).toBe(.543);
-
-    out = parse("return .* -> 5e+43;", "anything");
-    expect(out).toBe(5e43);
-
-    out = parse("return .* -> 5E+43;", "anything");
-    expect(out).toBe(5e43);
-
-    out = parse("return .* -> -5e-43;", "anything");
-    expect(out).toBe(-5e-43);
+test("string outputs", () => {
+    expectParse("return .* -> 'abcd';").toBe('abcd');
+    expectParse("return .* -> '\\n\\r\\t\\b\\f\\\\\\a';").toBe('\n\r\t\b\f\\a');
+    expectParse("return .* -> 'foo\u0061bar\u0062baz';").toBe('fooabarbbaz');
 });
 
 test("object outputs", () => {
-    let out = parse("return .* -> { foo: 1, baz: 2, bee: 3 };", "anything");
-    expect(out).toEqual({ foo: 1, baz: 2, bee: 3 });
+    expectParse("return .* -> { foo: 1, baz: 2, bee: 3 };").toEqual({ foo: 1, baz: 2, bee: 3 });
+    expectParse("return .* -> { '\\n\\t': 1 };").toEqual({ '\n\t': 1 });
+    expectParse("return .* -> [ 1, 2, 3 ];").toEqual([ 1, 2, 3 ]);
+    expectParse("return .* -> {foo: [{bar: {baz: [1, 2, 3 ]}}]};").toEqual({foo: [{ bar: {baz: [1, 2, 3 ]}}]});
+});
 
-    out = parse("return .* -> [ 1, 2, 3 ];", "anything");
-    expect(out).toEqual([ 1, 2, 3 ]);
+test("backref outputs", () => {
+    expectParse("return {.} {.} -> [$1, $2];", 'ab').toEqual(['a', 'b']);
+    expectParse(`
+        return {foo} {bar} -> [$1, $2];
+        foo = {.}{.} -> { $1: $2 };
+        bar = {.}{.} -> { $1: $2 };
+    `, 'abcd').toEqual([{a: 'b'}, {c: 'd'}]);
+});
+
+test("splat", () => {
+    expectParse(`return {'a'}* {'b'}* -> [...$1, ...$2];`, 'aaabbb').toEqual(['a','a','a','b','b','b']);
+    expectParse(`return {[a-c]}* {[d-f]}* -> [...($1,$2)];`, 'abcdef').toEqual(['a', 'd', 'b', 'e', 'c', 'f']);
+    expectParse(`return {[a-c]}* {[d-f]}* -> {...($1,$2)};`, 'abcdef').toEqual({a:'d', b:'e', c:'f'});
+    expectParse(`
+        return {foo} -> [...$1];
+        foo = {.}{.}{.}{.}{.}{.} -> { $1: $4, $2: $5, $3: $6 };
+    `,'abcdef').toEqual(['a','d','b','e','c','f']);
 });
 
 test("the 'any' terminal", () => {
-    let out = parse("return {.} -> $1;", "x");
-    expect(out).toEqual('x');
+    expectParse("return {.} -> $1;", "x").toEqual('x');
 });
 
 test("strings", () => {
-    let out = parse("return 'x' -> $0;", "x");
-    expect(out).toEqual('x');
-    out = parse("return '\\n' -> $0;", "\n");
-    expect(out).toEqual('\n');
-    out = parse("return 'foo\\n\\nbar' -> $0;", "foo\n\nbar");
-    expect(out).toEqual('foo\n\nbar');
-    out = parse("return '\\n\\r\\t\\b\\f\\\\\\a' -> $0;", "\n\r\t\b\f\\a");
-    expect(out).toEqual("\n\r\t\b\f\\a");
+    expectParse("return 'x' -> $0;", "x").toEqual('x');
+    expectParse("return '\\n' -> $0;", "\n").toEqual('\n');
+    expectParse("return 'foo\\n\\nbar' -> $0;", "foo\n\nbar").toEqual('foo\n\nbar');
+    expectParse("return '\\n\\r\\t\\b\\f\\\\\\a' -> $0;", "\n\r\t\b\f\\a").toEqual("\n\r\t\b\f\\a");
 });
 
 test("character classes", () => {
-    let out = parse("return {[x]} -> $1;", "x");
-    expect(out).toEqual('x');
-    out = parse("return {[a-z]} -> $1;", "x");
-    expect(out).toEqual('x');
-    out = parse("return {[0-9a-zA-Z]} -> $1;", "x");
-    expect(out).toEqual('x');
-    out = parse("return {[x0-9]} -> $1;", "x");
-    expect(out).toEqual('x');
-    out = parse("return {[qwertyx]} -> $1;", "x");
-    expect(out).toEqual('x');
-    out = parse("return [\\t] -> $0;", "\t");
-    expect(out).toEqual('\t');
-    out = parse("return [\\ua1b2] -> $0;", "\ua1b2");
-    expect(out).toEqual('\ua1b2');
-    out = parse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2");
-    expect(out).toEqual("\n\r\t\f\b\ua2a2");
+    expectParse("return {[x]} -> $1;", "x").toEqual('x');
+    expectParse("return {[a-z]} -> $1;", "x").toEqual('x');
+    expectParse("return {[0-9a-zA-Z]} -> $1;", "x").toEqual('x');
+    expectParse("return {[x0-9]} -> $1;", "x").toEqual('x');
+    expectParse("return {[qwertyx]} -> $1;", "x").toEqual('x');
+    expectParse("return [\\t] -> $0;", "\t").toEqual('\t');
+    expectParse("return [\\ua1b2] -> $0;", "\ua1b2").toEqual('\ua1b2');
+    expectParse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2").toEqual("\n\r\t\f\b\ua2a2");
 });
 
 test("dezent grammar documentation", () => {

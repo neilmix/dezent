@@ -2,20 +2,16 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - regex-like API
-// - test string outputs
-// - test hierarchical outputs
-// - test backref outputs
 // - test every dezent grammar rule
 // - backrefs -> outputs where appropriate
 // - command line script
 // - node position for post-parse error messages (e.g. NonArraySplat)
-// - performance/scale testing
 // - double-check grammar backrefs
 // - constants
 // - how to deal with multiple members of same name?
 // - documentation
 // - package license
+// - performance/scale testing
 // - packrat parsing
 // - @ values
 // - release?
