@@ -150,3 +150,24 @@ test("dezent grammar documentation", () => {
     let parsedDezent = parseText(findDezentGrammar(), textDezent, {debugErrors: true});
     expect(parsedDezent).toEqual(uncompiledDezent);
 });
+
+test("expected grammar terminals", () => {
+    try {
+        parseGrammar('return . -> {}');
+    } catch(e) {
+        expect(e.expected.sort()).toEqual([';']);
+    }
+
+    try {
+        parseGrammar('return {.}');
+    } catch (e) {
+        expect(e.expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
+    }
+
+    try {
+        parseGrammar(`return ( . ([ab] {'f'} 'foo)) -> $1;`);
+    } catch (e) {
+        expect(e.expected.sort()).toEqual(["'", "\\"]);
+    }
+
+});

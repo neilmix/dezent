@@ -12,6 +12,7 @@ export interface ParseError extends DezentError {
     char?: number,
     lineText?: string,
     reason?: string,
+    expected?: string[]
 }
 
 export class Dezent {

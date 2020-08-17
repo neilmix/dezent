@@ -2,21 +2,19 @@
 // Parsing with the power of regular expressions plus recursion, readability, and structure.
 
 // todo:
-// - command line script
-// - error messaging examples:
-// -   `return {(. .)+}`
-// -   `return {(. .)+} -> $1`
+// - tests for grammar errors
+// - error messaging for not predicates
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - backrefs -> outputs where appropriate
-// - constants
 // - how to deal with multiple members of same name?
 // - documentation
+// - command line script
 // - package license
 // - performance/scale testing
 // - packrat parsing
-// - @ values
 // - release?
-// - error messaging for not predicates
+// - constants
+// - @ values
 // - string interpolation
 // - backref within pattern
 
@@ -138,6 +136,7 @@ export class Parser {
     defines: {[key:string]:DefineNode};
     output : OutputContext = new OutputContext();
     options : ParserOptions;
+    omitFails : number = 0;
     debugLog : any[][];
     
     constructor(root:ReturnNode, text:string, defines:{[key:string]:DefineNode}, options:ParserOptions, debugLog:string[][]) {
@@ -192,6 +191,11 @@ export class Parser {
                     // our parsing is complete!
                     break;
                 }
+                if (["define", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
+                    if (!exited.node["canFail"]) {
+                        this.omitFails--;
+                    }
+                }
                 if (exited.node["pattern"] || exited.node.type == "ruleref") {
                     this.debug(exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
                 }
@@ -236,7 +240,9 @@ export class Parser {
                     }
                 } else { // exited.matchStatus == MatchStatus.FAIL
                     if (exited.pos == maxPos && exited.node["pattern"]) {
-                        failedPatterns[exited.node["pattern"]] = true;
+                        if (!this.omitFails && exited.node["pattern"]) {
+                            failedPatterns[exited.node["pattern"]] = true;
+                        }
                     }
                     if (["capture","group"].includes(exited.node.type)) {
                         this.output.exitGroup(false);
@@ -259,7 +265,7 @@ export class Parser {
                     switch (next.node.type) {
                         case "define":
                             if (next.node.name == 'return') {
-                                parsingError(ErrorCode.TextParsingError, this.text, maxPos, buildReason());
+                                parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
                             }
                             if (next.status == MatchStatus.Fail) {
                                 this.output.exitFrame(next.node, false);
@@ -282,14 +288,11 @@ export class Parser {
             parserError(ErrorCode.InputConsumedBeforeResult);
         }
         if (this.output.result.length != this.text.length) {
-            parsingError(ErrorCode.TextParsingError, this.text, maxPos, buildReason());
+            parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
         }
 
-        function buildReason() {
-            let keys = Object.keys(failedPatterns);
-            keys = keys.map((i) => i.replace(/\n/g, '\\n'));
-            let list = [].join.call(keys, '\n\t');
-            return keys.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;        
+        function expectedTerminals() {
+            return Object.keys(failedPatterns);
         }
     }
 
@@ -297,6 +300,11 @@ export class Parser {
         let current = this.top();
         let items;
 
+        if (["define", "rule", "pattern", "capture", "group"].includes(node.type)) {
+            if (!node["canFail"]) {
+                this.omitFails++;
+            }
+        }
         switch (node.type) {
             case "define": 
                 items = node.rules;
@@ -360,7 +368,7 @@ export function parserError(code:ErrorCode) {
     throw e;
 }
 
-export function parsingError(code:ErrorCode, text:string, pos:number, reason:string) {
+export function parsingError(code:ErrorCode, text:string, pos:number, expected:string[]) {
     let lines = text.split('\n');
     let consumed = 0, linenum = 0, charnum = 0, lineText = '';
     for (let line of lines) {
@@ -373,7 +381,12 @@ export function parsingError(code:ErrorCode, text:string, pos:number, reason:str
         consumed += line.length + 1;
     }
     let detabbed = lineText.replace(/\t/g, '    ');
-    let leading = charnum - 1 + (detabbed.length - lineText.length);    
+    let leading = charnum - 1 + (detabbed.length - lineText.length);
+
+    expected = expected.map((i) => i.replace(/\n/g, '\\n'));
+    let list = [].join.call(expected, '\n\t');
+    let reason = expected.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;        
+
     let backrefs = [null, linenum, charnum, reason, lineText, ' '.repeat(leading)];
     let msg = errorMessages[code].replace(/\$([0-9])/g, (match, index) => String(backrefs[index]));
     let e = new Error(msg);
@@ -383,5 +396,6 @@ export function parsingError(code:ErrorCode, text:string, pos:number, reason:str
     e["char"] = charnum;
     e["lineText"] = lineText;
     e["reason"] = reason;
+    e["expected"] = expected;
     throw e;
 }

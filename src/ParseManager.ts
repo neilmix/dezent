@@ -5,7 +5,7 @@ import {
 } from './Parser';
 
 import { 
-    Grammar, DefineNode, ReturnNode, RuleNode, TokenNode, PatternNode, ClassNode, 
+    Grammar, Node, SelectorNode, DefineNode, ReturnNode, RuleNode, TokenNode, PatternNode, ClassNode, AnyNode,
     ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, SplatNode, 
     StringTextNode, EscapeNode,
 } from './Grammar';
@@ -141,7 +141,7 @@ export class ParseManager {
             return grammar;
         } catch(e) {
             if (e["code"] == ErrorCode.TextParsingError) {
-                parsingError(ErrorCode.GrammarParsingError, text, e["pos"], e["reason"]);
+                parsingError(ErrorCode.GrammarParsingError, text, e["pos"], e["expected"]);
             } else {
                 throw e;
             }
@@ -165,7 +165,41 @@ export class ParseManager {
                 }
                 rules[i].captures = captures;
             }
+
+            // figure out if our selectors are capable of failing, which helps in
+            // identifying expected tokens for good error messaging.
+            visitParseNodes("pattern", item, null, null, (node:PatternNode) => {
+                for (let token of node.tokens) {
+                    if (token.required && !(token.descriptor.type == "string" && token.descriptor.pattern == '')) {
+                        node.canFail = true;
+                        return;
+                    }
+                }
+                node.canFail = false;
+            });
+            visitParseNodes(["capture","group","rule"], item, null, null, (node:SelectorNode) => {
+                node.canFail = true;
+                for (let pattern of node.options) {
+                    if (!pattern.canFail) {
+                        node.canFail = false;
+                        break;
+                    }
+                }
+            });
+            if (item.name == 'return') {
+                item.canFail = true;
+            } else {
+                item.canFail = true;
+                for (let rule of item.rules) {
+                    if (!rule.canFail) {
+                        item.canFail = false;
+                        break;
+                    }
+                }
+            }
         }
+
+        
         return grammar;
     }
 
@@ -177,7 +211,8 @@ export class ParseManager {
         let lastCount = -1;
         do {
             info.captures = [null];
-            visitOptionChildren(
+            visitParseNodes(
+                "token",
                 rule.options[i], 
                 info, 
                 (node:TokenNode, info) => {
@@ -185,54 +220,6 @@ export class ParseManager {
                     if (node.descriptor.type == "capture") {
                         node.descriptor.index = info.captures.length;
                         info.captures.push(info.repeats > 0);
-                    }
-                    if (node.descriptor.type == "string") {
-                        let matchString = buildString(node.descriptor);
-                        node.descriptor.pattern = matchString;
-                        node.descriptor.match = (s) => s.startsWith(matchString) ? [true, matchString.length] : [false, 0];
-                    }
-                    if (node.descriptor.type == "class") {
-                        for (let range of node.descriptor.ranges) {
-                            range.map((bound) => {
-                                if (bound.type == 'escape') {
-                                    if (bound.value[0] == 'u') {
-                                        bound.match = String.fromCharCode(parseInt(bound.value.substr(1), 16));
-                                    } else {
-                                        bound.match = ({
-                                            'n': '\n',
-                                            't': '\t',
-                                            'r': '\r',
-                                            'b': '\b',
-                                            'f': '\f',
-                                        })[bound.value] || bound.value;
-                                    }
-                                } else {
-                                    bound.match = bound.value;
-                                }
-                            });
-                        }
-                        node.descriptor.pattern = node.descriptor.ranges.map((i) => {
-                            let ret = (i[0].type == 'escape' ? '\\' : '') + i[0].value;
-                            if (i[0].value != i[1].value) {
-                                ret += '-';
-                                ret += (i[1].type == 'escape' ? '\\' : '') + i[1].value
-                            }
-                            return ret;
-                        }).join(' ');
-                        node.descriptor.match = (s) => {
-                            for (let range of (<ClassNode>node.descriptor).ranges) {
-                                if (s[0] >= range[0].match && s[0] <= range[1].match) {
-                                    return [true, 1];
-                                }
-                            }
-                            return [false, 0];
-                        }
-                    }
-                    if (node.descriptor.type == "any") {
-                        node.descriptor.match = (s) => {
-                            return s.length ? [true, 1] : [false, 0];
-                        }
-                        node.descriptor.pattern = '<character>';
                     }
                 },
                 (node:TokenNode, info) => {
@@ -246,6 +233,57 @@ export class ParseManager {
             i++;
          } while (i < rule.options.length);
     
+         visitParseNodes("string", rule, null, null, (node:StringNode) => {
+            let matchString = buildString(node);
+            node.pattern = matchString;
+            node.match = (s) => s.startsWith(matchString) ? [true, matchString.length] : [false, 0];
+         });
+
+         visitParseNodes("class", rule, null, null, (node:ClassNode) => {
+            for (let range of node.ranges) {
+                range.map((bound) => {
+                    if (bound.type == 'escape') {
+                        if (bound.value[0] == 'u') {
+                            bound.match = String.fromCharCode(parseInt(bound.value.substr(1), 16));
+                        } else {
+                            bound.match = ({
+                                'n': '\n',
+                                't': '\t',
+                                'r': '\r',
+                                'b': '\b',
+                                'f': '\f',
+                            })[bound.value] || bound.value;
+                        }
+                    } else {
+                        bound.match = bound.value;
+                    }
+                });
+            }
+            node.pattern = node.ranges.map((i) => {
+                let ret = (i[0].type == 'escape' ? '\\' : '') + i[0].value;
+                if (i[0].value != i[1].value) {
+                    ret += '-';
+                    ret += (i[1].type == 'escape' ? '\\' : '') + i[1].value
+                }
+                return ret;
+            }).join(' ');
+            node.match = (s) => {
+                for (let range of node.ranges) {
+                    if (s[0] >= range[0].match && s[0] <= range[1].match) {
+                        return [true, 1];
+                    }
+                }
+                return [false, 0];
+            }
+         });
+
+         visitParseNodes("any", rule, null, null, (node:AnyNode) => {
+            node.match = (s) => {
+                return s.length ? [true, 1] : [false, 0];
+            }
+            node.pattern = '';
+         });
+
          visitOutputNodes(rule.value, info, (node:ValueNode, info) => {
             if (node.type == "backref") info.backrefs.push(node);
          })
@@ -327,16 +365,32 @@ export class ParseManager {
     }
 }
 
-function visitOptionChildren(node:PatternNode, data, enter:Function, exit:Function) {
-    for (let child of node.tokens) {
-        enter(child, data);
-        let childOptions = child.descriptor["options"];
-        if (childOptions) {
-            for (let opt of childOptions) {
-                visitOptionChildren(opt, data, enter, exit);
-            }
-        }
-        exit(child, data);
+function visitParseNodes(
+    types:string|string[], 
+    root:Node, 
+    data?, 
+    enter?:(node:Node,data)=>void, 
+    exit?:(node:Node,data)=>void) 
+{
+    if (typeof types == "string") {
+        types = [types];
+    }
+    if (enter && types.includes(root.type)) {
+        enter(root, data);
+    }
+    let items = [];
+    switch(root.type) {
+        case "define": items = (<DefineNode>root).rules; break;
+        case "rule": case "capture": case "group": items = (<SelectorNode>root).options; break;
+        case "pattern": items = (<PatternNode>root).tokens; break;
+        case "token": items = [(<TokenNode>root).descriptor]; break;
+        default: break;
+    }
+    for (let item of items) {
+        visitParseNodes(types, item, data, enter, exit);
+    }
+    if (exit && types.includes(root.type)) {
+        exit(root, data);
     }
 }
 

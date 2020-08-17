@@ -1,15 +1,7 @@
 export type Grammar = DefineNode[];
 
 export interface Node { type: string }
-export interface SelectorNode extends Node { options: PatternNode[] }
-export interface TokenNode extends Node { 
-	type: 'token', 
-	required: boolean, 
-	repeat: boolean, 
-	and: boolean,
-	not: boolean,
-	descriptor: DescriptorNode 
-}
+export interface SelectorNode extends Node { options: PatternNode[], canFail?: boolean }
 export interface MatcherNode extends Node { 
 	pattern?: string; // for debug purposes
 	match?(s : string) : [boolean, number]; 
@@ -24,12 +16,40 @@ export type ParseNode = DefineNode | RuleNode | PatternNode | TokenNode | Descri
 export type ValueNode = BackRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 
-export interface DefineNode       extends Node         { type: 'define',    name: string, rules: RuleNode[] }
-export interface ReturnNode       extends DefineNode   { name: 'return' }
-export interface RuleNode         extends SelectorNode { type: 'rule',      value: ValueNode, captures?: boolean[], defineName?: string }
+export interface DefineNode extends Node { 
+	type: 'define',
+	name: string,
+	rules: RuleNode[],
+	canFail?: boolean
+}
+
+export interface ReturnNode extends DefineNode {
+	name: 'return'
+}
+
+export interface RuleNode extends SelectorNode { 
+	type: 'rule',
+	value: ValueNode, 
+	captures?: boolean[], 
+	defineName?: string
+}
+
+export interface PatternNode extends Node { 
+	type: 'pattern',
+	tokens: TokenNode[],
+	canFail?: boolean 
+}
+
+export interface TokenNode extends Node { 
+	type: 'token', 
+	required: boolean, 
+	repeat: boolean, 
+	and: boolean,
+	not: boolean,
+	descriptor: DescriptorNode 
+}
 export interface CaptureNode      extends SelectorNode { type: 'capture',   index?: number }
 export interface GroupNode        extends SelectorNode { type: 'group' }
-export interface PatternNode      extends Node         { type: 'pattern',   tokens: TokenNode[] }
 export interface RuleRefNode      extends Node         { type: 'ruleref',   name: string }
 export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [RangeNode, RangeNode][] }
 export interface AnyNode          extends MatcherNode  { type: 'any' }
