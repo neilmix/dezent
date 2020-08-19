@@ -1,7 +1,7 @@
 import "jest";
 
 import "./Parser";
-import { Dezent } from "./Dezent";
+import Dezent from "./Dezent";
 import { parseText, findDezentGrammar, parseGrammar } from "./Parser";
 import { createUncompiledDezentGrammar } from "./Grammar";
 import { readFileSync } from "fs";

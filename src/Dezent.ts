@@ -15,7 +15,7 @@ export interface ParseError extends DezentError {
     expected?: string[]
 }
 
-export class Dezent {
+export default class Dezent {
     debugErrors: boolean;
 
     error:DezentError|ParseError;
