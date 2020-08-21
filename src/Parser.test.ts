@@ -144,6 +144,13 @@ test('test modifiers', () => {
     expectParseFail(`return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;`, 'abaaa');
 });
 
+test("variables", () => {
+    expectParse(`$foo = 5; return .* -> $foo;`).toEqual(5);
+    expectParse(`$foo = ['bar', {baz: true}]; return .* -> $foo;`).toEqual(['bar', {baz: true}]);
+    expectParse(`$foo = $1; return {.*} -> $foo;`, 'blah').toEqual('blah');
+    expectGrammarFail(`return .* -> $foo;`);
+});
+
 test("dezent grammar documentation", () => {
     let uncompiledDezent = createUncompiledDezentGrammar();
     let textDezent = readFileSync("./test/grammar.dezent").toString();

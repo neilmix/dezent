@@ -3,12 +3,12 @@ import {
 } from "./Parser";
 
 import {
-    DefineNode, RuleNode, CaptureNode,
+    RuleDefNode, RuleNode, CaptureNode,
     ValueNode
 } from "./Grammar";
 
 type OutputFrame = {
-    node : DefineNode,
+    node : RuleDefNode,
     rule?: RuleNode,
     captureNode : CaptureNode|null,
     capture: OutputToken[],
@@ -33,7 +33,7 @@ export class OutputContext {
     constructor() {
     }
 
-    enterFrame(node:DefineNode) {
+    enterFrame(node:RuleDefNode) {
         this.top = {
             node: node,
             captureNode: null,
@@ -44,7 +44,7 @@ export class OutputContext {
         this.stack.push(this.top);
     }
 
-    exitFrame(node:DefineNode, success:boolean) {
+    exitFrame(node:RuleDefNode, success:boolean) {
         let frame = this.stack.pop();
         this.top = this.stack[this.stack.length - 1];
         if (frame.node != node) {

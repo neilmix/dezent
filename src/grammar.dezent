@@ -2,8 +2,8 @@
 // the dezent parser uses this grammar to parse grammar
 // documents prior to parsing.
 
-return _ ( { returnSt | defineSt } _ )* 
-	-> $1;
+return _ ( {returndef|ruledef} _ | '$' {identifier} _ '=' _ {value} _ ';' _ )* 
+	-> { ruledefs: $1, vars: { ...($2, $3) } };
 
 _ = ( singleLineComment | multiLineComment | whitespace? )* -> null;
 
@@ -11,11 +11,11 @@ singleLineComment = '//' ( !'\n' . )* '\n' -> null;
 multiLineComment  = '/*' ( !'*/' . )* '*/' -> null;
 whitespace        = [\u0020\t-\r]+ -> null;
 
-returnSt = 'return' whitespace _ {rule} _ ';' 
-	-> { type: 'define', name: 'return', rules: [$1] };
+returndef = 'return' whitespace _ {rule} _ ';' 
+	-> { type: 'ruledef', name: 'return', rules: [$1] };
 
-defineSt = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
-	-> { type: 'define', name: $1, rules: [$2, ...$3] };
+ruledef = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
+	-> { type: 'ruledef', name: $1, rules: [$2, ...$3] };
 
 rule = {options} _ '->' _ {value} 
 	-> { type: 'rule', ...$1, value: $2 };
@@ -77,12 +77,15 @@ modifier =
 	'?' -> { repeat: false, required: false },
 	''  -> { repeat: false, required: true };
 
-value = { backref | object | array | string | number | boolean | null } 
+value = { backref | varref | object | array | string | number | boolean | null } 
 	-> $1;
 
 backref = '$' { [0-9]+ } 
 	-> { type: 'backref', index: $1 };
 
+varref = '$' { identifier }
+	-> { type: 'varref', name: $1 };
+	
 splat = 
 	'...' {backref} -> { type: 'splat', backrefs: [$1] },
 	'...(' _ {backref} ( _ ',' _ {backref} )* _ ')' -> { type: 'splat', backrefs: [$1, ...$2] };

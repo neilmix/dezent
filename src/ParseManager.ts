@@ -5,22 +5,26 @@ import {
 } from './Parser';
 
 import { 
-    Grammar, Node, SelectorNode, DefineNode, ReturnNode, RuleNode, TokenNode, PatternNode, ClassNode, AnyNode,
-    ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, SplatNode, 
+    Grammar, Node, SelectorNode, RuleDefNode, ReturnNode, RuleNode, TokenNode, PatternNode, ClassNode, AnyNode,
+    ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, VarRefNode, SplatNode, 
     StringTextNode, EscapeNode,
 } from './Grammar';
 
 import { OutputToken } from './OutputContext';
 
 let builders:any = {
-    backref: (node:BackRefNode, backrefs:OutputToken[]) => {
+    backref: (node:BackRefNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
         if (backrefs[node.index] === undefined) {
             parserError(ErrorCode.BackRefNotFound);
         } else {
            return backrefs[node.index];
         }
     },
-    splat: (node:SplatNode, backrefs:OutputToken[]) => {
+    varref: (node:VarRefNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
+        let resolved = vars[node.name];
+        return builders[resolved.type](resolved, backrefs, vars);
+    },
+    splat: (node:SplatNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
         // remember our backref indices start at 0
         if (backrefs.length <= 1) {
             return [];
@@ -29,7 +33,7 @@ let builders:any = {
         // first convert to an array of arrays
         let resolved = [];
         for (let i = 0; i < node.backrefs.length; i++) {
-            let res = builders.backref(node.backrefs[i], backrefs);
+            let res = builders.backref(node.backrefs[i], backrefs, vars);
             if (!res || typeof res != 'object') {
                 grammarError(ErrorCode.InvalidSplat, String(i));
             }
@@ -56,27 +60,27 @@ let builders:any = {
         }
         return ret;
     },
-    object: (node:ObjectNode, backrefs:OutputToken[]) => {
+    object: (node:ObjectNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
         let ret = {};
         for (let member of node.members) {
             if (member.type == "splat") {
-                let items = builders.splat(member, backrefs);
+                let items = builders.splat(member, backrefs, vars);
                 for (let i = 0; i < items.length; i += 2) {
                     ret[items[i]] = items[i+1];
                 }
             } else {
-                ret[builders[member.name.type](member.name, backrefs)] = builders[member.value.type](member.value, backrefs);
+                ret[builders[member.name.type](member.name, backrefs, vars)] = builders[member.value.type](member.value, backrefs, vars);
             }
         }
         return ret;
     },
-    array: (node:ArrayNode, backrefs:OutputToken[]) => {
+    array: (node:ArrayNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
         let ret = [];
         for (let elem of node.elements) {
             if (elem.type == "splat") {
-                ret = ret.concat(builders.splat(elem, backrefs));
+                ret = ret.concat(builders.splat(elem, backrefs, vars));
             } else {
-                ret.push(builders[elem.type](elem, backrefs));
+                ret.push(builders[elem.type](elem, backrefs, vars));
             }
         }
         return ret;
@@ -155,20 +159,20 @@ export class ParseManager {
         // - validate that all backreferences are legit
         // We have to do this up-front because not every branch
         // of the grammar tree may be visited/executed at runtime
-        for (let item of grammar) {
-            let rules = item.rules;
+        for (let ruledef of grammar.ruledefs) {
+            let rules = ruledef.rules;
             for (let i = 0; i < rules.length; i++) {
-                rules[i].defineName = item["name"] || "return";
-                let [code, captures, index] = this.compileRule(rules[i]);
+                rules[i].ruledefName = ruledef["name"] || "return";
+                let [code, captures, index] = this.compileRule(rules[i], grammar.vars);
                 if (code != 0) {
-                    grammarError(code, item["name"] || item.type, String(i), index);
+                    grammarError(code, ruledef["name"] || ruledef.type, String(i), index);
                 }
                 rules[i].captures = captures;
             }
 
             // figure out if our selectors are capable of failing, which helps in
             // identifying expected tokens for good error messaging.
-            visitParseNodes("pattern", item, null, null, (node:PatternNode) => {
+            visitParseNodes("pattern", ruledef, null, null, (node:PatternNode) => {
                 for (let token of node.tokens) {
                     if (token.required && !(token.descriptor.type == "string" && token.descriptor.pattern == '')) {
                         node.canFail = true;
@@ -177,7 +181,7 @@ export class ParseManager {
                 }
                 node.canFail = false;
             });
-            visitParseNodes(["capture","group","rule"], item, null, null, (node:SelectorNode) => {
+            visitParseNodes(["capture","group","rule"], ruledef, null, null, (node:SelectorNode) => {
                 node.canFail = true;
                 for (let pattern of node.options) {
                     if (!pattern.canFail) {
@@ -186,24 +190,23 @@ export class ParseManager {
                     }
                 }
             });
-            if (item.name == 'return') {
-                item.canFail = true;
+            if (ruledef.name == 'return') {
+                ruledef.canFail = true;
             } else {
-                item.canFail = true;
-                for (let rule of item.rules) {
+                ruledef.canFail = true;
+                for (let rule of ruledef.rules) {
                     if (!rule.canFail) {
-                        item.canFail = false;
+                        ruledef.canFail = false;
                         break;
                     }
                 }
             }
         }
-
         
         return grammar;
     }
 
-    compileRule(rule:RuleNode) : [ErrorCode|0, boolean[], any] {
+    compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}) : [ErrorCode|0, boolean[], any] {
         // put an empty placeholder in captures so that the indices
         // align with backrefs (which begin at 1)
         let info = { captures: [null], repeats: 0, backrefs: [null] };
@@ -284,9 +287,18 @@ export class ParseManager {
             node.pattern = '';
          });
 
+         let varrefNames = [];
          visitOutputNodes(rule.value, info, (node:ValueNode, info) => {
             if (node.type == "backref") info.backrefs.push(node);
-         })
+            if (node.type == "varref") {
+                varrefNames.push(node.name);
+            }
+         });
+         for (let name of varrefNames) {
+             if (!vars[name]) {
+                 return [ErrorCode.InvalidVarRef, info.captures, name];
+             }
+         }
     
          for (let i = 1; i < info.backrefs.length; i++) {
              if (info.backrefs[i].index >= info.captures.length) {
@@ -298,17 +310,17 @@ export class ParseManager {
 
     parseTextWithGrammar(grammar:Grammar, text:string) : any {
         // pre-process the grammar
-        let defines: {[key:string]:DefineNode} = {};
+        let ruledefs: {[key:string]:RuleDefNode} = {};
         let ret:ReturnNode;
     
-        for (let statement of grammar) {
-            if (defines[statement.name]) {
-                grammarError(ErrorCode.DuplicateDefine, statement.name);
+        for (let ruledef of grammar.ruledefs) {
+            if (ruledefs[ruledef.name]) {
+                grammarError(ErrorCode.DuplicateDefine, ruledef.name);
             }
-            defines[statement.name] = statement;
+            ruledefs[ruledef.name] = ruledef;
 
-            if (statement.name == 'return') {
-                ret = <ReturnNode>statement;
+            if (ruledef.name == 'return') {
+                ret = <ReturnNode>ruledef;
             }
         }
     
@@ -317,7 +329,7 @@ export class ParseManager {
         }
     
         // now parse
-        let parser = this.currentParser = new Parser(ret, text, defines, this.options, this.debugLog);
+        let parser = this.currentParser = new Parser(ret, text, ruledefs, this.options, this.debugLog);
         parser.parse();
     
         // build our output value    
@@ -330,7 +342,7 @@ export class ParseManager {
                 return null;
             } else if (token.outputs && token.value) {
                 let backrefs = token.outputs.map((v) => buildOutput(v));
-                return builders[token.value.type](token.value, backrefs);
+                return builders[token.value.type](token.value, backrefs, grammar.vars);
             } else {
                 return text.substr(token.pos, token.length);
             }
@@ -380,7 +392,7 @@ function visitParseNodes(
     }
     let items = [];
     switch(root.type) {
-        case "define": items = (<DefineNode>root).rules; break;
+        case "ruledef": items = (<RuleDefNode>root).rules; break;
         case "rule": case "capture": case "group": items = (<SelectorNode>root).options; break;
         case "pattern": items = (<PatternNode>root).tokens; break;
         case "token": items = [(<TokenNode>root).descriptor]; break;

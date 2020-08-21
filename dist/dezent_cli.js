@@ -24,4 +24,4 @@ if (process.argv[2] == '-' && process.argv[3] == '-') {
 }
 var output = new Dezent_1["default"](read(process.argv[2]).toString())
     .parse(read(process.argv[3]).toString());
-console.log(JSON.stringify(output));
+process.stdout.write(JSON.stringify(output));

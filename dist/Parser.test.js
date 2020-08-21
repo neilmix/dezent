@@ -112,6 +112,12 @@ test('test modifiers', function () {
     expectParseFail("return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;", 'ccc');
     expectParseFail("return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;", 'abaaa');
 });
+test("variables", function () {
+    expectParse("$foo = 5; return .* -> $foo;").toEqual(5);
+    expectParse("$foo = ['bar', {baz: true}]; return .* -> $foo;").toEqual(['bar', { baz: true }]);
+    expectParse("$foo = $1; return {.*} -> $foo;", 'blah').toEqual('blah');
+    expectGrammarFail("return .* -> $foo;");
+});
 test("dezent grammar documentation", function () {
     var uncompiledDezent = Grammar_1.createUncompiledDezentGrammar();
     var textDezent = fs_1.readFileSync("./test/grammar.dezent").toString();

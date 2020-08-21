@@ -2,8 +2,6 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - backrefs -> outputs where appropriate
-// - constants
 // - @ values
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - tests for grammar errors
@@ -25,8 +23,8 @@
 // - regex-like search-and-find`
 
 import { 
-    Grammar, createUncompiledDezentGrammar, DefineNode, ReturnNode,
-    ParseNode, RuleNode, PatternNode, CaptureNode,  TokenNode, ValueNode
+    Grammar, createUncompiledDezentGrammar, RuleDefNode, ReturnNode,
+    ParseNode, RuleNode, PatternNode, TokenNode
  } from "./Grammar";
 
 import { ParseManager } from "./ParseManager";
@@ -44,6 +42,7 @@ export enum ErrorCode {
     ReturnNotFound            = 1006,
     CaptureCountMismatch      = 1007,
     InvalidBackRef            = 1008,
+    InvalidVarRef             = 1009,
 
     ArrayOverrun              = 2001,
     MismatchOutputFrames      = 2002,
@@ -68,6 +67,7 @@ const errorMessages = {
     1006: "Grammar does not contain a return rule",
     1007: "Not all options for rule $2 of $1 have the same number of captures",
     1008: "Invalid back reference $$3 for rule $2 of $1",
+    1009: "Invalid variable reference $$3 for rule $2 of $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -132,15 +132,15 @@ export enum MatchStatus {
 export class Parser {
     stack : ParseContextFrame[] = [];
     text : string;
-    defines: {[key:string]:DefineNode};
+    ruledefs: {[key:string]:RuleDefNode};
     output : OutputContext = new OutputContext();
     options : ParserOptions;
     omitFails : number = 0;
     debugLog : any[][];
     
-    constructor(root:ReturnNode, text:string, defines:{[key:string]:DefineNode}, options:ParserOptions, debugLog:string[][]) {
+    constructor(root:ReturnNode, text:string, ruledefs:{[key:string]:RuleDefNode}, options:ParserOptions, debugLog:string[][]) {
         this.text = text;
-        this.defines = defines;
+        this.ruledefs = ruledefs;
         this.options = options || {};
         this.debugLog = debugLog;
         this.enter(root);
@@ -163,7 +163,7 @@ export class Parser {
                         this.enter(current.items[current.index]);
                         break;
                     case "ruleref":
-                        let def = this.defines[current.node.name];
+                        let def = this.ruledefs[current.node.name];
                         if (!def) {
                             grammarError(ErrorCode.RuleNotFound, current.node.name);
                         }
@@ -190,7 +190,7 @@ export class Parser {
                     // our parsing is complete!
                     break;
                 }
-                if (["define", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
+                if (["ruledef", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
                     if (!exited.node["canFail"]) {
                         this.omitFails--;
                     }
@@ -221,7 +221,7 @@ export class Parser {
                         next.status = MatchStatus.Pass;
                     }
                     switch (next.node.type) {
-                        case "define":
+                        case "ruledef":
                             this.output.exitFrame(next.node, true);
                             break;
                         case "rule":
@@ -246,7 +246,7 @@ export class Parser {
                     if (["capture","group"].includes(exited.node.type)) {
                         this.output.exitGroup(false);
                     }
-                    if (["define", "rule", "capture", "group"].includes(next.node.type)) {
+                    if (["ruledef", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
                             next.status = MatchStatus.Fail;
                         }
@@ -262,7 +262,7 @@ export class Parser {
                         next.status = MatchStatus.Fail;
                     }
                     switch (next.node.type) {
-                        case "define":
+                        case "ruledef":
                             if (next.node.name == 'return') {
                                 parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
                             }
@@ -299,13 +299,13 @@ export class Parser {
         let current = this.top();
         let items;
 
-        if (["define", "rule", "pattern", "capture", "group"].includes(node.type)) {
+        if (["ruledef", "rule", "pattern", "capture", "group"].includes(node.type)) {
             if (!node["canFail"]) {
                 this.omitFails++;
             }
         }
         switch (node.type) {
-            case "define": 
+            case "ruledef": 
                 items = node.rules;
                 this.output.enterFrame(node);
                 break;

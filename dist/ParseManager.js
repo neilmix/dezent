@@ -3,7 +3,7 @@ exports.__esModule = true;
 exports.ParseManager = void 0;
 var Parser_1 = require("./Parser");
 var builders = {
-    backref: function (node, backrefs) {
+    backref: function (node, backrefs, vars) {
         if (backrefs[node.index] === undefined) {
             Parser_1.parserError(Parser_1.ErrorCode.BackRefNotFound);
         }
@@ -11,7 +11,11 @@ var builders = {
             return backrefs[node.index];
         }
     },
-    splat: function (node, backrefs) {
+    varref: function (node, backrefs, vars) {
+        var resolved = vars[node.name];
+        return builders[resolved.type](resolved, backrefs, vars);
+    },
+    splat: function (node, backrefs, vars) {
         // remember our backref indices start at 0
         if (backrefs.length <= 1) {
             return [];
@@ -19,7 +23,7 @@ var builders = {
         // first convert to an array of arrays
         var resolved = [];
         for (var i = 0; i < node.backrefs.length; i++) {
-            var res = builders.backref(node.backrefs[i], backrefs);
+            var res = builders.backref(node.backrefs[i], backrefs, vars);
             if (!res || typeof res != 'object') {
                 Parser_1.grammarError(Parser_1.ErrorCode.InvalidSplat, String(i));
             }
@@ -47,31 +51,31 @@ var builders = {
         }
         return ret;
     },
-    object: function (node, backrefs) {
+    object: function (node, backrefs, vars) {
         var ret = {};
         for (var _i = 0, _a = node.members; _i < _a.length; _i++) {
             var member = _a[_i];
             if (member.type == "splat") {
-                var items = builders.splat(member, backrefs);
+                var items = builders.splat(member, backrefs, vars);
                 for (var i = 0; i < items.length; i += 2) {
                     ret[items[i]] = items[i + 1];
                 }
             }
             else {
-                ret[builders[member.name.type](member.name, backrefs)] = builders[member.value.type](member.value, backrefs);
+                ret[builders[member.name.type](member.name, backrefs, vars)] = builders[member.value.type](member.value, backrefs, vars);
             }
         }
         return ret;
     },
-    array: function (node, backrefs) {
+    array: function (node, backrefs, vars) {
         var ret = [];
         for (var _i = 0, _a = node.elements; _i < _a.length; _i++) {
             var elem = _a[_i];
             if (elem.type == "splat") {
-                ret = ret.concat(builders.splat(elem, backrefs));
+                ret = ret.concat(builders.splat(elem, backrefs, vars));
             }
             else {
-                ret.push(builders[elem.type](elem, backrefs));
+                ret.push(builders[elem.type](elem, backrefs, vars));
             }
         }
         return ret;
@@ -145,20 +149,20 @@ var ParseManager = /** @class */ (function () {
         // - validate that all backreferences are legit
         // We have to do this up-front because not every branch
         // of the grammar tree may be visited/executed at runtime
-        for (var _i = 0, grammar_1 = grammar; _i < grammar_1.length; _i++) {
-            var item = grammar_1[_i];
-            var rules = item.rules;
+        for (var _i = 0, _a = grammar.ruledefs; _i < _a.length; _i++) {
+            var ruledef = _a[_i];
+            var rules = ruledef.rules;
             for (var i = 0; i < rules.length; i++) {
-                rules[i].defineName = item["name"] || "return";
-                var _a = this.compileRule(rules[i]), code = _a[0], captures = _a[1], index = _a[2];
+                rules[i].ruledefName = ruledef["name"] || "return";
+                var _b = this.compileRule(rules[i], grammar.vars), code = _b[0], captures = _b[1], index = _b[2];
                 if (code != 0) {
-                    Parser_1.grammarError(code, item["name"] || item.type, String(i), index);
+                    Parser_1.grammarError(code, ruledef["name"] || ruledef.type, String(i), index);
                 }
                 rules[i].captures = captures;
             }
             // figure out if our selectors are capable of failing, which helps in
             // identifying expected tokens for good error messaging.
-            visitParseNodes("pattern", item, null, null, function (node) {
+            visitParseNodes("pattern", ruledef, null, null, function (node) {
                 for (var _i = 0, _a = node.tokens; _i < _a.length; _i++) {
                     var token = _a[_i];
                     if (token.required && !(token.descriptor.type == "string" && token.descriptor.pattern == '')) {
@@ -168,7 +172,7 @@ var ParseManager = /** @class */ (function () {
                 }
                 node.canFail = false;
             });
-            visitParseNodes(["capture", "group", "rule"], item, null, null, function (node) {
+            visitParseNodes(["capture", "group", "rule"], ruledef, null, null, function (node) {
                 node.canFail = true;
                 for (var _i = 0, _a = node.options; _i < _a.length; _i++) {
                     var pattern = _a[_i];
@@ -178,15 +182,15 @@ var ParseManager = /** @class */ (function () {
                     }
                 }
             });
-            if (item.name == 'return') {
-                item.canFail = true;
+            if (ruledef.name == 'return') {
+                ruledef.canFail = true;
             }
             else {
-                item.canFail = true;
-                for (var _b = 0, _c = item.rules; _b < _c.length; _b++) {
-                    var rule = _c[_b];
+                ruledef.canFail = true;
+                for (var _c = 0, _d = ruledef.rules; _c < _d.length; _c++) {
+                    var rule = _d[_c];
                     if (!rule.canFail) {
-                        item.canFail = false;
+                        ruledef.canFail = false;
                         break;
                     }
                 }
@@ -194,7 +198,7 @@ var ParseManager = /** @class */ (function () {
         }
         return grammar;
     };
-    ParseManager.prototype.compileRule = function (rule) {
+    ParseManager.prototype.compileRule = function (rule, vars) {
         // put an empty placeholder in captures so that the indices
         // align with backrefs (which begin at 1)
         var info = { captures: [null], repeats: 0, backrefs: [null] };
@@ -271,10 +275,20 @@ var ParseManager = /** @class */ (function () {
             };
             node.pattern = '';
         });
+        var varrefNames = [];
         visitOutputNodes(rule.value, info, function (node, info) {
             if (node.type == "backref")
                 info.backrefs.push(node);
+            if (node.type == "varref") {
+                varrefNames.push(node.name);
+            }
         });
+        for (var _i = 0, varrefNames_1 = varrefNames; _i < varrefNames_1.length; _i++) {
+            var name_2 = varrefNames_1[_i];
+            if (!vars[name_2]) {
+                return [Parser_1.ErrorCode.InvalidVarRef, info.captures, name_2];
+            }
+        }
         for (var i_1 = 1; i_1 < info.backrefs.length; i_1++) {
             if (info.backrefs[i_1].index >= info.captures.length) {
                 return [Parser_1.ErrorCode.InvalidBackRef, info.captures, info.backrefs[i_1].index];
@@ -284,23 +298,23 @@ var ParseManager = /** @class */ (function () {
     };
     ParseManager.prototype.parseTextWithGrammar = function (grammar, text) {
         // pre-process the grammar
-        var defines = {};
+        var ruledefs = {};
         var ret;
-        for (var _i = 0, grammar_2 = grammar; _i < grammar_2.length; _i++) {
-            var statement = grammar_2[_i];
-            if (defines[statement.name]) {
-                Parser_1.grammarError(Parser_1.ErrorCode.DuplicateDefine, statement.name);
+        for (var _i = 0, _a = grammar.ruledefs; _i < _a.length; _i++) {
+            var ruledef = _a[_i];
+            if (ruledefs[ruledef.name]) {
+                Parser_1.grammarError(Parser_1.ErrorCode.DuplicateDefine, ruledef.name);
             }
-            defines[statement.name] = statement;
-            if (statement.name == 'return') {
-                ret = statement;
+            ruledefs[ruledef.name] = ruledef;
+            if (ruledef.name == 'return') {
+                ret = ruledef;
             }
         }
         if (!ret) {
             Parser_1.grammarError(Parser_1.ErrorCode.ReturnNotFound);
         }
         // now parse
-        var parser = this.currentParser = new Parser_1.Parser(ret, text, defines, this.options, this.debugLog);
+        var parser = this.currentParser = new Parser_1.Parser(ret, text, ruledefs, this.options, this.debugLog);
         parser.parse();
         // build our output value    
         return buildOutput(parser.output.result);
@@ -313,7 +327,7 @@ var ParseManager = /** @class */ (function () {
             }
             else if (token.outputs && token.value) {
                 var backrefs = token.outputs.map(function (v) { return buildOutput(v); });
-                return builders[token.value.type](token.value, backrefs);
+                return builders[token.value.type](token.value, backrefs, grammar.vars);
             }
             else {
                 return text.substr(token.pos, token.length);
@@ -362,7 +376,7 @@ function visitParseNodes(types, root, data, enter, exit) {
     }
     var items = [];
     switch (root.type) {
-        case "define":
+        case "ruledef":
             items = root.rules;
             break;
         case "rule":

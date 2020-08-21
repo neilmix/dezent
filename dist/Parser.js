@@ -4,14 +4,13 @@
 exports.__esModule = true;
 exports.parsingError = exports.parserError = exports.grammarError = exports.Parser = exports.MatchStatus = exports.parseGrammar = exports.parseText = exports.findDezentGrammar = exports.ErrorCode = void 0;
 // todo:
-// - backrefs -> outputs where appropriate
-// - constants
+// - fix vardef failure
 // - @ values
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - tests for grammar errors
 // - how to deal with multiple members of same name?
 // - documentation
-// - command line script
+// - command line script w/tests
 // - package license
 // - performance/scale testing
 // - packrat parsing
@@ -39,6 +38,7 @@ var ErrorCode;
     ErrorCode[ErrorCode["ReturnNotFound"] = 1006] = "ReturnNotFound";
     ErrorCode[ErrorCode["CaptureCountMismatch"] = 1007] = "CaptureCountMismatch";
     ErrorCode[ErrorCode["InvalidBackRef"] = 1008] = "InvalidBackRef";
+    ErrorCode[ErrorCode["InvalidVarRef"] = 1009] = "InvalidVarRef";
     ErrorCode[ErrorCode["ArrayOverrun"] = 2001] = "ArrayOverrun";
     ErrorCode[ErrorCode["MismatchOutputFrames"] = 2002] = "MismatchOutputFrames";
     ErrorCode[ErrorCode["CaptureAlreadyInProgress"] = 2003] = "CaptureAlreadyInProgress";
@@ -61,6 +61,7 @@ var errorMessages = {
     1006: "Grammar does not contain a return rule",
     1007: "Not all options for rule $2 of $1 have the same number of captures",
     1008: "Invalid back reference $$3 for rule $2 of $1",
+    1009: "Invalid variable reference $$3 for rule $2 of $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -112,12 +113,12 @@ var MatchStatus;
     MatchStatus[MatchStatus["Fail"] = 2] = "Fail";
 })(MatchStatus = exports.MatchStatus || (exports.MatchStatus = {}));
 var Parser = /** @class */ (function () {
-    function Parser(root, text, defines, options, debugLog) {
+    function Parser(root, text, ruledefs, options, debugLog) {
         this.stack = [];
         this.output = new OutputContext_1.OutputContext();
         this.omitFails = 0;
         this.text = text;
-        this.defines = defines;
+        this.ruledefs = ruledefs;
         this.options = options || {};
         this.debugLog = debugLog;
         this.enter(root);
@@ -136,7 +137,7 @@ var Parser = /** @class */ (function () {
                         this.enter(current.items[current.index]);
                         break;
                     case "ruleref":
-                        var def = this.defines[current.node.name];
+                        var def = this.ruledefs[current.node.name];
                         if (!def) {
                             grammarError(ErrorCode.RuleNotFound, current.node.name);
                         }
@@ -165,7 +166,7 @@ var Parser = /** @class */ (function () {
                     // our parsing is complete!
                     break;
                 }
-                if (["define", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
+                if (["ruledef", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
                     if (!exited.node["canFail"]) {
                         this.omitFails--;
                     }
@@ -197,7 +198,7 @@ var Parser = /** @class */ (function () {
                         next.status = MatchStatus.Pass;
                     }
                     switch (next.node.type) {
-                        case "define":
+                        case "ruledef":
                             this.output.exitFrame(next.node, true);
                             break;
                         case "rule":
@@ -223,7 +224,7 @@ var Parser = /** @class */ (function () {
                     if (["capture", "group"].includes(exited.node.type)) {
                         this.output.exitGroup(false);
                     }
-                    if (["define", "rule", "capture", "group"].includes(next.node.type)) {
+                    if (["ruledef", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
                             next.status = MatchStatus.Fail;
                         }
@@ -242,7 +243,7 @@ var Parser = /** @class */ (function () {
                         next.status = MatchStatus.Fail;
                     }
                     switch (next.node.type) {
-                        case "define":
+                        case "ruledef":
                             if (next.node.name == 'return') {
                                 parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
                             }
@@ -275,13 +276,13 @@ var Parser = /** @class */ (function () {
     Parser.prototype.enter = function (node) {
         var current = this.top();
         var items;
-        if (["define", "rule", "pattern", "capture", "group"].includes(node.type)) {
+        if (["ruledef", "rule", "pattern", "capture", "group"].includes(node.type)) {
             if (!node["canFail"]) {
                 this.omitFails++;
             }
         }
         switch (node.type) {
-            case "define":
+            case "ruledef":
                 items = node.rules;
                 this.output.enterFrame(node);
                 break;
