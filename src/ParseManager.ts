@@ -76,11 +76,7 @@ export class ParseManager {
             let rules = ruledef.rules;
             for (let i = 0; i < rules.length; i++) {
                 rules[i].ruledefName = ruledef["name"] || "return";
-                let [code, captures, index] = this.compileRule(rules[i], grammar.vars, text);
-                if (code != 0) {
-                    grammarError(code, text, null, ruledef["name"] || ruledef.type, String(i), index);
-                }
-                rules[i].captures = captures;
+                rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
             }
 
             // perform sanity checks
@@ -126,7 +122,7 @@ export class ParseManager {
         return grammar;
     }
 
-    compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}, text:string) : [ErrorCode|0, boolean[], any] {
+    compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}, text:string) : boolean[] {
         // put an empty placeholder in captures so that the indices
         // align with backrefs (which begin at 1)
         let info = { captures: [null], repeats: 0, backrefs: [null] };
@@ -221,7 +217,7 @@ export class ParseManager {
                  grammarError(ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
              }
          }
-        return [0, info.captures, null];
+        return info.captures;
     }
 
     parseTextWithGrammar(grammar:Grammar, text:string) : any {
