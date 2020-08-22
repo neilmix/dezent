@@ -61,7 +61,7 @@ export interface CharNode         extends RangeNode    { type: 'char',      valu
 export interface BackRefNode      extends Node { type: 'backref',   index: string }
 export interface VarRefNode       extends Node { type: 'varref',    name: string }
 export interface MetaRefNode      extends Node { type: 'metaref',   name: string }
-export interface SplatNode        extends Node { type: 'splat',     backrefs: BackRefNode[] }
+export interface SplatNode        extends Node { type: 'splat',     refs: (BackRefNode|VarRefNode)[] }
 export interface ObjectNode       extends Node { type: 'object',    members: (MemberNode|SplatNode)[] }
 export interface ArrayNode        extends Node { type: 'array',     elements: ValueNode[] }
 export interface NumberNode       extends Node { type: 'number',    value: string }
@@ -174,8 +174,8 @@ export function createUncompiledDezentGrammar():Grammar {
 				{ type: 'metaref', name: '$1' }),
 
 			ruledef('splat',
-				`'...' {backref}`, { type: 'splat', backrefs: ['$1'] },
-				`'...(' _ {backref} ( _ ',' _ {backref} )* _ ')'`, { type: 'splat', backrefs: ['$1', '...$2'] }),
+				`'...' {backref|varref}`, { type: 'splat', refs: ['$1'] },
+				`'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'`, { type: 'splat', refs: ['$1', '...$2'] }),
 
 			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
 				{ type: 'object', members: ['...$1', '$2'] }),
@@ -441,12 +441,12 @@ function output(value: any) : ValueNode {
 				if (value.match(/^...\$(\d)/)) {
 					return {
 						type: 'splat',
-						backrefs: [{ type: 'backref', index: RegExp.$1 }]
+						refs: [{ type: 'backref', index: RegExp.$1 }]
 					}
 				} else if (value.match(/^...\(\$(\d),\$(\d)\)/)) {
 					return {
 						type: 'splat',
-						backrefs: [
+						refs: [
 							{ type: 'backref', index: RegExp.$1 },
 							{ type: 'backref', index: RegExp.$2 }
 						]

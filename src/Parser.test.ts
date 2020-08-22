@@ -148,6 +148,11 @@ test("variables", () => {
     expectParse(`$foo = 5; return .* -> $foo;`).toEqual(5);
     expectParse(`$foo = ['bar', {baz: true}]; return .* -> $foo;`).toEqual(['bar', {baz: true}]);
     expectParse(`$foo = $1; return {.*} -> $foo;`, 'blah').toEqual('blah');
+    expectParse(`$foo = { foo: 'a', bar: 'b' }; return .* -> { baz: 'c', ...$foo, bee: [...$foo] };`)
+        .toEqual({ baz: 'c', foo: 'a', bar: 'b', bee: ['foo', 'a', 'bar', 'b' ]});
+    expectParse(`$a = ['foo', 'bar']; $b = ['a', 'b']; return .* -> { baz: 'c', ...($a, $b) };`)
+        .toEqual({ baz: 'c', foo: 'a', bar: 'b' });
+    
     expectGrammarFail(`return .* -> $foo;`);
 });
 
@@ -156,6 +161,18 @@ test("metas", () => {
         return .{rule}.. -> $1;
         rule = ... -> { pos: @position, length: @length };
     `, '123456').toEqual({ pos: 1, length: 3 });
+
+    expectParse(`
+        return .{rule}.. -> $1;
+        rule = ... -> $meta;
+        $meta = { pos: @position, length: @length };
+    `, '123456').toEqual({ pos: 1, length: 3 });
+
+    expectParse(`
+        return .{rule}.. -> $1;
+        rule = ... -> { foo: 'bar', ...$meta };
+        $meta = { pos: @position, length: @length };
+    `, '123456').toEqual({ foo: 'bar', pos: 1, length: 3 });
 });
 
 test("dezent grammar documentation", () => {

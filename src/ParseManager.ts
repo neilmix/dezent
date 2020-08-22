@@ -35,15 +35,10 @@ let builders : {
         return metas[node.name];
     },
     splat: (node:SplatNode, backrefs, vars, metas) => {
-        // remember our backref indices start at 0
-        if (backrefs.length <= 1) {
-            return [];
-        }
-
         // first convert to an array of arrays
         let resolved = [];
-        for (let i = 0; i < node.backrefs.length; i++) {
-            let res = builders.backref(node.backrefs[i], backrefs, vars, metas);
+        for (let i = 0; i < node.refs.length; i++) {
+            let res = builders[node.refs[i].type](node.refs[i], backrefs, vars, metas);
             if (!res || typeof res != 'object') {
                 grammarError(ErrorCode.InvalidSplat, String(i));
             }
@@ -426,7 +421,7 @@ function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
     f(node, data);
     let items;
     if (node.type == "splat") {
-        items = node.backrefs;
+        items = node.refs;
     } else if (node.type == "array") {
         items = node.elements;
     } else if (node.type == "object") {

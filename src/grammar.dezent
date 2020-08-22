@@ -90,8 +90,8 @@ metaref = '@' { 'position' | 'length' }
 	-> { type: 'metaref', name: $1 };
 
 splat = 
-	'...' {backref} -> { type: 'splat', backrefs: [$1] },
-	'...(' _ {backref} ( _ ',' _ {backref} )* _ ')' -> { type: 'splat', backrefs: [$1, ...$2] };
+	'...' {backref|varref} -> { type: 'splat', refs: [$1] },
+	'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')' -> { type: 'splat', refs: [$1, ...$2] };
 
 object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' 
 	-> { type: 'object', members: [...$1, $2] };
