@@ -2,10 +2,8 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - @ values
 // - node position for post-parse error messages (e.g. NonArraySplat)
 // - tests for grammar errors
-// - how to deal with multiple members of same name?
 // - documentation
 // - command line script w/tests
 // - package license

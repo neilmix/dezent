@@ -151,6 +151,13 @@ test("variables", () => {
     expectGrammarFail(`return .* -> $foo;`);
 });
 
+test("metas", () => {
+    expectParse(`
+        return .{rule}.. -> $1;
+        rule = ... -> { pos: @position, length: @length };
+    `, '123456').toEqual({ pos: 1, length: 3 });
+});
+
 test("dezent grammar documentation", () => {
     let uncompiledDezent = createUncompiledDezentGrammar();
     let textDezent = readFileSync("./test/grammar.dezent").toString();

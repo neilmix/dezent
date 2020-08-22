@@ -13,7 +13,7 @@ export interface RangeNode extends Node {
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = RuleDefNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
-export type ValueNode = BackRefNode | VarRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
+export type ValueNode = BackRefNode | VarRefNode | MetaRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 
 export interface RuleDefNode extends Node { 
@@ -60,6 +60,7 @@ export interface CharNode         extends RangeNode    { type: 'char',      valu
 
 export interface BackRefNode      extends Node { type: 'backref',   index: string }
 export interface VarRefNode       extends Node { type: 'varref',    name: string }
+export interface MetaRefNode      extends Node { type: 'metaref',   name: string }
 export interface SplatNode        extends Node { type: 'splat',     backrefs: BackRefNode[] }
 export interface ObjectNode       extends Node { type: 'object',    members: (MemberNode|SplatNode)[] }
 export interface ArrayNode        extends Node { type: 'array',     elements: ValueNode[] }
@@ -160,7 +161,7 @@ export function createUncompiledDezentGrammar():Grammar {
 				`'?'`, { repeat: false, required: false },
 				`''`,  { repeat: false, required: true }),
 
-			ruledef('value', `{backref|varref|object|array|string|number|boolean|null}`,
+			ruledef('value', `{backref|varref|metaref|object|array|string|number|boolean|null}`,
 				'$1'),
 
 			ruledef('backref', `'$' {[0-9]+}`,
@@ -168,6 +169,9 @@ export function createUncompiledDezentGrammar():Grammar {
 
 			ruledef('varref', `'$' {identifier}`,
 				{ type: 'varref', name: '$1' }),
+
+			ruledef('metaref', `'@' {'position'|'length'}`,
+				{ type: 'metaref', name: '$1' }),
 
 			ruledef('splat',
 				`'...' {backref}`, { type: 'splat', backrefs: ['$1'] },

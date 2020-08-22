@@ -6,25 +6,35 @@ import {
 
 import { 
     Grammar, Node, SelectorNode, RuleDefNode, ReturnNode, RuleNode, TokenNode, PatternNode, ClassNode, AnyNode,
-    ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, VarRefNode, SplatNode, 
-    StringTextNode, EscapeNode,
+    ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, VarRefNode, 
+    MetaRefNode, SplatNode, StringTextNode, EscapeNode,
 } from './Grammar';
 
 import { OutputToken } from './OutputContext';
 
-let builders:any = {
-    backref: (node:BackRefNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
+let builders : {
+    [key:string]: (
+        node: ValueNode, 
+        backrefs: OutputToken[], 
+        vars: { [key:string]: ValueNode }, 
+        metas: { position: number, length: number }
+    ) => any
+} = {
+    backref: (node:BackRefNode, backrefs) => {
         if (backrefs[node.index] === undefined) {
             parserError(ErrorCode.BackRefNotFound);
         } else {
            return backrefs[node.index];
         }
     },
-    varref: (node:VarRefNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
+    varref: (node:VarRefNode, backrefs, vars, metas) => {
         let resolved = vars[node.name];
-        return builders[resolved.type](resolved, backrefs, vars);
+        return builders[resolved.type](resolved, backrefs, vars, metas);
     },
-    splat: (node:SplatNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
+    metaref: (node:MetaRefNode, backrefs, vars, metas) => {
+        return metas[node.name];
+    },
+    splat: (node:SplatNode, backrefs, vars, metas) => {
         // remember our backref indices start at 0
         if (backrefs.length <= 1) {
             return [];
@@ -33,7 +43,7 @@ let builders:any = {
         // first convert to an array of arrays
         let resolved = [];
         for (let i = 0; i < node.backrefs.length; i++) {
-            let res = builders.backref(node.backrefs[i], backrefs, vars);
+            let res = builders.backref(node.backrefs[i], backrefs, vars, metas);
             if (!res || typeof res != 'object') {
                 grammarError(ErrorCode.InvalidSplat, String(i));
             }
@@ -60,27 +70,28 @@ let builders:any = {
         }
         return ret;
     },
-    object: (node:ObjectNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
+    object: (node:ObjectNode, backrefs, vars, metas) => {
         let ret = {};
         for (let member of node.members) {
             if (member.type == "splat") {
-                let items = builders.splat(member, backrefs, vars);
+                let items = builders.splat(member, backrefs, vars, metas);
                 for (let i = 0; i < items.length; i += 2) {
                     ret[items[i]] = items[i+1];
                 }
             } else {
-                ret[builders[member.name.type](member.name, backrefs, vars)] = builders[member.value.type](member.value, backrefs, vars);
+                ret[builders[member.name.type](member.name, backrefs, vars, metas)] 
+                    = builders[member.value.type](member.value, backrefs, vars, metas);
             }
         }
         return ret;
     },
-    array: (node:ArrayNode, backrefs:OutputToken[], vars:{[key:string]:ValueNode}) => {
+    array: (node:ArrayNode, backrefs, vars, metas) => {
         let ret = [];
         for (let elem of node.elements) {
             if (elem.type == "splat") {
-                ret = ret.concat(builders.splat(elem, backrefs, vars));
+                ret = ret.concat(builders.splat(elem, backrefs, vars, metas));
             } else {
-                ret.push(builders[elem.type](elem, backrefs, vars));
+                ret.push(builders[elem.type](elem, backrefs, vars, metas));
             }
         }
         return ret;
@@ -342,7 +353,12 @@ export class ParseManager {
                 return null;
             } else if (token.outputs && token.value) {
                 let backrefs = token.outputs.map((v) => buildOutput(v));
-                return builders[token.value.type](token.value, backrefs, grammar.vars);
+                return builders[token.value.type](
+                    token.value, 
+                    backrefs, 
+                    grammar.vars,
+                    { position: token.pos, length: token.length }
+                );
             } else {
                 return text.substr(token.pos, token.length);
             }

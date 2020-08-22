@@ -77,7 +77,7 @@ modifier =
 	'?' -> { repeat: false, required: false },
 	''  -> { repeat: false, required: true };
 
-value = { backref | varref | object | array | string | number | boolean | null } 
+value = { backref | varref | metaref | object | array | string | number | boolean | null } 
 	-> $1;
 
 backref = '$' { [0-9]+ } 
@@ -85,7 +85,10 @@ backref = '$' { [0-9]+ }
 
 varref = '$' { identifier }
 	-> { type: 'varref', name: $1 };
-	
+
+metaref = '@' { 'position' | 'length' }
+	-> { type: 'metaref', name: $1 };
+
 splat = 
 	'...' {backref} -> { type: 'splat', backrefs: [$1] },
 	'...(' _ {backref} ( _ ',' _ {backref} )* _ ')' -> { type: 'splat', backrefs: [$1, ...$2] };
