@@ -2,8 +2,7 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - node position for post-parse error messages (e.g. NonArraySplat)
-// - tests for grammar errors
+// - refactor node types
 // - documentation
 // - command line script w/tests
 // - package license
@@ -18,7 +17,7 @@
 // - error recovery
 // - chunked parsing
 // - macros/functions, e.g. definition(pattern1, pattern2)
-// - regex-like search-and-find`
+// - regex-like search-and-find
 
 import { 
     Grammar, createUncompiledDezentGrammar, RuleDefNode, ReturnNode,
@@ -54,18 +53,18 @@ export enum ErrorCode {
     MultipleOutputsForCapture = 2010,
 }
 
-const errorMessages = {
-    1:    "Parse failed: $3\nAt line $1 char $2:\n$4\n$5^",
-    2:    "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5^",
+export const errorMessages = {
+    1:    "Parse failed: $3\nAt line $1 char $2:\n$4\n$5",
+    2:    "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5",
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
-    1004: "Back reference used in splat is neither an array nor object: $$1",
+    1004: "Back reference used in splat is neither an array nor object",
     1005: "All arrays in a splat must be of the same length",
     1006: "Grammar does not contain a return rule",
-    1007: "Not all options for rule $2 of $1 have the same number of captures",
-    1008: "Invalid back reference $$3 for rule $2 of $1",
-    1009: "Invalid variable reference $$3 for rule $2 of $1",
+    1007: "All options within a rule must have the same number of captures",
+    1008: "Invalid back reference: $$1",
+    1009: "Invalid variable reference: $$1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -161,11 +160,7 @@ export class Parser {
                         this.enter(current.items[current.index]);
                         break;
                     case "ruleref":
-                        let def = this.ruledefs[current.node.name];
-                        if (!def) {
-                            grammarError(ErrorCode.RuleNotFound, current.node.name);
-                        }
-                        this.enter(def);
+                        this.enter(this.ruledefs[current.node.name]);
                         break;
                     case "string":
                     case "class":
@@ -351,13 +346,6 @@ export class Parser {
     }
 }
 
-export function grammarError(code:ErrorCode, ...args:string[]) {
-    let msg = errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index-1]);
-    let e = new Error(`Grammar error ${code}: ${msg}`);
-    e["code"] = code;
-    throw e;
-}    
-
 export function parserError(code:ErrorCode) {
     let msg = errorMessages[code];
     let e = new Error(`Internal parser error ${code}: ${msg}`);
@@ -366,6 +354,26 @@ export function parserError(code:ErrorCode) {
 }
 
 export function parsingError(code:ErrorCode, text:string, pos:number, expected:string[]) {
+    expected = expected.map((i) => i.replace(/\n/g, '\\n'));
+    let list = [].join.call(expected, '\n\t');
+    let reason = expected.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;        
+
+    let info = findLineAndChar(text, pos);
+    let backrefs = [null, info.line, info.char, reason, info.lineText, info.pointerText];
+    let msg = errorMessages[code].replace(/\$([0-9])/g, (match, index) => String(backrefs[index]));
+    let e = new Error(msg);
+    e["code"] = code;
+    e["pos"] = pos;
+    e["line"] = info.line;
+    e["char"] = info.char;
+    e["lineText"] = info.lineText;
+    e["pointerText"] = info.pointerText;
+    e["reason"] = reason;
+    e["expected"] = expected;
+    throw e;
+}
+
+export function findLineAndChar(text:string, pos:number) : { line: number, char: number, lineText: string, pointerText: string } {
     let lines = text.split('\n');
     let consumed = 0, linenum = 0, charnum = 0, lineText = '';
     for (let line of lines) {
@@ -379,20 +387,10 @@ export function parsingError(code:ErrorCode, text:string, pos:number, expected:s
     }
     let detabbed = lineText.replace(/\t/g, '    ');
     let leading = charnum - 1 + (detabbed.length - lineText.length);
-
-    expected = expected.map((i) => i.replace(/\n/g, '\\n'));
-    let list = [].join.call(expected, '\n\t');
-    let reason = expected.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;        
-
-    let backrefs = [null, linenum, charnum, reason, lineText, ' '.repeat(leading)];
-    let msg = errorMessages[code].replace(/\$([0-9])/g, (match, index) => String(backrefs[index]));
-    let e = new Error(msg);
-    e["code"] = code;
-    e["pos"] = pos;
-    e["line"] = linenum;
-    e["char"] = charnum;
-    e["lineText"] = lineText;
-    e["reason"] = reason;
-    e["expected"] = expected;
-    throw e;
+    return {
+        line: linenum,
+        char: charnum,
+        lineText: lineText,
+        pointerText: ' '.repeat(leading) + '^'
+    }
 }

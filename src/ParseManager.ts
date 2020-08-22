@@ -1,125 +1,16 @@
 
 import { 
     ParserOptions, Parser, findDezentGrammar, ErrorCode, 
-    parserError, parsingError, grammarError
+    parserError, parsingError, errorMessages, findLineAndChar
 } from './Parser';
 
 import { 
-    Grammar, Node, SelectorNode, RuleDefNode, ReturnNode, RuleNode, TokenNode, PatternNode, ClassNode, AnyNode,
+    Grammar, Node, SelectorNode, Meta, RuleDefNode, ReturnNode, RuleNode, TokenNode, PatternNode, RuleRefNode, ClassNode, AnyNode,
     ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, VarRefNode, 
     MetaRefNode, SplatNode, StringTextNode, EscapeNode,
 } from './Grammar';
 
 import { OutputToken } from './OutputContext';
-
-let builders : {
-    [key:string]: (
-        node: ValueNode, 
-        backrefs: OutputToken[], 
-        vars: { [key:string]: ValueNode }, 
-        metas: { position: number, length: number }
-    ) => any
-} = {
-    backref: (node:BackRefNode, backrefs) => {
-        if (backrefs[node.index] === undefined) {
-            parserError(ErrorCode.BackRefNotFound);
-        } else {
-           return backrefs[node.index];
-        }
-    },
-    varref: (node:VarRefNode, backrefs, vars, metas) => {
-        let resolved = vars[node.name];
-        return builders[resolved.type](resolved, backrefs, vars, metas);
-    },
-    metaref: (node:MetaRefNode, backrefs, vars, metas) => {
-        return metas[node.name];
-    },
-    splat: (node:SplatNode, backrefs, vars, metas) => {
-        // first convert to an array of arrays
-        let resolved = [];
-        for (let i = 0; i < node.refs.length; i++) {
-            let res = builders[node.refs[i].type](node.refs[i], backrefs, vars, metas);
-            if (!res || typeof res != 'object') {
-                grammarError(ErrorCode.InvalidSplat, String(i));
-            }
-            if (Array.isArray(res)) {
-                resolved.push(res);
-            } else {
-                let items = [];
-                for (let name in res) {
-                    items.push(name, res[name]);
-                }
-                resolved.push(items);
-            }
-        }
-        if (resolved.length <= 1) {
-            return resolved[0];
-        }
-        // now merge our arrays
-        // breadth-first, across then down
-        let ret = [];
-        for (let i = 0; i < resolved[0].length; i++) {
-            for (let j = 0; j < resolved.length; j++) {
-                ret.push(resolved[j][i]);
-            }
-        }
-        return ret;
-    },
-    object: (node:ObjectNode, backrefs, vars, metas) => {
-        let ret = {};
-        for (let member of node.members) {
-            if (member.type == "splat") {
-                let items = builders.splat(member, backrefs, vars, metas);
-                for (let i = 0; i < items.length; i += 2) {
-                    ret[items[i]] = items[i+1];
-                }
-            } else {
-                ret[builders[member.name.type](member.name, backrefs, vars, metas)] 
-                    = builders[member.value.type](member.value, backrefs, vars, metas);
-            }
-        }
-        return ret;
-    },
-    array: (node:ArrayNode, backrefs, vars, metas) => {
-        let ret = [];
-        for (let elem of node.elements) {
-            if (elem.type == "splat") {
-                ret = ret.concat(builders.splat(elem, backrefs, vars, metas));
-            } else {
-                ret.push(builders[elem.type](elem, backrefs, vars, metas));
-            }
-        }
-        return ret;
-    },
-    string: (node:StringNode) => {
-        return buildString(node);
-    },
-    number: (node:NumberNode) => {
-        return Number(node.value);
-    },
-    boolean: (node:BooleanNode) => {
-        return node.value;
-    },
-    null: () => {
-        return null;
-    },
-};
-
-function buildString(node:StringNode) {
-    return node.tokens.map((node:StringTextNode|EscapeNode) => {
-        if (node.type == "text") {
-            return node.value;
-        } else if (node.value[0] == 'u') {
-            return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
-        } else if(node.value.length > 1) {
-            parserError(ErrorCode.Unreachable);
-        } else if ("bfnrt".indexOf(node.value) >= 0) {
-            return ({ b:'\b', f:'\f', n:'\n', r:'\r', t:'\t' })[node.value];
-        } else {
-            return node.value;
-        }
-    }).join("")
-}
 
 export class ParseManager {
     options:ParserOptions;
@@ -147,7 +38,7 @@ export class ParseManager {
             if (this.options.debugErrors) {
                 this.rawGrammar = JSON.stringify(grammar);
             }
-            this.compileGrammar(grammar);
+            this.compileGrammar(grammar, text);
             return grammar;
         } catch(e) {
             if (e["code"] == ErrorCode.TextParsingError) {
@@ -158,23 +49,46 @@ export class ParseManager {
         }
     }
 
-    compileGrammar(grammar:Grammar) {
+    compileGrammar(grammar:Grammar, text?:string) {
         // compile and validate
         // - count the number of backrefs in each rule
         // - validate that all options contain that many backrefs
         // - validate that all backreferences are legit
+        // - other helpful sanity checks
         // We have to do this up-front because not every branch
         // of the grammar tree may be visited/executed at runtime
+
+        grammar.text = text;
+
+        let ruledefLookup = grammar.ruledefLookup = {};
+        for (let ruledef of grammar.ruledefs) {
+            if (ruledefLookup[ruledef.name]) {
+                if (ruledef.name == 'return') {
+                    grammarError(ErrorCode.MultipleReturn, text, ruledef.meta, ruledef.name);
+                } else {
+                    grammarError(ErrorCode.DuplicateDefine, text, ruledef.meta, ruledef.name);
+                }
+            }
+            ruledefLookup[ruledef.name] = ruledef;
+        }
+
         for (let ruledef of grammar.ruledefs) {
             let rules = ruledef.rules;
             for (let i = 0; i < rules.length; i++) {
                 rules[i].ruledefName = ruledef["name"] || "return";
-                let [code, captures, index] = this.compileRule(rules[i], grammar.vars);
+                let [code, captures, index] = this.compileRule(rules[i], grammar.vars, text);
                 if (code != 0) {
-                    grammarError(code, ruledef["name"] || ruledef.type, String(i), index);
+                    grammarError(code, text, null, ruledef["name"] || ruledef.type, String(i), index);
                 }
                 rules[i].captures = captures;
             }
+
+            // perform sanity checks
+            visitParseNodes("ruleref", ruledef, null, null, (node:RuleRefNode) => {
+                if (!ruledefLookup[node.name]) {
+                    grammarError(ErrorCode.RuleNotFound, text, node.meta, node.name);
+                }
+            });
 
             // figure out if our selectors are capable of failing, which helps in
             // identifying expected tokens for good error messaging.
@@ -212,7 +126,7 @@ export class ParseManager {
         return grammar;
     }
 
-    compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}) : [ErrorCode|0, boolean[], any] {
+    compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}, text:string) : [ErrorCode|0, boolean[], any] {
         // put an empty placeholder in captures so that the indices
         // align with backrefs (which begin at 1)
         let info = { captures: [null], repeats: 0, backrefs: [null] };
@@ -236,7 +150,7 @@ export class ParseManager {
                 }
             );
             if (lastCount > -1 && lastCount != info.captures.length) {
-                return [ErrorCode.CaptureCountMismatch, info.captures, null];
+                grammarError(ErrorCode.CaptureCountMismatch, text, rule.meta);
             }
             lastCount = info.captures.length;
             i++;
@@ -293,22 +207,18 @@ export class ParseManager {
             node.pattern = '';
          });
 
-         let varrefNames = [];
          visitOutputNodes(rule.value, info, (node:ValueNode, info) => {
             if (node.type == "backref") info.backrefs.push(node);
             if (node.type == "varref") {
-                varrefNames.push(node.name);
+                if (!vars[node.name]) {
+                    grammarError(ErrorCode.InvalidVarRef, text, node.meta, node.name);
+                }
             }
          });
-         for (let name of varrefNames) {
-             if (!vars[name]) {
-                 return [ErrorCode.InvalidVarRef, info.captures, name];
-             }
-         }
     
          for (let i = 1; i < info.backrefs.length; i++) {
              if (info.backrefs[i].index >= info.captures.length) {
-                 return [ErrorCode.InvalidBackRef, info.captures, info.backrefs[i].index];
+                 grammarError(ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
              }
          }
         return [0, info.captures, null];
@@ -316,28 +226,120 @@ export class ParseManager {
 
     parseTextWithGrammar(grammar:Grammar, text:string) : any {
         // pre-process the grammar
-        let ruledefs: {[key:string]:RuleDefNode} = {};
         let ret:ReturnNode;
     
         for (let ruledef of grammar.ruledefs) {
-            if (ruledefs[ruledef.name]) {
-                grammarError(ErrorCode.DuplicateDefine, ruledef.name);
-            }
-            ruledefs[ruledef.name] = ruledef;
-
             if (ruledef.name == 'return') {
                 ret = <ReturnNode>ruledef;
             }
         }
     
         if (!ret) {
-            grammarError(ErrorCode.ReturnNotFound);
+            grammarError(ErrorCode.ReturnNotFound, text);
         }
     
         // now parse
-        let parser = this.currentParser = new Parser(ret, text, ruledefs, this.options, this.debugLog);
+        let parser = this.currentParser = new Parser(ret, text, grammar.ruledefLookup, this.options, this.debugLog);
         parser.parse();
-    
+
+        let builders : {
+            [key:string]: (
+                node: ValueNode, 
+                backrefs: OutputToken[], 
+                vars: { [key:string]: ValueNode }, 
+                metas: { position: number, length: number }
+            ) => any
+        } = {
+            backref: (node:BackRefNode, backrefs) => {
+                if (backrefs[node.index] === undefined) {
+                    parserError(ErrorCode.BackRefNotFound);
+                } else {
+                   return backrefs[node.index];
+                }
+            },
+            varref: (node:VarRefNode, backrefs, vars, metas) => {
+                let resolved = vars[node.name];
+                return builders[resolved.type](resolved, backrefs, vars, metas);
+            },
+            metaref: (node:MetaRefNode, backrefs, vars, metas) => {
+                return metas[node.name];
+            },
+            splat: (node:SplatNode, backrefs, vars, metas) => {
+                // first convert to an array of arrays
+                let resolved = [];
+                for (let i = 0; i < node.refs.length; i++) {
+                    let res = builders[node.refs[i].type](node.refs[i], backrefs, vars, metas);
+                    if (!res || typeof res != 'object') {
+                        grammarError(ErrorCode.InvalidSplat, grammar.text, node.meta);
+                    }
+                    if (Array.isArray(res)) {
+                        resolved.push(res);
+                    } else {
+                        let items = [];
+                        for (let name in res) {
+                            items.push(name, res[name]);
+                        }
+                        resolved.push(items);
+                    }
+                }
+                if (resolved.length <= 1) {
+                    return resolved[0];
+                }
+                resolved.map((item) => {
+                    if (item.length != resolved[0].length) {
+                        grammarError(ErrorCode.SplatArraySizeMismatch, grammar.text, node.meta);
+                    }
+                })
+                // now merge our arrays
+                // breadth-first, across then down
+                let ret = [];
+                for (let i = 0; i < resolved[0].length; i++) {
+                    for (let j = 0; j < resolved.length; j++) {
+                        ret.push(resolved[j][i]);
+                    }
+                }
+                return ret;
+            },
+            object: (node:ObjectNode, backrefs, vars, metas) => {
+                let ret = {};
+                for (let member of node.members) {
+                    if (member.type == "splat") {
+                        let items = builders.splat(member, backrefs, vars, metas);
+                        for (let i = 0; i < items.length; i += 2) {
+                            ret[items[i]] = items[i+1];
+                        }
+                    } else {
+                        ret[builders[member.name.type](member.name, backrefs, vars, metas)] 
+                            = builders[member.value.type](member.value, backrefs, vars, metas);
+                    }
+                }
+                return ret;
+            },
+            array: (node:ArrayNode, backrefs, vars, metas) => {
+                let ret = [];
+                for (let elem of node.elements) {
+                    if (elem.type == "splat") {
+                        ret = ret.concat(builders.splat(elem, backrefs, vars, metas));
+                    } else {
+                        ret.push(builders[elem.type](elem, backrefs, vars, metas));
+                    }
+                }
+                return ret;
+            },
+            string: (node:StringNode) => {
+                return buildString(node);
+            },
+            number: (node:NumberNode) => {
+                return Number(node.value);
+            },
+            boolean: (node:BooleanNode) => {
+                return node.value;
+            },
+            null: () => {
+                return null;
+            },
+        };
+                
         // build our output value    
         return buildOutput(parser.output.result);
     
@@ -388,6 +390,22 @@ export class ParseManager {
     }
 }
 
+function buildString(node:StringNode) {
+    return node.tokens.map((node:StringTextNode|EscapeNode) => {
+        if (node.type == "text") {
+            return node.value;
+        } else if (node.value[0] == 'u') {
+            return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
+        } else if(node.value.length > 1) {
+            parserError(ErrorCode.Unreachable);
+        } else if ("bfnrt".indexOf(node.value) >= 0) {
+            return ({ b:'\b', f:'\f', n:'\n', r:'\r', t:'\t' })[node.value];
+        } else {
+            return node.value;
+        }
+    }).join("")
+}
+
 function visitParseNodes(
     types:string|string[], 
     root:Node, 
@@ -436,3 +454,23 @@ function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
         }
     }
 }
+
+export function grammarError(code:ErrorCode, text?:string, meta?:Meta, ...args:string[]) {
+    let reason = errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index-1]);
+    let msg = `Grammar error ${code}: ${reason}`;
+    let info;
+    if (text && meta) {
+        info = findLineAndChar(text, meta.pos);
+        msg = `${msg}\nAt line ${info.line} char ${info.char}:\n${info.lineText}\n${info.pointerText}\n`;
+    }
+    let e = new Error(msg);
+    e["code"] = code;
+    if (info) {
+        e["pos"] = meta.pos;
+        e["line"] = info.line;
+        e["char"] = info.char;
+        e["lineText"] = info.pointerText;
+        e["reason"] = reason;
+    }
+    throw e;
+}    

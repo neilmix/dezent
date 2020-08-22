@@ -1,6 +1,20 @@
-export type Grammar = { ruledefs: RuleDefNode[], vars: { [key:string]: ValueNode } };
+export type Grammar = { 
+	text?: string,
+	ruledefs: RuleDefNode[], 
+	vars: { [key:string]: ValueNode }, 
+	ruledefLookup?: { [key:string]: RuleDefNode } 
+};
 
-export interface Node { type: string }
+export interface Meta {
+	pos: number,
+	length: number
+}
+
+export interface Node { 
+	type: string,
+	meta?: Meta
+}
+
 export interface SelectorNode extends Node { options: PatternNode[], canFail?: boolean }
 export interface MatcherNode extends Node { 
 	pattern?: string; // for debug purposes
@@ -15,6 +29,8 @@ export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | 
 export type ParseNode = RuleDefNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
 export type ValueNode = BackRefNode | VarRefNode | MetaRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
+export interface MetaData {
+}
 
 export interface RuleDefNode extends Node { 
 	type: 'ruledef',
@@ -96,13 +112,13 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruledef('whitespace',        `[\\u0020\\t-\\r]+`, null),
 
 			ruledef('returndef', `'return' whitespace _ {rule} _ ';'`,
-				{ type: 'ruledef', name: 'return', rules: ['$1'] }),
+				{ type: 'ruledef', name: 'return', rules: ['$1'], '...$meta': '' }),
 
 			ruledef('ruledef', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
-				{ type: 'ruledef', name: '$1', rules: ['$2', '...$3'] }),
+				{ type: 'ruledef', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
 
 			ruledef('rule', `{options} _ '->' _ {value}`,
-				{ type: 'rule', '...$1': '', value: '$2' }),
+				{ type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
 			
 			ruledef('options', `{pattern} _ ( '|' _ {pattern} _ )*`,
 				{ options: ['$1', '...$2'] }),
@@ -148,7 +164,7 @@ export function createUncompiledDezentGrammar():Grammar {
 				{ type: 'any' }),
 
 			ruledef('ruleref', `{identifier}`,
-				{ type: 'ruleref', name: '$1' }),
+				{ type: 'ruleref', name: '$1', '...$meta': '' }),
 
 			ruledef('predicate',
 				`'&'`, { and: true, not: false },
@@ -165,17 +181,17 @@ export function createUncompiledDezentGrammar():Grammar {
 				'$1'),
 
 			ruledef('backref', `'$' {[0-9]+}`,
-				{ type: 'backref', index: '$1' }),
+				{ type: 'backref', index: '$1', '...$meta': '' }),
 
 			ruledef('varref', `'$' {identifier}`,
-				{ type: 'varref', name: '$1' }),
+				{ type: 'varref', name: '$1', '...$meta': '' }),
 
 			ruledef('metaref', `'@' {'position'|'length'}`,
 				{ type: 'metaref', name: '$1' }),
 
 			ruledef('splat',
-				`'...' {backref|varref}`, { type: 'splat', refs: ['$1'] },
-				`'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'`, { type: 'splat', refs: ['$1', '...$2'] }),
+				`'...' {backref|varref}`, { type: 'splat', refs: ['$1'], '...$meta': '' },
+				`'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'`, { type: 'splat', refs: ['$1', '...$2'], '...$meta': '' }),
 
 			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
 				{ type: 'object', members: ['...$1', '$2'] }),
@@ -219,7 +235,9 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruledef('identifierAsStringNode', `{identifier}`,
 				{ type: 'string', tokens: [ {type: 'text', value: '$1' } ] }),
 		],
-		vars: {}
+		vars: {
+			meta: output({ meta: { pos: "@position", length: "@length" } })
+		}
 	};
 }
 
@@ -437,20 +455,22 @@ function output(value: any) : ValueNode {
 					type: 'backref',
 					index: RegExp.$1
 				}
+			} else if (value.match(/^@([a-zA-Z_]+)/)) {
+				return {
+					type: 'metaref',
+					name: RegExp.$1
+				}
 			} else if (value.match(/^\.\.\./)) {
-				if (value.match(/^...\$(\d)/)) {
-					return {
-						type: 'splat',
-						refs: [{ type: 'backref', index: RegExp.$1 }]
-					}
-				} else if (value.match(/^...\(\$(\d),\$(\d)\)/)) {
-					return {
-						type: 'splat',
-						refs: [
-							{ type: 'backref', index: RegExp.$1 },
-							{ type: 'backref', index: RegExp.$2 }
-						]
-					}
+				let ref = function(name:string):BackRefNode|VarRefNode { 
+					// don't use a regexp here because it will mess up the backrefs just prior to this call
+					return name[0] <= '9'
+						? { type: 'backref', index: name } 
+						: { type: 'varref', name: name };
+				}
+				if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
+					return { type: 'splat', refs: [ ref(RegExp.$1) ] };
+				} else if (value.match(/^...\(\$([0-9]+|[a-zA-Z_]+),\$([0-9]+|[a-zA-Z_]+)\)/)) {
+					return { type: 'splat', refs: [ ref(RegExp.$1), ref(RegExp.$2) ] };
 				} else {
 					throw new Error();
 				}

@@ -12,13 +12,13 @@ multiLineComment  = '/*' ( !'*/' . )* '*/' -> null;
 whitespace        = [\u0020\t-\r]+ -> null;
 
 returndef = 'return' whitespace _ {rule} _ ';' 
-	-> { type: 'ruledef', name: 'return', rules: [$1] };
+	-> { type: 'ruledef', name: 'return', rules: [$1], ...$meta };
 
 ruledef = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
-	-> { type: 'ruledef', name: $1, rules: [$2, ...$3] };
+	-> { type: 'ruledef', name: $1, rules: [$2, ...$3], ...$meta };
 
 rule = {options} _ '->' _ {value} 
-	-> { type: 'rule', ...$1, value: $2 };
+	-> { type: 'rule', ...$1, value: $2, ...$meta };
 
 options = {pattern} _ ( '|' _ {pattern} _ )* 
 	-> { options: [$1, ...$2] };
@@ -64,7 +64,7 @@ any = '.'
 	-> { type: 'any' };
 
 ruleref = {identifier}
-	-> { type: 'ruleref', name: $1 };
+	-> { type: 'ruleref', name: $1, ...$meta };
 
 predicate =
 	'&' -> { and: true, not: false },
@@ -81,17 +81,17 @@ value = { backref | varref | metaref | object | array | string | number | boolea
 	-> $1;
 
 backref = '$' { [0-9]+ } 
-	-> { type: 'backref', index: $1 };
+	-> { type: 'backref', index: $1, ...$meta };
 
 varref = '$' { identifier }
-	-> { type: 'varref', name: $1 };
+	-> { type: 'varref', name: $1, ...$meta };
 
 metaref = '@' { 'position' | 'length' }
 	-> { type: 'metaref', name: $1 };
 
 splat = 
-	'...' {backref|varref} -> { type: 'splat', refs: [$1] },
-	'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')' -> { type: 'splat', refs: [$1, ...$2] };
+	'...' {backref|varref} -> { type: 'splat', refs: [$1], ...$meta },
+	'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')' -> { type: 'splat', refs: [$1, ...$2], ...$meta };
 
 object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' 
 	-> { type: 'object', members: [...$1, $2] };
@@ -134,3 +134,5 @@ identifier = [_a-zA-Z] [_a-zA-Z0-9]*
 
 identifierAsStringNode = {identifier}
 	-> { type: 'string', tokens: [ {type: 'text', value: $1 } ] };
+
+$meta = { meta: { pos: @position, length: @length } };
