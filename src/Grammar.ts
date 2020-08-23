@@ -27,7 +27,7 @@ export interface RangeNode extends Node {
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = RuleDefNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
-export type ValueNode = BackRefNode | VarRefNode | MetaRefNode | SplatNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
+export type ValueNode = BackRefNode | VarRefNode | MetaRefNode | SpreadNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 export interface MetaData {
 }
@@ -77,8 +77,8 @@ export interface CharNode         extends RangeNode    { type: 'char',      valu
 export interface BackRefNode      extends Node { type: 'backref',   index: string }
 export interface VarRefNode       extends Node { type: 'varref',    name: string }
 export interface MetaRefNode      extends Node { type: 'metaref',   name: string }
-export interface SplatNode        extends Node { type: 'splat',     refs: (BackRefNode|VarRefNode)[] }
-export interface ObjectNode       extends Node { type: 'object',    members: (MemberNode|SplatNode)[] }
+export interface SpreadNode       extends Node { type: 'spread',     refs: (BackRefNode|VarRefNode)[] }
+export interface ObjectNode       extends Node { type: 'object',    members: (MemberNode|SpreadNode)[] }
 export interface ArrayNode        extends Node { type: 'array',     elements: ValueNode[] }
 export interface NumberNode       extends Node { type: 'number',    value: string }
 export interface BooleanNode      extends Node { type: 'boolean',   value: boolean }
@@ -96,7 +96,7 @@ export function createUncompiledDezentGrammar():Grammar {
 	// though there are some restrictions to keep the
 	// amount of parsing logic under control:
 	// - there can be no whitespace within a capture
-	// - object splat must be written as name/value pair, e.g. ...$1': ''
+	// - object spread must be written as name/value pair, e.g. ...$1': ''
 	// - grouping parens (and predicate/modifier) must be surrounded by whitespace
 	// - character classes don't support spaces - use \\u0020
 
@@ -189,18 +189,18 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruledef('metaref', `'@' {'position'|'length'}`,
 				{ type: 'metaref', name: '$1' }),
 
-			ruledef('splat',
-				`'...' {backref|varref}`, { type: 'splat', refs: ['$1'], '...$meta': '' },
-				`'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'`, { type: 'splat', refs: ['$1', '...$2'], '...$meta': '' }),
+			ruledef('spread',
+				`'...' {backref|varref}`, { type: 'spread', refs: ['$1'], '...$meta': '' },
+				`'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'`, { type: 'spread', refs: ['$1', '...$2'], '...$meta': '' }),
 
 			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
 				{ type: 'object', members: ['...$1', '$2'] }),
 
 			ruledef('member', 
-				`{splat}`, '$1',
+				`{spread}`, '$1',
 				`{backref|string|identifierAsStringNode} _ ':' _ {value}`, { type: 'member', name: '$1', value: '$2' }),
 
-			ruledef('array', `'[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']'`,
+			ruledef('array', `'[' ( _ {value|spread} _ ',' )* _ {value|spread}? _ ']'`,
 				{ type: 'array', elements: ['...$1', '$2'] }),
 
 			ruledef('string', `'\\'' {escape|stringText}* '\\''`,
@@ -434,7 +434,7 @@ function output(value: any) : ValueNode {
 				let members = [];
 				for (let name in value) {
 					if (name.startsWith('...')) {
-						// splat
+						// spread
 						members.push(output(name));
 					} else {
 						members.push({
@@ -468,9 +468,9 @@ function output(value: any) : ValueNode {
 						: { type: 'varref', name: name };
 				}
 				if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
-					return { type: 'splat', refs: [ ref(RegExp.$1) ] };
+					return { type: 'spread', refs: [ ref(RegExp.$1) ] };
 				} else if (value.match(/^...\(\$([0-9]+|[a-zA-Z_]+),\$([0-9]+|[a-zA-Z_]+)\)/)) {
-					return { type: 'splat', refs: [ ref(RegExp.$1), ref(RegExp.$2) ] };
+					return { type: 'spread', refs: [ ref(RegExp.$1), ref(RegExp.$2) ] };
 				} else {
 					throw new Error();
 				}

@@ -10,6 +10,15 @@ function parse(grammar, text) {
     var d = new Dezent_1["default"](grammar, { debugErrors: true });
     return d.parse(text);
 }
+function parseError(grammar, text) {
+    try {
+        Parser_1.parseText(grammar, text);
+        fail();
+    }
+    catch (e) {
+        return e;
+    }
+}
 function expectParse(grammar, text) {
     return expect(parse(grammar, text || 'Did you forget the second argument?'));
 }
@@ -21,6 +30,15 @@ function expectGrammarFail(grammar) {
 function expectParseFail(grammar, text) {
     var d = new Dezent_1["default"](grammar);
     expect(d.parse(text || 'Did you forget the second argument?')).toBe(undefined);
+}
+function parseGrammarError(grammar) {
+    try {
+        Parser_1.parseGrammar(grammar);
+        fail();
+    }
+    catch (e) {
+        return e;
+    }
 }
 test("boolean / null outputs", function () {
     expectParse("return .* -> true;").toBe(true);
@@ -52,7 +70,7 @@ test("backref outputs", function () {
     expectParse("\n        return {foo} {bar} -> [$1, $2];\n        foo = {.}{.} -> { $1: $2 };\n        bar = {.}{.} -> { $1: $2 };\n    ", 'abcd').toEqual([{ a: 'b' }, { c: 'd' }]);
     expectParse("return ... -> $0;", 'aaa').toEqual('aaa');
 });
-test("splat", function () {
+test("spread", function () {
     expectParse("return {'a'}* {'b'}* -> [...$1, ...$2];", 'aaabbb').toEqual(['a', 'a', 'a', 'b', 'b', 'b']);
     expectParse("return {[a-c]}* {[d-f]}* -> [...($1,$2)];", 'abcdef').toEqual(['a', 'd', 'b', 'e', 'c', 'f']);
     expectParse("return {[a-c]}* {[d-f]}* -> {...($1,$2)};", 'abcdef').toEqual({ a: 'd', b: 'e', c: 'f' });
@@ -116,31 +134,45 @@ test("variables", function () {
     expectParse("$foo = 5; return .* -> $foo;").toEqual(5);
     expectParse("$foo = ['bar', {baz: true}]; return .* -> $foo;").toEqual(['bar', { baz: true }]);
     expectParse("$foo = $1; return {.*} -> $foo;", 'blah').toEqual('blah');
+    expectParse("$foo = { foo: 'a', bar: 'b' }; return .* -> { baz: 'c', ...$foo, bee: [...$foo] };")
+        .toEqual({ baz: 'c', foo: 'a', bar: 'b', bee: ['foo', 'a', 'bar', 'b'] });
+    expectParse("$a = ['foo', 'bar']; $b = ['a', 'b']; return .* -> { baz: 'c', ...($a, $b) };")
+        .toEqual({ baz: 'c', foo: 'a', bar: 'b' });
     expectGrammarFail("return .* -> $foo;");
+});
+test("metas", function () {
+    expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> { pos: @position, length: @length };\n    ", '123456').toEqual({ pos: 1, length: 3 });
+    expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> $meta;\n        $meta = { pos: @position, length: @length };\n    ", '123456').toEqual({ pos: 1, length: 3 });
+    expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> { foo: 'bar', ...$meta };\n        $meta = { pos: @position, length: @length };\n    ", '123456').toEqual({ foo: 'bar', pos: 1, length: 3 });
 });
 test("dezent grammar documentation", function () {
     var uncompiledDezent = Grammar_1.createUncompiledDezentGrammar();
     var textDezent = fs_1.readFileSync("./test/grammar.dezent").toString();
-    var parsedDezent = Parser_1.parseText(Parser_1.findDezentGrammar(), textDezent, { debugErrors: true });
+    var hackedGrammar = Parser_1.findDezentGrammar();
+    // Our bootstrap grammar does not contain any metas because it's created
+    // somewhat manually, not parsed from source. But it does contain rules
+    // that do insert metas into our documented grammar. To mitigate this,
+    // we need to monkey-patch our bootstrap grammar so that it won't
+    // insert metas into the grammar we parse from file.
+    var prevMeta = hackedGrammar.vars.meta;
+    hackedGrammar.vars.meta = { type: 'object', members: [] };
+    var parsedDezent = Parser_1.parseText(hackedGrammar, textDezent, { debugErrors: true });
+    hackedGrammar.vars.meta = prevMeta;
     expect(parsedDezent).toEqual(uncompiledDezent);
 });
 test("expected grammar terminals", function () {
-    try {
-        Parser_1.parseGrammar('return . -> {}');
-    }
-    catch (e) {
-        expect(e.expected.sort()).toEqual([';']);
-    }
-    try {
-        Parser_1.parseGrammar('return {.}');
-    }
-    catch (e) {
-        expect(e.expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
-    }
-    try {
-        Parser_1.parseGrammar("return ( . ([ab] {'f'} 'foo)) -> $1;");
-    }
-    catch (e) {
-        expect(e.expected.sort()).toEqual(["'", "\\"]);
-    }
+    expect(parseGrammarError('return . -> {}').expected.sort()).toEqual([';']);
+    expect(parseGrammarError('return {.}').expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
+    expect(parseGrammarError("return ( . ([ab] {'f'} 'foo)) -> $1;").expected.sort()).toEqual(["'", "\\"]);
+});
+test("grammar errors", function () {
+    expect(parseGrammarError("return foo -> null; foo = . -> null; foo = .. -> 1;").char).toEqual(38);
+    expect(parseGrammarError("return . -> 1; return . -> 2;").char).toEqual(16);
+    expect(parseGrammarError("return foo -> true;").char).toEqual(8);
+    expect(parseError("foo = . -> $0; return {foo} -> [...$1];", 'a').char).toEqual(33);
+    expect(parseError("return {'a'}* {'b'}* -> [...($1,$2)];", 'abb').char).toEqual(26);
+    expect(parseError("foo = . -> true;", 'a').code).toEqual(1006);
+    expect(parseGrammarError("return {.} | {.} {.} -> true;").char).toEqual(8);
+    expect(parseGrammarError("return {.} -> $2;").char).toEqual(15);
+    expect(parseGrammarError("return . -> $foo;").char).toEqual(13);
 });

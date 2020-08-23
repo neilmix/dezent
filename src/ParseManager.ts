@@ -7,7 +7,7 @@ import {
 import { 
     Grammar, Node, SelectorNode, Meta, RuleDefNode, ReturnNode, RuleNode, TokenNode, PatternNode, RuleRefNode, ClassNode, AnyNode,
     ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, VarRefNode, 
-    MetaRefNode, SplatNode, StringTextNode, EscapeNode,
+    MetaRefNode, SpreadNode, StringTextNode, EscapeNode,
 } from './Grammar';
 
 import { OutputToken } from './OutputContext';
@@ -260,13 +260,13 @@ export class ParseManager {
             metaref: (node:MetaRefNode, backrefs, vars, metas) => {
                 return metas[node.name];
             },
-            splat: (node:SplatNode, backrefs, vars, metas) => {
+            spread: (node:SpreadNode, backrefs, vars, metas) => {
                 // first convert to an array of arrays
                 let resolved = [];
                 for (let i = 0; i < node.refs.length; i++) {
                     let res = builders[node.refs[i].type](node.refs[i], backrefs, vars, metas);
                     if (!res || typeof res != 'object') {
-                        grammarError(ErrorCode.InvalidSplat, grammar.text, node.meta);
+                        grammarError(ErrorCode.InvalidSpread, grammar.text, node.meta);
                     }
                     if (Array.isArray(res)) {
                         resolved.push(res);
@@ -283,7 +283,7 @@ export class ParseManager {
                 }
                 resolved.map((item) => {
                     if (item.length != resolved[0].length) {
-                        grammarError(ErrorCode.SplatArraySizeMismatch, grammar.text, node.meta);
+                        grammarError(ErrorCode.SpreadArraySizeMismatch, grammar.text, node.meta);
                     }
                 })
                 // now merge our arrays
@@ -299,8 +299,8 @@ export class ParseManager {
             object: (node:ObjectNode, backrefs, vars, metas) => {
                 let ret = {};
                 for (let member of node.members) {
-                    if (member.type == "splat") {
-                        let items = builders.splat(member, backrefs, vars, metas);
+                    if (member.type == "spread") {
+                        let items = builders.spread(member, backrefs, vars, metas);
                         for (let i = 0; i < items.length; i += 2) {
                             ret[items[i]] = items[i+1];
                         }
@@ -314,8 +314,8 @@ export class ParseManager {
             array: (node:ArrayNode, backrefs, vars, metas) => {
                 let ret = [];
                 for (let elem of node.elements) {
-                    if (elem.type == "splat") {
-                        ret = ret.concat(builders.splat(elem, backrefs, vars, metas));
+                    if (elem.type == "spread") {
+                        ret = ret.concat(builders.spread(elem, backrefs, vars, metas));
                     } else {
                         ret.push(builders[elem.type](elem, backrefs, vars, metas));
                     }
@@ -434,7 +434,7 @@ function visitParseNodes(
 function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
     f(node, data);
     let items;
-    if (node.type == "splat") {
+    if (node.type == "spread") {
         items = node.refs;
     } else if (node.type == "array") {
         items = node.elements;

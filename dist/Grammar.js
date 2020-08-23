@@ -9,7 +9,7 @@ function createUncompiledDezentGrammar() {
     // though there are some restrictions to keep the
     // amount of parsing logic under control:
     // - there can be no whitespace within a capture
-    // - object splat must be written as name/value pair, e.g. ...$1': ''
+    // - object spread must be written as name/value pair, e.g. ...$1': ''
     // - grouping parens (and predicate/modifier) must be surrounded by whitespace
     // - character classes don't support spaces - use \\u0020
     return {
@@ -19,9 +19,9 @@ function createUncompiledDezentGrammar() {
             ruledef('singleLineComment', "'//' ( !'\\n' . )* '\\n'", null),
             ruledef('multiLineComment', "'/*' ( !'*/' . )* '*/'", null),
             ruledef('whitespace', "[\\u0020\\t-\\r]+", null),
-            ruledef('returndef', "'return' whitespace _ {rule} _ ';'", { type: 'ruledef', name: 'return', rules: ['$1'] }),
-            ruledef('ruledef', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruledef', name: '$1', rules: ['$2', '...$3'] }),
-            ruledef('rule', "{options} _ '->' _ {value}", { type: 'rule', '...$1': '', value: '$2' }),
+            ruledef('returndef', "'return' whitespace _ {rule} _ ';'", { type: 'ruledef', name: 'return', rules: ['$1'], '...$meta': '' }),
+            ruledef('ruledef', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruledef', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
+            ruledef('rule', "{options} _ '->' _ {value}", { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
             ruledef('options', "{pattern} _ ( '|' _ {pattern} _ )*", { options: ['$1', '...$2'] }),
             ruledef('pattern', "( {token} _ )+", { type: 'pattern', tokens: '$1' }),
             ruledef('token', "{predicate} {capture|group|string|class|ruleref|any} {modifier}", { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
@@ -36,16 +36,17 @@ function createUncompiledDezentGrammar() {
             ruledef('classChar', "!']' {escape|char}", '$1'),
             ruledef('char', "charstr", { type: 'char', value: '$0' }),
             ruledef('any', "'.'", { type: 'any' }),
-            ruledef('ruleref', "{identifier}", { type: 'ruleref', name: '$1' }),
+            ruledef('ruleref', "{identifier}", { type: 'ruleref', name: '$1', '...$meta': '' }),
             ruledef('predicate', "'&'", { and: true, not: false }, "'!'", { and: false, not: true }, "''", { and: false, not: false }),
             ruledef('modifier', "'*'", { repeat: true, required: false }, "'+'", { repeat: true, required: true }, "'?'", { repeat: false, required: false }, "''", { repeat: false, required: true }),
-            ruledef('value', "{backref|varref|object|array|string|number|boolean|null}", '$1'),
-            ruledef('backref', "'$' {[0-9]+}", { type: 'backref', index: '$1' }),
-            ruledef('varref', "'$' {identifier}", { type: 'varref', name: '$1' }),
-            ruledef('splat', "'...' {backref}", { type: 'splat', backrefs: ['$1'] }, "'...(' _ {backref} ( _ ',' _ {backref} )* _ ')'", { type: 'splat', backrefs: ['$1', '...$2'] }),
+            ruledef('value', "{backref|varref|metaref|object|array|string|number|boolean|null}", '$1'),
+            ruledef('backref', "'$' {[0-9]+}", { type: 'backref', index: '$1', '...$meta': '' }),
+            ruledef('varref', "'$' {identifier}", { type: 'varref', name: '$1', '...$meta': '' }),
+            ruledef('metaref', "'@' {'position'|'length'}", { type: 'metaref', name: '$1' }),
+            ruledef('spread', "'...' {backref|varref}", { type: 'spread', refs: ['$1'], '...$meta': '' }, "'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'", { type: 'spread', refs: ['$1', '...$2'], '...$meta': '' }),
             ruledef('object', "'{' ( _ {member} _ ',' )* _ {member}? _ '}'", { type: 'object', members: ['...$1', '$2'] }),
-            ruledef('member', "{splat}", '$1', "{backref|string|identifierAsStringNode} _ ':' _ {value}", { type: 'member', name: '$1', value: '$2' }),
-            ruledef('array', "'[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']'", { type: 'array', elements: ['...$1', '$2'] }),
+            ruledef('member', "{spread}", '$1', "{backref|string|identifierAsStringNode} _ ':' _ {value}", { type: 'member', name: '$1', value: '$2' }),
+            ruledef('array', "'[' ( _ {value|spread} _ ',' )* _ {value|spread}? _ ']'", { type: 'array', elements: ['...$1', '$2'] }),
             ruledef('string', "'\\'' {escape|stringText}* '\\''", { type: 'string', tokens: '$1' }),
             ruledef('stringText', "( !['\\\\] . )+", { type: 'text', value: '$0' }),
             ruledef('number', "'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }, "'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }),
@@ -57,7 +58,9 @@ function createUncompiledDezentGrammar() {
             ruledef('identifier', "[_a-zA-Z] [_a-zA-Z0-9]*", '$0'),
             ruledef('identifierAsStringNode', "{identifier}", { type: 'string', tokens: [{ type: 'text', value: '$1' }] }),
         ],
-        vars: {}
+        vars: {
+            meta: output({ meta: { pos: "@position", length: "@length" } })
+        }
     };
 }
 exports.createUncompiledDezentGrammar = createUncompiledDezentGrammar;
@@ -266,7 +269,7 @@ function output(value) {
                 var members = [];
                 for (var name_1 in value) {
                     if (name_1.startsWith('...')) {
-                        // splat
+                        // spread
                         members.push(output(name_1));
                     }
                     else {
@@ -289,21 +292,24 @@ function output(value) {
                     index: RegExp.$1
                 };
             }
+            else if (value.match(/^@([a-zA-Z_]+)/)) {
+                return {
+                    type: 'metaref',
+                    name: RegExp.$1
+                };
+            }
             else if (value.match(/^\.\.\./)) {
-                if (value.match(/^...\$(\d)/)) {
-                    return {
-                        type: 'splat',
-                        backrefs: [{ type: 'backref', index: RegExp.$1 }]
-                    };
+                var ref = function (name) {
+                    // don't use a regexp here because it will mess up the backrefs just prior to this call
+                    return name[0] <= '9'
+                        ? { type: 'backref', index: name }
+                        : { type: 'varref', name: name };
+                };
+                if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
+                    return { type: 'spread', refs: [ref(RegExp.$1)] };
                 }
-                else if (value.match(/^...\(\$(\d),\$(\d)\)/)) {
-                    return {
-                        type: 'splat',
-                        backrefs: [
-                            { type: 'backref', index: RegExp.$1 },
-                            { type: 'backref', index: RegExp.$2 }
-                        ]
-                    };
+                else if (value.match(/^...\(\$([0-9]+|[a-zA-Z_]+),\$([0-9]+|[a-zA-Z_]+)\)/)) {
+                    return { type: 'spread', refs: [ref(RegExp.$1), ref(RegExp.$2)] };
                 }
                 else {
                     throw new Error();

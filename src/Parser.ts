@@ -2,13 +2,14 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - refactor node types
 // - documentation
 // - command line script w/tests
 // - package license
 // - performance/scale testing
 // - packrat parsing
 // - release?
+// - output callbacks
+// - @id
 // - string interpolation
 // - backref within pattern
 
@@ -34,8 +35,8 @@ export enum ErrorCode {
     DuplicateDefine           = 1001,
     MultipleReturn            = 1002,
     RuleNotFound              = 1003,
-    InvalidSplat              = 1004,
-    SplatArraySizeMismatch    = 1005,
+    InvalidSpread             = 1004,
+    SpreadArraySizeMismatch   = 1005,
     ReturnNotFound            = 1006,
     CaptureCountMismatch      = 1007,
     InvalidBackRef            = 1008,
@@ -59,8 +60,8 @@ export const errorMessages = {
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
-    1004: "Back reference used in splat is neither an array nor object",
-    1005: "All arrays in a splat must be of the same length",
+    1004: "Spread argument is neither an array nor object",
+    1005: "All arrays in a spread must be of the same length",
     1006: "Grammar does not contain a return rule",
     1007: "All options within a rule must have the same number of captures",
     1008: "Invalid back reference: $$1",

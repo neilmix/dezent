@@ -2,19 +2,16 @@
 // tagline:
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 exports.__esModule = true;
-exports.parsingError = exports.parserError = exports.grammarError = exports.Parser = exports.MatchStatus = exports.parseGrammar = exports.parseText = exports.findDezentGrammar = exports.ErrorCode = void 0;
+exports.findLineAndChar = exports.parsingError = exports.parserError = exports.Parser = exports.MatchStatus = exports.parseGrammar = exports.parseText = exports.findDezentGrammar = exports.errorMessages = exports.ErrorCode = void 0;
 // todo:
-// - fix vardef failure
-// - @ values
-// - node position for post-parse error messages (e.g. NonArraySplat)
-// - tests for grammar errors
-// - how to deal with multiple members of same name?
 // - documentation
 // - command line script w/tests
 // - package license
 // - performance/scale testing
 // - packrat parsing
 // - release?
+// - output callbacks
+// - @id
 // - string interpolation
 // - backref within pattern
 // speculative todo:
@@ -22,7 +19,7 @@ exports.parsingError = exports.parserError = exports.grammarError = exports.Pars
 // - error recovery
 // - chunked parsing
 // - macros/functions, e.g. definition(pattern1, pattern2)
-// - regex-like search-and-find`
+// - regex-like search-and-find
 var Grammar_1 = require("./Grammar");
 var ParseManager_1 = require("./ParseManager");
 var OutputContext_1 = require("./OutputContext");
@@ -33,8 +30,8 @@ var ErrorCode;
     ErrorCode[ErrorCode["DuplicateDefine"] = 1001] = "DuplicateDefine";
     ErrorCode[ErrorCode["MultipleReturn"] = 1002] = "MultipleReturn";
     ErrorCode[ErrorCode["RuleNotFound"] = 1003] = "RuleNotFound";
-    ErrorCode[ErrorCode["InvalidSplat"] = 1004] = "InvalidSplat";
-    ErrorCode[ErrorCode["SplatArraySizeMismatch"] = 1005] = "SplatArraySizeMismatch";
+    ErrorCode[ErrorCode["InvalidSpread"] = 1004] = "InvalidSpread";
+    ErrorCode[ErrorCode["SpreadArraySizeMismatch"] = 1005] = "SpreadArraySizeMismatch";
     ErrorCode[ErrorCode["ReturnNotFound"] = 1006] = "ReturnNotFound";
     ErrorCode[ErrorCode["CaptureCountMismatch"] = 1007] = "CaptureCountMismatch";
     ErrorCode[ErrorCode["InvalidBackRef"] = 1008] = "InvalidBackRef";
@@ -50,18 +47,18 @@ var ErrorCode;
     ErrorCode[ErrorCode["InputConsumedBeforeResult"] = 2009] = "InputConsumedBeforeResult";
     ErrorCode[ErrorCode["MultipleOutputsForCapture"] = 2010] = "MultipleOutputsForCapture";
 })(ErrorCode = exports.ErrorCode || (exports.ErrorCode = {}));
-var errorMessages = {
-    1: "Parse failed: $3\nAt line $1 char $2:\n$4\n$5^",
-    2: "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5^",
+exports.errorMessages = {
+    1: "Parse failed: $3\nAt line $1 char $2:\n$4\n$5",
+    2: "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5",
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
-    1004: "Back reference used in splat is neither an array nor object: $$1",
-    1005: "All arrays in a splat must be of the same length",
+    1004: "Spread argument is neither an array nor object",
+    1005: "All arrays in a spread must be of the same length",
     1006: "Grammar does not contain a return rule",
-    1007: "Not all options for rule $2 of $1 have the same number of captures",
-    1008: "Invalid back reference $$3 for rule $2 of $1",
-    1009: "Invalid variable reference $$3 for rule $2 of $1",
+    1007: "All options within a rule must have the same number of captures",
+    1008: "Invalid back reference: $$1",
+    1009: "Invalid variable reference: $$1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -137,11 +134,7 @@ var Parser = /** @class */ (function () {
                         this.enter(current.items[current.index]);
                         break;
                     case "ruleref":
-                        var def = this.ruledefs[current.node.name];
-                        if (!def) {
-                            grammarError(ErrorCode.RuleNotFound, current.node.name);
-                        }
-                        this.enter(def);
+                        this.enter(this.ruledefs[current.node.name]);
                         break;
                     case "string":
                     case "class":
@@ -333,25 +326,33 @@ var Parser = /** @class */ (function () {
     return Parser;
 }());
 exports.Parser = Parser;
-function grammarError(code) {
-    var args = [];
-    for (var _i = 1; _i < arguments.length; _i++) {
-        args[_i - 1] = arguments[_i];
-    }
-    var msg = errorMessages[code].replace(/\$([0-9])/g, function (match, index) { return args[index - 1]; });
-    var e = new Error("Grammar error " + code + ": " + msg);
-    e["code"] = code;
-    throw e;
-}
-exports.grammarError = grammarError;
 function parserError(code) {
-    var msg = errorMessages[code];
+    var msg = exports.errorMessages[code];
     var e = new Error("Internal parser error " + code + ": " + msg);
     e["code"] = code;
     throw e;
 }
 exports.parserError = parserError;
 function parsingError(code, text, pos, expected) {
+    expected = expected.map(function (i) { return i.replace(/\n/g, '\\n'); });
+    var list = [].join.call(expected, '\n\t');
+    var reason = expected.length == 1 ? "expected: " + list : "expected one of the following: \n\t" + list;
+    var info = findLineAndChar(text, pos);
+    var backrefs = [null, info.line, info.char, reason, info.lineText, info.pointerText];
+    var msg = exports.errorMessages[code].replace(/\$([0-9])/g, function (match, index) { return String(backrefs[index]); });
+    var e = new Error(msg);
+    e["code"] = code;
+    e["pos"] = pos;
+    e["line"] = info.line;
+    e["char"] = info.char;
+    e["lineText"] = info.lineText;
+    e["pointerText"] = info.pointerText;
+    e["reason"] = reason;
+    e["expected"] = expected;
+    throw e;
+}
+exports.parsingError = parsingError;
+function findLineAndChar(text, pos) {
     var lines = text.split('\n');
     var consumed = 0, linenum = 0, charnum = 0, lineText = '';
     for (var _i = 0, lines_1 = lines; _i < lines_1.length; _i++) {
@@ -366,19 +367,11 @@ function parsingError(code, text, pos, expected) {
     }
     var detabbed = lineText.replace(/\t/g, '    ');
     var leading = charnum - 1 + (detabbed.length - lineText.length);
-    expected = expected.map(function (i) { return i.replace(/\n/g, '\\n'); });
-    var list = [].join.call(expected, '\n\t');
-    var reason = expected.length == 1 ? "expected: " + list : "expected one of the following: \n\t" + list;
-    var backrefs = [null, linenum, charnum, reason, lineText, ' '.repeat(leading)];
-    var msg = errorMessages[code].replace(/\$([0-9])/g, function (match, index) { return String(backrefs[index]); });
-    var e = new Error(msg);
-    e["code"] = code;
-    e["pos"] = pos;
-    e["line"] = linenum;
-    e["char"] = charnum;
-    e["lineText"] = lineText;
-    e["reason"] = reason;
-    e["expected"] = expected;
-    throw e;
+    return {
+        line: linenum,
+        char: charnum,
+        lineText: lineText,
+        pointerText: ' '.repeat(leading) + '^'
+    };
 }
-exports.parsingError = parsingError;
+exports.findLineAndChar = findLineAndChar;

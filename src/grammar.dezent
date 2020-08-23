@@ -89,18 +89,18 @@ varref = '$' { identifier }
 metaref = '@' { 'position' | 'length' }
 	-> { type: 'metaref', name: $1 };
 
-splat = 
-	'...' {backref|varref} -> { type: 'splat', refs: [$1], ...$meta },
-	'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')' -> { type: 'splat', refs: [$1, ...$2], ...$meta };
+spread = 
+	'...' {backref|varref} -> { type: 'spread', refs: [$1], ...$meta },
+	'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')' -> { type: 'spread', refs: [$1, ...$2], ...$meta };
 
 object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' 
 	-> { type: 'object', members: [...$1, $2] };
 
 member = 
-	{splat} -> $1,
+	{spread} -> $1,
 	{backref|string|identifierAsStringNode} _ ':' _ {value} -> { type: 'member', name: $1, value: $2 };
 
-array = '[' ( _ {value|splat} _ ',' )* _ {value|splat}? _ ']' 
+array = '[' ( _ {value|spread} _ ',' )* _ {value|spread}? _ ']' 
 	-> { type: 'array', elements: [...$1, $2] };
 
 string = '\'' {escape|stringText}* '\''
