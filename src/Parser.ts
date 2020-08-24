@@ -2,11 +2,9 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - values in spreads
 // - pivot operator
 // - object spread requires/produces tuples
 // - remove multi-arg spread
-// - ? values in arrays
 // - object & array accessors
 // - documentation
 // - command line script w/tests

@@ -88,6 +88,7 @@ test("backref outputs", () => {
 });
 
 test("spread", () => {
+    expectParse(`return .* -> [ ...[1,2,3], ...[4,5,6]];`).toEqual([1,2,3,4,5,6]);
     expectParse(`return {'a'}* {'b'}* -> [...$1, ...$2];`, 'aaabbb').toEqual(['a','a','a','b','b','b']);
     expectParse(`return {[a-c]}* {[d-f]}* -> [...($1,$2)];`, 'abcdef').toEqual(['a', 'd', 'b', 'e', 'c', 'f']);
     expectParse(`return {[a-c]}* {[d-f]}* -> {...($1,$2)};`, 'abcdef').toEqual({a:'d', b:'e', c:'f'});

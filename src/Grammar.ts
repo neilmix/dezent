@@ -97,12 +97,14 @@ export function createUncompiledDezentGrammar():Grammar {
 	// This is a mini DSL that allows us to build an AST
 	// that our parser uses to parse grammar files.
 	// This is the same grammar as in grammar.dezent,
-	// though there are some restrictions to keep the
-	// amount of parsing logic under control:
+	// though there are some restrictions to avoid
+	// having to write a full recursive descent parser:
 	// - there can be no whitespace within a capture
 	// - object spread must be written as name/value pair, e.g. ...$1': ''
 	// - grouping parens (and predicate/modifier) must be surrounded by whitespace
 	// - character classes don't support spaces - use \\u0020
+	// - collapse can only happen with backrefs
+	// - spread operator can only be used with backrefs
 
 	return {
 		ruledefs: [
@@ -194,7 +196,7 @@ export function createUncompiledDezentGrammar():Grammar {
 				{ type: 'metaref', name: '$1' }),
 
 			ruledef('spread',
-				`'...' {backref|varref}`, { type: 'spread', refs: ['$1'], '...$meta': '' },
+				`'...' {backref|varref|object|array|string}`, { type: 'spread', refs: ['$1'], '...$meta': '' },
 				`'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'`, { type: 'spread', refs: ['$1', '...$2'], '...$meta': '' }),
 
 			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,

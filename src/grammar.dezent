@@ -90,7 +90,7 @@ metaref = '@' { 'position' | 'length' }
 	-> { type: 'metaref', name: $1 };
 
 spread = 
-	'...' {backref|varref} -> { type: 'spread', refs: [$1], ...$meta },
+	'...' {backref|varref|object|array|string} -> { type: 'spread', refs: [$1], ...$meta },
 	'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')' -> { type: 'spread', refs: [$1, ...$2], ...$meta };
 
 object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' 
