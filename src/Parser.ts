@@ -2,6 +2,12 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
+// - values in spreads
+// - pivot operator
+// - object spread requires/produces tuples
+// - remove multi-arg spread
+// - ? values in arrays
+// - object & array accessors
 // - documentation
 // - command line script w/tests
 // - package license
@@ -12,13 +18,14 @@
 // - @id
 // - string interpolation
 // - backref within pattern
+// - regex-like search-and-find
 
-// speculative todo:
+// speculative/research todo:
+// - packrat cache eviction to free memory
 // - error messaging
 // - error recovery
 // - chunked parsing
 // - macros/functions, e.g. definition(pattern1, pattern2)
-// - regex-like search-and-find
 
 import { 
     Grammar, createUncompiledDezentGrammar, RuleDefNode, ReturnNode,

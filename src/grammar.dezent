@@ -94,14 +94,18 @@ spread =
 	'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')' -> { type: 'spread', refs: [$1, ...$2], ...$meta };
 
 object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' 
-	-> { type: 'object', members: [...$1, $2] };
+	-> { type: 'object', members: [...$1, $2?] };
 
 member = 
 	{spread} -> $1,
 	{backref|string|identifierAsStringNode} _ ':' _ {value} -> { type: 'member', name: $1, value: $2 };
 
-array = '[' ( _ {value|spread} _ ',' )* _ {value|spread}? _ ']' 
-	-> { type: 'array', elements: [...$1, $2] };
+array = '[' ( _ {element} _ ',' )* _ {element}? _ ']' 
+	-> { type: 'array', elements: [...$1, $2?] };
+
+element = 
+	{value|spread} '?' -> { ...$1, collapse: true },
+	{value|spread} -> { ...$1, collapse: false };
 
 string = '\'' {escape|stringText}* '\''
 	-> { type: 'string', tokens: $1 };

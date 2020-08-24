@@ -1,7 +1,7 @@
 {
   "name": "dezent",
   "version": "0.8.0",
-  "description": "Parsing with the power of regular expressions plus recursion, readability, and structure.",
+  "description": "Powerful pattern matching and parsing that's readable, recursive, and structured.",
   "main": "./dist/Dezent.js",
   "bin": {
     "dezent": "./dist/dezent_cli.js"

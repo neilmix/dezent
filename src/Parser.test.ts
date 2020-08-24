@@ -71,6 +71,10 @@ test("object outputs", () => {
     expectParse("return .* -> { '\\n\\t': 1 };").toEqual({ '\n\t': 1 });
     expectParse("return .* -> [ 1, 2, 3 ];").toEqual([ 1, 2, 3 ]);
     expectParse("return .* -> {foo: [{bar: {baz: [1, 2, 3 ]}}]};").toEqual({foo: [{ bar: {baz: [1, 2, 3 ]}}]});
+
+    // trailing commas
+    expectParse("return .* -> [1,2,];").toEqual([1,2]);
+    expectParse("return .* -> { a: 1, b: 2, };").toEqual({ a: 1, b: 2 });
 });
 
 test("backref outputs", () => {

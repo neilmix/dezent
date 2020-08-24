@@ -317,7 +317,10 @@ export class ParseManager {
                     if (elem.type == "spread") {
                         ret = ret.concat(builders.spread(elem, backrefs, vars, metas));
                     } else {
-                        ret.push(builders[elem.type](elem, backrefs, vars, metas));
+                        let val = builders[elem.type](elem, backrefs, vars, metas);
+                        if (!elem.collapse || val != null) {
+                            ret.push(val);
+                        }
                     }
                 }
                 return ret;

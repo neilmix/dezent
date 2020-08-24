@@ -14,6 +14,9 @@ export interface Node {
 	type: string,
 	meta?: Meta
 }
+export interface OutputNode extends Node {
+	collapse?: boolean
+}
 
 export interface SelectorNode extends Node { options: PatternNode[], canFail?: boolean }
 export interface MatcherNode extends Node { 
@@ -69,20 +72,21 @@ export interface GroupNode        extends SelectorNode { type: 'group' }
 export interface RuleRefNode      extends Node         { type: 'ruleref',   name: string }
 export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [RangeNode, RangeNode][] }
 export interface AnyNode          extends MatcherNode  { type: 'any' }
-export interface StringNode       extends MatcherNode  { type: 'string',    tokens: (EscapeNode|StringTextNode)[] }
+export interface StringNode       extends MatcherNode, 
+                                          OutputNode   { type: 'string',    tokens: (EscapeNode|StringTextNode)[] }
 export interface StringTextNode   extends Node         { type: 'text',      value: string }
 export interface EscapeNode       extends RangeNode    { type: 'escape',    value: string }
 export interface CharNode         extends RangeNode    { type: 'char',      value: string }
 
-export interface BackRefNode      extends Node { type: 'backref',   index: string }
-export interface VarRefNode       extends Node { type: 'varref',    name: string }
-export interface MetaRefNode      extends Node { type: 'metaref',   name: string }
-export interface SpreadNode       extends Node { type: 'spread',     refs: (BackRefNode|VarRefNode)[] }
-export interface ObjectNode       extends Node { type: 'object',    members: (MemberNode|SpreadNode)[] }
-export interface ArrayNode        extends Node { type: 'array',     elements: ValueNode[] }
-export interface NumberNode       extends Node { type: 'number',    value: string }
-export interface BooleanNode      extends Node { type: 'boolean',   value: boolean }
-export interface NullNode         extends Node { type: 'null' }
+export interface BackRefNode      extends OutputNode { type: 'backref',   index: string }
+export interface VarRefNode       extends OutputNode { type: 'varref',    name: string }
+export interface MetaRefNode      extends OutputNode { type: 'metaref',   name: string }
+export interface SpreadNode       extends OutputNode { type: 'spread',     refs: (BackRefNode|VarRefNode)[] }
+export interface ObjectNode       extends OutputNode { type: 'object',    members: (MemberNode|SpreadNode)[] }
+export interface ArrayNode        extends OutputNode { type: 'array',     elements: ValueNode[] }
+export interface NumberNode       extends OutputNode { type: 'number',    value: string }
+export interface BooleanNode      extends OutputNode { type: 'boolean',   value: boolean }
+export interface NullNode         extends OutputNode { type: 'null' }
 
 export interface MemberNode { type: 'member', name: BackRefNode|StringNode, value: ValueNode }
 
@@ -194,14 +198,18 @@ export function createUncompiledDezentGrammar():Grammar {
 				`'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'`, { type: 'spread', refs: ['$1', '...$2'], '...$meta': '' }),
 
 			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
-				{ type: 'object', members: ['...$1', '$2'] }),
+				{ type: 'object', members: ['...$1', '$2?'] }),
 
 			ruledef('member', 
 				`{spread}`, '$1',
 				`{backref|string|identifierAsStringNode} _ ':' _ {value}`, { type: 'member', name: '$1', value: '$2' }),
 
-			ruledef('array', `'[' ( _ {value|spread} _ ',' )* _ {value|spread}? _ ']'`,
-				{ type: 'array', elements: ['...$1', '$2'] }),
+			ruledef('array', `'[' ( _ {element} _ ',' )* _ {element}? _ ']'`,
+				{ type: 'array', elements: ['...$1', '$2?'] }),
+
+			ruledef('element',
+				`{value|spread} '?'`, { '...$1':'', collapse: true },
+				`{value|spread}`, { '...$1':'', collapse: false }),
 
 			ruledef('string', `'\\'' {escape|stringText}* '\\''`,
 				{ type: 'string', tokens: '$1' }),
@@ -424,7 +432,9 @@ function output(value: any) : ValueNode {
 			} else if (Array.isArray(value)) {
 				let ret = [];
 				for (let elem of value) {
-					ret.push(output(elem));
+					let out = output(elem);
+					out.collapse = elem.length > 1 && elem[elem.length-1] == '?';
+					ret.push(out);
 				}
 				return { 
 					type: 'array',
@@ -450,7 +460,7 @@ function output(value: any) : ValueNode {
 				}
 			}
 		case 'string':
-			if (value.match(/^\$(\d)$/)) {
+			if (value.match(/^\$(\d+)/)) {
 				return {
 					type: 'backref',
 					index: RegExp.$1
