@@ -2,8 +2,8 @@
 // the dezent parser uses this grammar to parse grammar
 // documents prior to parsing.
 
-return _ ( {returndef|ruledef} _ | '$' {identifier} _ '=' _ {value} _ ';' _ )* 
-	-> { ruledefs: $1, vars: { ...($2, $3) } };
+return _ ( {returndef|ruledef} _ | {vardef} _ )* 
+	-> { ruledefs: $1, vars: { ...$2 } };
 
 _ = ( singleLineComment | multiLineComment | whitespace? )* -> null;
 
@@ -16,6 +16,9 @@ returndef = 'return' whitespace _ {rule} _ ';'
 
 ruledef = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
 	-> { type: 'ruledef', name: $1, rules: [$2, ...$3], ...$meta };
+
+vardef = '$' {identifier} _ '=' _ {value} _ ';'
+	-> [$1, $2];
 
 rule = {options} _ '->' _ {value} 
 	-> { type: 'rule', ...$1, value: $2, ...$meta };
@@ -90,11 +93,10 @@ metaref = '@' { 'position' | 'length' }
 	-> { type: 'metaref', name: $1 };
 
 pivot = '^' {backref|varref|array|pivot}
-	-> { type: 'pivot', value: $1 };
+	-> { type: 'pivot', value: $1, ...$meta };
 
-spread = 
-	'...' {backref|varref|object|array|string} -> { type: 'spread', refs: [$1], ...$meta },
-	'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')' -> { type: 'spread', refs: [$1, ...$2], ...$meta };
+spread = '...' {backref|varref|pivot|object|array|string} 
+	-> { type: 'spread', value: $1, ...$meta };
 
 object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' 
 	-> { type: 'object', members: [...$1, $2?] };

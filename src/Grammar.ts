@@ -82,7 +82,7 @@ export interface BackRefNode      extends OutputNode { type: 'backref',   index:
 export interface VarRefNode       extends OutputNode { type: 'varref',    name: string }
 export interface MetaRefNode      extends OutputNode { type: 'metaref',   name: string }
 export interface PivotNode        extends OutputNode { type: 'pivot',     value: BackRefNode|VarRefNode|ObjectNode|ArrayNode|PivotNode }
-export interface SpreadNode       extends OutputNode { type: 'spread',    refs: (BackRefNode|VarRefNode)[] }
+export interface SpreadNode       extends OutputNode { type: 'spread',    value: BackRefNode|VarRefNode|PivotNode|ObjectNode|ArrayNode }
 export interface ObjectNode       extends OutputNode { type: 'object',    members: (MemberNode|SpreadNode)[] }
 export interface ArrayNode        extends OutputNode { type: 'array',     elements: ValueNode[] }
 export interface NumberNode       extends OutputNode { type: 'number',    value: string }
@@ -105,12 +105,12 @@ export function createUncompiledDezentGrammar():Grammar {
 	// - grouping parens (and predicate/modifier) must be surrounded by whitespace
 	// - character classes don't support spaces - use \\u0020
 	// - collapse can only happen with backrefs
-	// - spread operator can only be used with backrefs
+	// - spread operator can only be used with backref or varref
 
 	return {
 		ruledefs: [
-			returndef(`_ ( {returndef|ruledef} _ | '$' {identifier} _ '=' _ {value} _ ';' _ )*`, 
-				{ ruledefs: "$1", vars: { '...($2,$3)': '' } }),
+			returndef(`_ ( {returndef|ruledef} _ | {vardef} _ )*`, 
+				{ ruledefs: "$1", vars: { '...$2': '' } }),
 
 			ruledef('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
 
@@ -124,6 +124,9 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruledef('ruledef', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
 				{ type: 'ruledef', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
 
+			ruledef('vardef', `'$' {identifier} _ '=' _ {value} _ ';'`,
+				['$1', '$2']),
+			
 			ruledef('rule', `{options} _ '->' _ {value}`,
 				{ type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
 			
@@ -197,11 +200,10 @@ export function createUncompiledDezentGrammar():Grammar {
 				{ type: 'metaref', name: '$1' }),
 
 			ruledef('pivot', `'^' {backref|varref|array|pivot}`,
-				{ type: 'pivot', value: '$1' }),
+				{ type: 'pivot', value: '$1', '...$meta':'' }),
 
-			ruledef('spread',
-				`'...' {backref|varref|object|array|string}`, { type: 'spread', refs: ['$1'], '...$meta': '' },
-				`'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'`, { type: 'spread', refs: ['$1', '...$2'], '...$meta': '' }),
+			ruledef('spread', `'...' {backref|varref|pivot|object|array|string}`, 
+				{ type: 'spread', value: '$1', '...$meta': '' }),
 
 			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
 				{ type: 'object', members: ['...$1', '$2?'] }),
@@ -484,9 +486,7 @@ function output(value: any) : ValueNode {
 						: { type: 'varref', name: name };
 				}
 				if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
-					return { type: 'spread', refs: [ ref(RegExp.$1) ] };
-				} else if (value.match(/^...\(\$([0-9]+|[a-zA-Z_]+),\$([0-9]+|[a-zA-Z_]+)\)/)) {
-					return { type: 'spread', refs: [ ref(RegExp.$1), ref(RegExp.$2) ] };
+					return { type: 'spread', value: ref(RegExp.$1) };
 				} else {
 					throw new Error();
 				}

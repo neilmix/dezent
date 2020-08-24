@@ -2,8 +2,6 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - object spread requires/produces tuples
-// - remove multi-arg spread
 // - object & array accessors
 // - documentation
 // - command line script w/tests
@@ -46,6 +44,7 @@ export enum ErrorCode {
     InvalidVarRef             = 1008,
     InvalidPivot              = 1009,
     PivotArraySizeMismatch    = 1010,
+    InvalidObjectTuple        = 1011,
 
     ArrayOverrun              = 2001,
     MismatchOutputFrames      = 2002,
@@ -72,6 +71,7 @@ export const errorMessages = {
     1008: "Invalid variable reference: $$1",
     1009: "Invalid pivot argment: $1",
     1010: "All subarrays in a pivot must be of the same length",
+    1011: "When spreading an array into an object, array elements must be arrays of length 2 but instead received: $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",

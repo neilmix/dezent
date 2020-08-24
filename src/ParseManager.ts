@@ -285,48 +285,28 @@ export class ParseManager {
                 return ret;
             },
             spread: (node:SpreadNode, backrefs, vars, metas) => {
-                // first convert to an array of arrays
-                let resolved = [];
-                for (let i = 0; i < node.refs.length; i++) {
-                    let res = builders[node.refs[i].type](node.refs[i], backrefs, vars, metas);
-                    if (!res || typeof res != 'object') {
-                        grammarError(ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(res));
-                    }
-                    if (Array.isArray(res)) {
-                        resolved.push(res);
-                    } else {
-                        let items = [];
-                        for (let name in res) {
-                            items.push(name, res[name]);
-                        }
-                        resolved.push(items);
-                    }
+                let value = builders[node.value.type](node.value, backrefs, vars, metas);
+                if (!value || (typeof value != 'object' && typeof value != 'string')) {
+                    grammarError(ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(value));
                 }
-                if (resolved.length <= 1) {
-                    return resolved[0];
+                if (typeof value == "string") {
+                    return value.split('');
+                } else if (Array.isArray(value)) {
+                    return value;
+                } else {
+                    return Object.entries(value);
                 }
-                resolved.map((item) => {
-                    if (item.length != resolved[0].length) {
-                        grammarError(ErrorCode.PivotArraySizeMismatch, grammar.text, node.meta);
-                    }
-                })
-                // now merge our arrays
-                // breadth-first, across then down
-                let ret = [];
-                for (let i = 0; i < resolved[0].length; i++) {
-                    for (let j = 0; j < resolved.length; j++) {
-                        ret.push(resolved[j][i]);
-                    }
-                }
-                return ret;
             },
             object: (node:ObjectNode, backrefs, vars, metas) => {
                 let ret = {};
                 for (let member of node.members) {
                     if (member.type == "spread") {
-                        let items = builders.spread(member, backrefs, vars, metas);
-                        for (let i = 0; i < items.length; i += 2) {
-                            ret[items[i]] = items[i+1];
+                        let tuples = builders.spread(member, backrefs, vars, metas);
+                        for (let tuple of tuples) {
+                            if (!Array.isArray(tuple) || tuple.length != 2) {
+                                grammarError(ErrorCode.InvalidObjectTuple, grammar.text, member.meta, JSON.stringify(tuple));
+                            }
+                            ret[tuple[0]] = tuple[1];
                         }
                     } else {
                         ret[builders[member.name.type](member.name, backrefs, vars, metas)] 
@@ -461,8 +441,8 @@ function visitParseNodes(
 function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
     f(node, data);
     let items;
-    if (node.type == "spread") {
-        items = node.refs;
+    if (node.type == "spread" || node.type == "pivot") {
+        items = [node.value];
     } else if (node.type == "array") {
         items = node.elements;
     } else if (node.type == "object") {
