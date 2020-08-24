@@ -4,6 +4,10 @@
 exports.__esModule = true;
 exports.findLineAndChar = exports.parsingError = exports.parserError = exports.Parser = exports.MatchStatus = exports.parseGrammar = exports.parseText = exports.findDezentGrammar = exports.errorMessages = exports.ErrorCode = void 0;
 // todo:
+// - pivot operator
+// - object spread requires/produces tuples
+// - remove multi-arg spread
+// - object & array accessors
 // - documentation
 // - command line script w/tests
 // - package license
@@ -14,12 +18,13 @@ exports.findLineAndChar = exports.parsingError = exports.parserError = exports.P
 // - @id
 // - string interpolation
 // - backref within pattern
-// speculative todo:
+// - regex-like search-and-find
+// speculative/research todo:
+// - packrat cache eviction to free memory
 // - error messaging
 // - error recovery
 // - chunked parsing
 // - macros/functions, e.g. definition(pattern1, pattern2)
-// - regex-like search-and-find
 var Grammar_1 = require("./Grammar");
 var ParseManager_1 = require("./ParseManager");
 var OutputContext_1 = require("./OutputContext");
@@ -36,6 +41,7 @@ var ErrorCode;
     ErrorCode[ErrorCode["CaptureCountMismatch"] = 1007] = "CaptureCountMismatch";
     ErrorCode[ErrorCode["InvalidBackRef"] = 1008] = "InvalidBackRef";
     ErrorCode[ErrorCode["InvalidVarRef"] = 1009] = "InvalidVarRef";
+    ErrorCode[ErrorCode["InvalidPivot"] = 1010] = "InvalidPivot";
     ErrorCode[ErrorCode["ArrayOverrun"] = 2001] = "ArrayOverrun";
     ErrorCode[ErrorCode["MismatchOutputFrames"] = 2002] = "MismatchOutputFrames";
     ErrorCode[ErrorCode["CaptureAlreadyInProgress"] = 2003] = "CaptureAlreadyInProgress";
@@ -53,12 +59,13 @@ exports.errorMessages = {
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
-    1004: "Spread argument is neither an array nor object",
+    1004: "Spread argument is neither an array nor object: $1",
     1005: "All arrays in a spread must be of the same length",
     1006: "Grammar does not contain a return rule",
     1007: "All options within a rule must have the same number of captures",
     1008: "Invalid back reference: $$1",
     1009: "Invalid variable reference: $$1",
+    1010: "Invalid pivot argment: $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",

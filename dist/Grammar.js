@@ -6,12 +6,14 @@ function createUncompiledDezentGrammar() {
     // This is a mini DSL that allows us to build an AST
     // that our parser uses to parse grammar files.
     // This is the same grammar as in grammar.dezent,
-    // though there are some restrictions to keep the
-    // amount of parsing logic under control:
+    // though there are some restrictions to avoid
+    // having to write a full recursive descent parser:
     // - there can be no whitespace within a capture
     // - object spread must be written as name/value pair, e.g. ...$1': ''
     // - grouping parens (and predicate/modifier) must be surrounded by whitespace
     // - character classes don't support spaces - use \\u0020
+    // - collapse can only happen with backrefs
+    // - spread operator can only be used with backrefs
     return {
         ruledefs: [
             returndef("_ ( {returndef|ruledef} _ | '$' {identifier} _ '=' _ {value} _ ';' _ )*", { ruledefs: "$1", vars: { '...($2,$3)': '' } }),
@@ -39,14 +41,16 @@ function createUncompiledDezentGrammar() {
             ruledef('ruleref', "{identifier}", { type: 'ruleref', name: '$1', '...$meta': '' }),
             ruledef('predicate', "'&'", { and: true, not: false }, "'!'", { and: false, not: true }, "''", { and: false, not: false }),
             ruledef('modifier', "'*'", { repeat: true, required: false }, "'+'", { repeat: true, required: true }, "'?'", { repeat: false, required: false }, "''", { repeat: false, required: true }),
-            ruledef('value', "{backref|varref|metaref|object|array|string|number|boolean|null}", '$1'),
+            ruledef('value', "{backref|varref|metaref|pivot|object|array|string|number|boolean|null}", '$1'),
             ruledef('backref', "'$' {[0-9]+}", { type: 'backref', index: '$1', '...$meta': '' }),
             ruledef('varref', "'$' {identifier}", { type: 'varref', name: '$1', '...$meta': '' }),
             ruledef('metaref', "'@' {'position'|'length'}", { type: 'metaref', name: '$1' }),
-            ruledef('spread', "'...' {backref|varref}", { type: 'spread', refs: ['$1'], '...$meta': '' }, "'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'", { type: 'spread', refs: ['$1', '...$2'], '...$meta': '' }),
-            ruledef('object', "'{' ( _ {member} _ ',' )* _ {member}? _ '}'", { type: 'object', members: ['...$1', '$2'] }),
+            ruledef('pivot', "'^' {backref|varref|array}", { type: 'pivot', value: '$1' }),
+            ruledef('spread', "'...' {backref|varref|object|array|string}", { type: 'spread', refs: ['$1'], '...$meta': '' }, "'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'", { type: 'spread', refs: ['$1', '...$2'], '...$meta': '' }),
+            ruledef('object', "'{' ( _ {member} _ ',' )* _ {member}? _ '}'", { type: 'object', members: ['...$1', '$2?'] }),
             ruledef('member', "{spread}", '$1', "{backref|string|identifierAsStringNode} _ ':' _ {value}", { type: 'member', name: '$1', value: '$2' }),
-            ruledef('array', "'[' ( _ {value|spread} _ ',' )* _ {value|spread}? _ ']'", { type: 'array', elements: ['...$1', '$2'] }),
+            ruledef('array', "'[' ( _ {element} _ ',' )* _ {element}? _ ']'", { type: 'array', elements: ['...$1', '$2?'] }),
+            ruledef('element', "{value|spread} '?'", { '...$1': '', collapse: true }, "{value|spread}", { '...$1': '', collapse: false }),
             ruledef('string', "'\\'' {escape|stringText}* '\\''", { type: 'string', tokens: '$1' }),
             ruledef('stringText', "( !['\\\\] . )+", { type: 'text', value: '$0' }),
             ruledef('number', "'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }, "'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }),
@@ -258,7 +262,9 @@ function output(value) {
                 var ret = [];
                 for (var _i = 0, value_1 = value; _i < value_1.length; _i++) {
                     var elem = value_1[_i];
-                    ret.push(output(elem));
+                    var out = output(elem);
+                    out.collapse = elem.length > 1 && elem[elem.length - 1] == '?';
+                    ret.push(out);
                 }
                 return {
                     type: 'array',
@@ -286,7 +292,7 @@ function output(value) {
                 };
             }
         case 'string':
-            if (value.match(/^\$(\d)$/)) {
+            if (value.match(/^\$(\d+)/)) {
                 return {
                     type: 'backref',
                     index: RegExp.$1

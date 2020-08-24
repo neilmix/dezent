@@ -7,7 +7,7 @@ import {
 import { 
     Grammar, Node, SelectorNode, Meta, RuleDefNode, ReturnNode, RuleNode, TokenNode, PatternNode, RuleRefNode, ClassNode, AnyNode,
     ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, VarRefNode, 
-    MetaRefNode, SpreadNode, StringTextNode, EscapeNode,
+    MetaRefNode, PivotNode, SpreadNode, StringTextNode, EscapeNode,
 } from './Grammar';
 
 import { OutputToken } from './OutputContext';
@@ -260,13 +260,37 @@ export class ParseManager {
             metaref: (node:MetaRefNode, backrefs, vars, metas) => {
                 return metas[node.name];
             },
+            pivot: (node:PivotNode, backrefs, vars, metas) => {
+                let value = builders[node.value.type](node.value, backrefs, vars, metas);
+                if (!Array.isArray(value)) {
+                    grammarError(ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(value));
+                }
+                value.map((item) => {
+                    if (!Array.isArray(item)) {
+                        grammarError(ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(item));
+                    }
+                    if (item.length != value[0].length) {
+                        grammarError(ErrorCode.PivotArraySizeMismatch, grammar.text, node.meta);
+                    }
+                })
+                let ret = [];
+                for (let item of value[0]) {
+                    ret.push([]);
+                }
+                for (let i = 0; i < value.length; i++) {
+                    for (let j = 0; j < value[0].length; j++) {
+                        ret[j][i] = value[i][j];
+                    }
+                }
+                return ret;
+            },
             spread: (node:SpreadNode, backrefs, vars, metas) => {
                 // first convert to an array of arrays
                 let resolved = [];
                 for (let i = 0; i < node.refs.length; i++) {
                     let res = builders[node.refs[i].type](node.refs[i], backrefs, vars, metas);
                     if (!res || typeof res != 'object') {
-                        grammarError(ErrorCode.InvalidSpread, grammar.text, node.meta);
+                        grammarError(ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(res));
                     }
                     if (Array.isArray(res)) {
                         resolved.push(res);
@@ -283,7 +307,7 @@ export class ParseManager {
                 }
                 resolved.map((item) => {
                     if (item.length != resolved[0].length) {
-                        grammarError(ErrorCode.SpreadArraySizeMismatch, grammar.text, node.meta);
+                        grammarError(ErrorCode.PivotArraySizeMismatch, grammar.text, node.meta);
                     }
                 })
                 // now merge our arrays

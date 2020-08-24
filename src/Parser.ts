@@ -2,7 +2,6 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - pivot operator
 // - object spread requires/produces tuples
 // - remove multi-arg spread
 // - object & array accessors
@@ -41,11 +40,12 @@ export enum ErrorCode {
     MultipleReturn            = 1002,
     RuleNotFound              = 1003,
     InvalidSpread             = 1004,
-    SpreadArraySizeMismatch   = 1005,
-    ReturnNotFound            = 1006,
-    CaptureCountMismatch      = 1007,
-    InvalidBackRef            = 1008,
-    InvalidVarRef             = 1009,
+    ReturnNotFound            = 1005,
+    CaptureCountMismatch      = 1006,
+    InvalidBackRef            = 1007,
+    InvalidVarRef             = 1008,
+    InvalidPivot              = 1009,
+    PivotArraySizeMismatch    = 1010,
 
     ArrayOverrun              = 2001,
     MismatchOutputFrames      = 2002,
@@ -65,12 +65,13 @@ export const errorMessages = {
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
-    1004: "Spread argument is neither an array nor object",
-    1005: "All arrays in a spread must be of the same length",
-    1006: "Grammar does not contain a return rule",
-    1007: "All options within a rule must have the same number of captures",
-    1008: "Invalid back reference: $$1",
-    1009: "Invalid variable reference: $$1",
+    1004: "Spread argument is neither an array nor object: $1",
+    1005: "Grammar does not contain a return rule",
+    1006: "All options within a rule must have the same number of captures",
+    1007: "Invalid back reference: $$1",
+    1008: "Invalid variable reference: $$1",
+    1009: "Invalid pivot argment: $1",
+    1010: "All subarrays in a pivot must be of the same length",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",

@@ -229,13 +229,15 @@ var ParseManager = /** @class */ (function () {
             metaref: function (node, backrefs, vars, metas) {
                 return metas[node.name];
             },
+            pivot: function (node, backrefs, vars, metas) {
+            },
             spread: function (node, backrefs, vars, metas) {
                 // first convert to an array of arrays
                 var resolved = [];
                 for (var i = 0; i < node.refs.length; i++) {
                     var res = builders[node.refs[i].type](node.refs[i], backrefs, vars, metas);
                     if (!res || typeof res != 'object') {
-                        grammarError(Parser_1.ErrorCode.InvalidSpread, grammar.text, node.meta);
+                        grammarError(Parser_1.ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(res));
                     }
                     if (Array.isArray(res)) {
                         resolved.push(res);
@@ -291,7 +293,10 @@ var ParseManager = /** @class */ (function () {
                         ret = ret.concat(builders.spread(elem, backrefs, vars, metas));
                     }
                     else {
-                        ret.push(builders[elem.type](elem, backrefs, vars, metas));
+                        var val = builders[elem.type](elem, backrefs, vars, metas);
+                        if (!elem.collapse || val != null) {
+                            ret.push(val);
+                        }
                     }
                 }
                 return ret;

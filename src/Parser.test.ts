@@ -87,6 +87,13 @@ test("backref outputs", () => {
     expectParse(`return ... -> $0;`, 'aaa').toEqual('aaa');
 });
 
+test("pivot", () => {
+    expectParse(`return .* -> ^[[1,2,3],[4,5,6]];`).toEqual([[1,4],[2,5],[3,6]]);
+    expectParse(`return .* -> ^^[[1,2,3],[4,5,6]];`).toEqual([[1,2,3],[4,5,6]]);
+    expectParseFail(`return .* -> ^[1,2,3];`);
+    expectParseFail(`return .* -> ^[[1,2],[1,2,3]];`);
+});
+
 test("spread", () => {
     expectParse(`return .* -> [ ...[1,2,3], ...[4,5,6]];`).toEqual([1,2,3,4,5,6]);
     expectParse(`return {'a'}* {'b'}* -> [...$1, ...$2];`, 'aaabbb').toEqual(['a','a','a','b','b','b']);
@@ -228,7 +235,7 @@ test("grammar errors", () => {
     expect(parseGrammarError(`return foo -> true;`).char).toEqual(8);
     expect(parseError(`foo = . -> $0; return {foo} -> [...$1];`, 'a').char).toEqual(33);
     expect(parseError(`return {'a'}* {'b'}* -> [...($1,$2)];`, 'abb').char).toEqual(26);
-    expect(parseError(`foo = . -> true;`, 'a').code).toEqual(1006);
+    expect(parseError(`foo = . -> true;`, 'a').code).toEqual(1005);
     expect(parseGrammarError(`return {.} | {.} {.} -> true;`).char).toEqual(8);
     expect(parseGrammarError(`return {.} -> $2;`).char).toEqual(15);
     expect(parseGrammarError(`return . -> $foo;`).char).toEqual(13);

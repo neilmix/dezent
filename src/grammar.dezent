@@ -77,7 +77,7 @@ modifier =
 	'?' -> { repeat: false, required: false },
 	''  -> { repeat: false, required: true };
 
-value = { backref | varref | metaref | object | array | string | number | boolean | null } 
+value = { backref | varref | metaref | pivot | object | array | string | number | boolean | null } 
 	-> $1;
 
 backref = '$' { [0-9]+ } 
@@ -88,6 +88,9 @@ varref = '$' { identifier }
 
 metaref = '@' { 'position' | 'length' }
 	-> { type: 'metaref', name: $1 };
+
+pivot = '^' {backref|varref|array|pivot}
+	-> { type: 'pivot', value: $1 };
 
 spread = 
 	'...' {backref|varref|object|array|string} -> { type: 'spread', refs: [$1], ...$meta },
