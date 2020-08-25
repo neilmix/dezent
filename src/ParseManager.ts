@@ -6,7 +6,7 @@ import {
 
 import { 
     Grammar, Node, SelectorNode, Meta, RulesetNode, ReturnNode, RuleNode, TokenNode, PatternNode, RuleRefNode, ClassNode, AnyNode,
-    ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, VarRefNode, 
+    ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, ConstRefNode, 
     MetaRefNode, PivotNode, SpreadNode, StringTextNode, EscapeNode,
 } from './Grammar';
 
@@ -205,9 +205,9 @@ export class ParseManager {
 
          visitOutputNodes(rule.value, info, (node:ValueNode, info) => {
             if (node.type == "backref") info.backrefs.push(node);
-            if (node.type == "varref") {
+            if (node.type == "constref") {
                 if (!vars[node.name]) {
-                    grammarError(ErrorCode.InvalidVarRef, text, node.meta, node.name);
+                    grammarError(ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
          });
@@ -253,7 +253,7 @@ export class ParseManager {
                    return backrefs[node.index];
                 }
             },
-            varref: (node:VarRefNode, backrefs, vars, metas) => {
+            constref: (node:ConstRefNode, backrefs, vars, metas) => {
                 let resolved = vars[node.name];
                 return buildValue(resolved, backrefs, vars, metas);
             },

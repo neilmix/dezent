@@ -41,35 +41,35 @@ var ParseManager = /** @class */ (function () {
         // We have to do this up-front because not every branch
         // of the grammar tree may be visited/executed at runtime
         grammar.text = text;
-        var ruledefLookup = grammar.ruledefLookup = {};
-        for (var _i = 0, _a = grammar.ruledefs; _i < _a.length; _i++) {
-            var ruledef = _a[_i];
-            if (ruledefLookup[ruledef.name]) {
-                if (ruledef.name == 'return') {
-                    grammarError(Parser_1.ErrorCode.MultipleReturn, text, ruledef.meta, ruledef.name);
+        var rulesetLookup = grammar.rulesetLookup = {};
+        for (var _i = 0, _a = grammar.ruleset; _i < _a.length; _i++) {
+            var ruleset = _a[_i];
+            if (rulesetLookup[ruleset.name]) {
+                if (ruleset.name == 'return') {
+                    grammarError(Parser_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
                 }
                 else {
-                    grammarError(Parser_1.ErrorCode.DuplicateDefine, text, ruledef.meta, ruledef.name);
+                    grammarError(Parser_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
                 }
             }
-            ruledefLookup[ruledef.name] = ruledef;
+            rulesetLookup[ruleset.name] = ruleset;
         }
-        for (var _b = 0, _c = grammar.ruledefs; _b < _c.length; _b++) {
-            var ruledef = _c[_b];
-            var rules = ruledef.rules;
+        for (var _b = 0, _c = grammar.ruleset; _b < _c.length; _b++) {
+            var ruleset = _c[_b];
+            var rules = ruleset.rules;
             for (var i = 0; i < rules.length; i++) {
-                rules[i].ruledefName = ruledef["name"] || "return";
+                rules[i].rulesetName = ruleset["name"] || "return";
                 rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
             }
             // perform sanity checks
-            visitParseNodes("ruleref", ruledef, null, null, function (node) {
-                if (!ruledefLookup[node.name]) {
+            visitParseNodes("ruleref", ruleset, null, null, function (node) {
+                if (!rulesetLookup[node.name]) {
                     grammarError(Parser_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
                 }
             });
             // figure out if our selectors are capable of failing, which helps in
             // identifying expected tokens for good error messaging.
-            visitParseNodes("pattern", ruledef, null, null, function (node) {
+            visitParseNodes("pattern", ruleset, null, null, function (node) {
                 for (var _i = 0, _a = node.tokens; _i < _a.length; _i++) {
                     var token = _a[_i];
                     if (token.required && !(token.descriptor.type == "string" && token.descriptor.pattern == '')) {
@@ -79,7 +79,7 @@ var ParseManager = /** @class */ (function () {
                 }
                 node.canFail = false;
             });
-            visitParseNodes(["capture", "group", "rule"], ruledef, null, null, function (node) {
+            visitParseNodes(["capture", "group", "rule"], ruleset, null, null, function (node) {
                 node.canFail = true;
                 for (var _i = 0, _a = node.options; _i < _a.length; _i++) {
                     var pattern = _a[_i];
@@ -89,15 +89,15 @@ var ParseManager = /** @class */ (function () {
                     }
                 }
             });
-            if (ruledef.name == 'return') {
-                ruledef.canFail = true;
+            if (ruleset.name == 'return') {
+                ruleset.canFail = true;
             }
             else {
-                ruledef.canFail = true;
-                for (var _d = 0, _e = ruledef.rules; _d < _e.length; _d++) {
+                ruleset.canFail = true;
+                for (var _d = 0, _e = ruleset.rules; _d < _e.length; _d++) {
                     var rule = _e[_d];
                     if (!rule.canFail) {
-                        ruledef.canFail = false;
+                        ruleset.canFail = false;
                         break;
                     }
                 }
@@ -185,9 +185,9 @@ var ParseManager = /** @class */ (function () {
         visitOutputNodes(rule.value, info, function (node, info) {
             if (node.type == "backref")
                 info.backrefs.push(node);
-            if (node.type == "varref") {
+            if (node.type == "constref") {
                 if (!vars[node.name]) {
-                    grammarError(Parser_1.ErrorCode.InvalidVarRef, text, node.meta, node.name);
+                    grammarError(Parser_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
         });
@@ -201,17 +201,17 @@ var ParseManager = /** @class */ (function () {
     ParseManager.prototype.parseTextWithGrammar = function (grammar, text) {
         // pre-process the grammar
         var ret;
-        for (var _i = 0, _a = grammar.ruledefs; _i < _a.length; _i++) {
-            var ruledef = _a[_i];
-            if (ruledef.name == 'return') {
-                ret = ruledef;
+        for (var _i = 0, _a = grammar.ruleset; _i < _a.length; _i++) {
+            var ruleset = _a[_i];
+            if (ruleset.name == 'return') {
+                ret = ruleset;
             }
         }
         if (!ret) {
             grammarError(Parser_1.ErrorCode.ReturnNotFound, text);
         }
         // now parse
-        var parser = this.currentParser = new Parser_1.Parser(ret, text, grammar.ruledefLookup, this.options, this.debugLog);
+        var parser = this.currentParser = new Parser_1.Parser(ret, text, grammar.rulesetLookup, this.options, this.debugLog);
         parser.parse();
         var builders = {
             backref: function (node, backrefs) {
@@ -222,65 +222,71 @@ var ParseManager = /** @class */ (function () {
                     return backrefs[node.index];
                 }
             },
-            varref: function (node, backrefs, vars, metas) {
+            constref: function (node, backrefs, vars, metas) {
                 var resolved = vars[node.name];
-                return builders[resolved.type](resolved, backrefs, vars, metas);
+                return buildValue(resolved, backrefs, vars, metas);
             },
             metaref: function (node, backrefs, vars, metas) {
                 return metas[node.name];
             },
             pivot: function (node, backrefs, vars, metas) {
-            },
-            spread: function (node, backrefs, vars, metas) {
-                // first convert to an array of arrays
-                var resolved = [];
-                for (var i = 0; i < node.refs.length; i++) {
-                    var res = builders[node.refs[i].type](node.refs[i], backrefs, vars, metas);
-                    if (!res || typeof res != 'object') {
-                        grammarError(Parser_1.ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(res));
-                    }
-                    if (Array.isArray(res)) {
-                        resolved.push(res);
-                    }
-                    else {
-                        var items = [];
-                        for (var name_1 in res) {
-                            items.push(name_1, res[name_1]);
-                        }
-                        resolved.push(items);
-                    }
+                var value = buildValue(node.value, backrefs, vars, metas);
+                if (!Array.isArray(value)) {
+                    grammarError(Parser_1.ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(value));
                 }
-                if (resolved.length <= 1) {
-                    return resolved[0];
-                }
-                resolved.map(function (item) {
-                    if (item.length != resolved[0].length) {
-                        grammarError(Parser_1.ErrorCode.SpreadArraySizeMismatch, grammar.text, node.meta);
+                value.map(function (item) {
+                    if (!Array.isArray(item)) {
+                        grammarError(Parser_1.ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(item));
+                    }
+                    if (item.length != value[0].length) {
+                        grammarError(Parser_1.ErrorCode.PivotArraySizeMismatch, grammar.text, node.meta);
                     }
                 });
-                // now merge our arrays
-                // breadth-first, across then down
                 var ret = [];
-                for (var i = 0; i < resolved[0].length; i++) {
-                    for (var j = 0; j < resolved.length; j++) {
-                        ret.push(resolved[j][i]);
+                for (var _i = 0, _a = value[0]; _i < _a.length; _i++) {
+                    var item = _a[_i];
+                    ret.push([]);
+                }
+                for (var i = 0; i < value.length; i++) {
+                    for (var j = 0; j < value[0].length; j++) {
+                        ret[j][i] = value[i][j];
                     }
                 }
                 return ret;
+            },
+            spread: function (node, backrefs, vars, metas) {
+                var value = buildValue(node.value, backrefs, vars, metas);
+                if (!value || (typeof value != 'object' && typeof value != 'string')) {
+                    grammarError(Parser_1.ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(value));
+                }
+                if (typeof value == "string") {
+                    return value.split('');
+                }
+                else if (Array.isArray(value)) {
+                    return value;
+                }
+                else {
+                    return Object.entries(value);
+                }
             },
             object: function (node, backrefs, vars, metas) {
                 var ret = {};
                 for (var _i = 0, _a = node.members; _i < _a.length; _i++) {
                     var member = _a[_i];
                     if (member.type == "spread") {
-                        var items = builders.spread(member, backrefs, vars, metas);
-                        for (var i = 0; i < items.length; i += 2) {
-                            ret[items[i]] = items[i + 1];
+                        var tuples = buildValue(member, backrefs, vars, metas);
+                        ;
+                        for (var _b = 0, tuples_1 = tuples; _b < tuples_1.length; _b++) {
+                            var tuple = tuples_1[_b];
+                            if (!Array.isArray(tuple) || tuple.length != 2) {
+                                grammarError(Parser_1.ErrorCode.InvalidObjectTuple, grammar.text, member.meta, JSON.stringify(tuple));
+                            }
+                            ret[tuple[0]] = tuple[1];
                         }
                     }
                     else {
-                        ret[builders[member.name.type](member.name, backrefs, vars, metas)]
-                            = builders[member.value.type](member.value, backrefs, vars, metas);
+                        ret[buildValue(member.name, backrefs, vars, metas)]
+                            = buildValue(member.value, backrefs, vars, metas);
                     }
                 }
                 return ret;
@@ -290,10 +296,11 @@ var ParseManager = /** @class */ (function () {
                 for (var _i = 0, _a = node.elements; _i < _a.length; _i++) {
                     var elem = _a[_i];
                     if (elem.type == "spread") {
-                        ret = ret.concat(builders.spread(elem, backrefs, vars, metas));
+                        ret = ret.concat(buildValue(elem, backrefs, vars, metas));
                     }
                     else {
-                        var val = builders[elem.type](elem, backrefs, vars, metas);
+                        var val = buildValue(elem, backrefs, vars, metas);
+                        ;
                         if (!elem.collapse || val != null) {
                             ret.push(val);
                         }
@@ -325,11 +332,36 @@ var ParseManager = /** @class */ (function () {
             }
             else if (token.outputs && token.value) {
                 var backrefs = token.outputs.map(function (v) { return buildOutput(v); });
-                return builders[token.value.type](token.value, backrefs, grammar.vars, { position: token.pos, length: token.length });
+                return buildValue(token.value, backrefs, grammar.vars, { position: token.pos, length: token.length });
             }
             else {
                 return text.substr(token.pos, token.length);
             }
+        }
+        function buildValue(node, backrefs, vars, metas) {
+            var out = builders[node.type](node, backrefs, vars, metas);
+            if (node.access)
+                for (var _i = 0, _a = node.access; _i < _a.length; _i++) {
+                    var prop = _a[_i];
+                    if (out == null || (typeof out != 'object' && typeof out != 'string')) {
+                        grammarError(Parser_1.ErrorCode.InvalidAccessRoot, grammar.text, prop.meta, JSON.stringify(out));
+                    }
+                    var index = void 0;
+                    if (prop.value) {
+                        index = buildValue(prop.value, backrefs, vars, metas);
+                        if (typeof index != 'string' && typeof index != 'number') {
+                            grammarError(Parser_1.ErrorCode.InvalidAccessIndex, grammar.text, prop.meta, JSON.stringify(index));
+                        }
+                    }
+                    else {
+                        index = prop.name;
+                    }
+                    if (!out.hasOwnProperty(index)) {
+                        grammarError(Parser_1.ErrorCode.InvalidAccessProperty, grammar.text, prop.meta, index);
+                    }
+                    out = out[index];
+                }
+            return out;
         }
     };
     ParseManager.prototype.debug = function () {
@@ -393,7 +425,7 @@ function visitParseNodes(types, root, data, enter, exit) {
     }
     var items = [];
     switch (root.type) {
-        case "ruledef":
+        case "ruleset":
             items = root.rules;
             break;
         case "rule":
@@ -420,8 +452,8 @@ function visitParseNodes(types, root, data, enter, exit) {
 function visitOutputNodes(node, data, f) {
     f(node, data);
     var items;
-    if (node.type == "spread") {
-        items = node.refs;
+    if (node.type == "spread" || node.type == "pivot") {
+        items = [node.value];
     }
     else if (node.type == "array") {
         items = node.elements;

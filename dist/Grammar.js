@@ -13,54 +13,59 @@ function createUncompiledDezentGrammar() {
     // - grouping parens (and predicate/modifier) must be surrounded by whitespace
     // - character classes don't support spaces - use \\u0020
     // - collapse can only happen with backrefs
-    // - spread operator can only be used with backrefs
+    // - spread operator can only be used with backref or constref
     return {
-        ruledefs: [
-            returndef("_ ( {returndef|ruledef} _ | '$' {identifier} _ '=' _ {value} _ ';' _ )*", { ruledefs: "$1", vars: { '...($2,$3)': '' } }),
-            ruledef('_', "( singleLineComment | multiLineComment | whitespace? )*", null),
-            ruledef('singleLineComment', "'//' ( !'\\n' . )* '\\n'", null),
-            ruledef('multiLineComment', "'/*' ( !'*/' . )* '*/'", null),
-            ruledef('whitespace', "[\\u0020\\t-\\r]+", null),
-            ruledef('returndef', "'return' whitespace _ {rule} _ ';'", { type: 'ruledef', name: 'return', rules: ['$1'], '...$meta': '' }),
-            ruledef('ruledef', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruledef', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
-            ruledef('rule', "{options} _ '->' _ {value}", { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
-            ruledef('options', "{pattern} _ ( '|' _ {pattern} _ )*", { options: ['$1', '...$2'] }),
-            ruledef('pattern', "( {token} _ )+", { type: 'pattern', tokens: '$1' }),
-            ruledef('token', "{predicate} {capture|group|string|class|ruleref|any} {modifier}", { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
-            ruledef('capture', "'{' _ {captureOptions} _ '}'", { type: 'capture', '...$1': '' }),
-            ruledef('group', "'(' _ {options} _ ')'", { type: 'group', '...$1': '' }),
-            ruledef('captureOptions', "{capturePattern} _ ( '|' _ {capturePattern} _ )*", { options: ['$1', '...$2'] }),
-            ruledef('capturePattern', "( {captureToken} _ )+", { type: 'pattern', tokens: '$1' }),
-            ruledef('captureToken', "{predicate} {captureGroup|string|class|ruleref|any} {modifier}", { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
-            ruledef('captureGroup', "'(' _ {captureOptions} _ ')'", { type: 'group', '...$1': '' }),
-            ruledef('class', "'[' {classComponent}* ']'", { type: 'class', ranges: '$1' }),
-            ruledef('classComponent', "{classChar} '-' {classChar}", ['$1', '$2'], "{classChar}", ['$1', '$1']),
-            ruledef('classChar', "!']' {escape|char}", '$1'),
-            ruledef('char', "charstr", { type: 'char', value: '$0' }),
-            ruledef('any', "'.'", { type: 'any' }),
-            ruledef('ruleref', "{identifier}", { type: 'ruleref', name: '$1', '...$meta': '' }),
-            ruledef('predicate', "'&'", { and: true, not: false }, "'!'", { and: false, not: true }, "''", { and: false, not: false }),
-            ruledef('modifier', "'*'", { repeat: true, required: false }, "'+'", { repeat: true, required: true }, "'?'", { repeat: false, required: false }, "''", { repeat: false, required: true }),
-            ruledef('value', "{backref|varref|metaref|pivot|object|array|string|number|boolean|null}", '$1'),
-            ruledef('backref', "'$' {[0-9]+}", { type: 'backref', index: '$1', '...$meta': '' }),
-            ruledef('varref', "'$' {identifier}", { type: 'varref', name: '$1', '...$meta': '' }),
-            ruledef('metaref', "'@' {'position'|'length'}", { type: 'metaref', name: '$1' }),
-            ruledef('pivot', "'^' {backref|varref|array}", { type: 'pivot', value: '$1' }),
-            ruledef('spread', "'...' {backref|varref|object|array|string}", { type: 'spread', refs: ['$1'], '...$meta': '' }, "'...(' _ {backref|varref} ( _ ',' _ {backref|varref} )* _ ')'", { type: 'spread', refs: ['$1', '...$2'], '...$meta': '' }),
-            ruledef('object', "'{' ( _ {member} _ ',' )* _ {member}? _ '}'", { type: 'object', members: ['...$1', '$2?'] }),
-            ruledef('member', "{spread}", '$1', "{backref|string|identifierAsStringNode} _ ':' _ {value}", { type: 'member', name: '$1', value: '$2' }),
-            ruledef('array', "'[' ( _ {element} _ ',' )* _ {element}? _ ']'", { type: 'array', elements: ['...$1', '$2?'] }),
-            ruledef('element', "{value|spread} '?'", { '...$1': '', collapse: true }, "{value|spread}", { '...$1': '', collapse: false }),
-            ruledef('string', "'\\'' {escape|stringText}* '\\''", { type: 'string', tokens: '$1' }),
-            ruledef('stringText', "( !['\\\\] . )+", { type: 'text', value: '$0' }),
-            ruledef('number', "'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }, "'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }),
-            ruledef('boolean', "'true'", { type: 'boolean', value: true }, "'false'", { type: 'boolean', value: false }),
-            ruledef('null', "'null'", { type: 'null' }),
-            ruledef('escape', "'\\\\' {unicode|charstr}", { type: 'escape', value: '$1' }),
-            ruledef('unicode', "'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]", '$0'),
-            ruledef('charstr', "!'\\n' .", '$0'),
-            ruledef('identifier', "[_a-zA-Z] [_a-zA-Z0-9]*", '$0'),
-            ruledef('identifierAsStringNode', "{identifier}", { type: 'string', tokens: [{ type: 'text', value: '$1' }] }),
+        ruleset: [
+            returndef("_ ( {returndef|ruleset} _ | {constant} _ )*", { ruleset: "$1", vars: { '...$2': '' } }),
+            ruleset('_', "( singleLineComment | multiLineComment | whitespace? )*", null),
+            ruleset('singleLineComment', "'//' ( !'\\n' . )* '\\n'", null),
+            ruleset('multiLineComment', "'/*' ( !'*/' . )* '*/'", null),
+            ruleset('whitespace', "[\\u0020\\t-\\r]+", null),
+            ruleset('returndef', "'return' whitespace _ {rule} _ ';'", { type: 'ruleset', name: 'return', rules: ['$1'], '...$meta': '' }),
+            ruleset('ruleset', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
+            ruleset('constant', "'$' {identifier} _ '=' _ {value} _ ';'", ['$1', '$2']),
+            ruleset('rule', "{options} _ '->' _ {value}", { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
+            ruleset('options', "{pattern} _ ( '|' _ {pattern} _ )*", { options: ['$1', '...$2'] }),
+            ruleset('pattern', "( {token} _ )+", { type: 'pattern', tokens: '$1' }),
+            ruleset('token', "{predicate} {capture|group|string|class|ruleref|any} {modifier}", { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
+            ruleset('capture', "'{' _ {captureOptions} _ '}'", { type: 'capture', '...$1': '' }),
+            ruleset('group', "'(' _ {options} _ ')'", { type: 'group', '...$1': '' }),
+            ruleset('captureOptions', "{capturePattern} _ ( '|' _ {capturePattern} _ )*", { options: ['$1', '...$2'] }),
+            ruleset('capturePattern', "( {captureToken} _ )+", { type: 'pattern', tokens: '$1' }),
+            ruleset('captureToken', "{predicate} {captureGroup|string|class|ruleref|any} {modifier}", { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
+            ruleset('captureGroup', "'(' _ {captureOptions} _ ')'", { type: 'group', '...$1': '' }),
+            ruleset('class', "'[' {classComponent}* ']'", { type: 'class', ranges: '$1' }),
+            ruleset('classComponent', "{classChar} '-' {classChar}", ['$1', '$2'], "{classChar}", ['$1', '$1']),
+            ruleset('classChar', "!']' {escape|char}", '$1'),
+            ruleset('char', "charstr", { type: 'char', value: '$0' }),
+            ruleset('any', "'.'", { type: 'any' }),
+            ruleset('ruleref', "{identifier}", { type: 'ruleref', name: '$1', '...$meta': '' }),
+            ruleset('predicate', "'&'", { and: true, not: false }, "'!'", { and: false, not: true }, "''", { and: false, not: false }),
+            ruleset('modifier', "'*'", { repeat: true, required: false }, "'+'", { repeat: true, required: true }, "'?'", { repeat: false, required: false }, "''", { repeat: false, required: true }),
+            ruleset('value', "{backref|constref|metaref|pivot|object|array|string|number|boolean|null}", '$1'),
+            ruleset('backref', "'$' {[0-9]+} {access}", { type: 'backref', index: '$1', access: '$2', '...$meta': '' }),
+            ruleset('constref', "'$' {identifier} {access}", { type: 'constref', name: '$1', access: '$2', '...$meta': '' }),
+            ruleset('metaref', "'@' {'position'|'length'}", { type: 'metaref', name: '$1' }),
+            ruleset('pivot', "'^' {backref|constref|array|pivot}", { type: 'pivot', value: '$1', '...$meta': '' }),
+            ruleset('spread', "'...' {backref|constref|pivot|object|array|string}", { type: 'spread', value: '$1', '...$meta': '' }),
+            ruleset('object', "'{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}", { type: 'object', members: ['...$1', '$2?'], access: '$3' }),
+            ruleset('member', "{spread}", '$1', "{backref|string|identifierAsStringNode} _ ':' _ {value}", { type: 'member', name: '$1', value: '$2' }),
+            ruleset('array', "'[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}", { type: 'array', elements: ['...$1', '$2?'], access: '$3' }),
+            ruleset('element', "{value|spread} '?'", { '...$1': '', collapse: true }, "{value|spread}", { '...$1': '', collapse: false }),
+            ruleset('string', "'\\'' {escape|stringText}* '\\''", { type: 'string', tokens: '$1' }),
+            ruleset('stringText', "( !['\\\\] . )+", { type: 'text', value: '$0' }),
+            ruleset('number', "'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }, "'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }),
+            ruleset('boolean', "'true'", { type: 'boolean', value: true }, "'false'", { type: 'boolean', value: false }),
+            ruleset('null', "'null'", { type: 'null' }),
+            ruleset('access', "{dotAccess|bracketAccess}*", '$1'),
+            ruleset('dotAccess', "'.' {identifier}", { name: '$1', '...$meta': '' }),
+            ruleset('bracketAccess', "'[' _ {backref|constref|metaref|string|index} _ ']'", { value: '$1', '...$meta': '' }),
+            ruleset('index', "[0-9]+", { type: 'number', value: '$0' }),
+            ruleset('escape', "'\\\\' {unicode|charstr}", { type: 'escape', value: '$1' }),
+            ruleset('unicode', "'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]", '$0'),
+            ruleset('charstr', "!'\\n' .", '$0'),
+            ruleset('identifier', "[_a-zA-Z] [_a-zA-Z0-9]*", '$0'),
+            ruleset('identifierAsStringNode', "{identifier}", { type: 'string', tokens: [{ type: 'text', value: '$1' }] }),
         ],
         vars: {
             meta: output({ meta: { pos: "@position", length: "@length" } })
@@ -70,12 +75,12 @@ function createUncompiledDezentGrammar() {
 exports.createUncompiledDezentGrammar = createUncompiledDezentGrammar;
 function returndef(options, output) {
     return {
-        type: 'ruledef',
+        type: 'ruleset',
         name: 'return',
         rules: [rule(options, output)]
     };
 }
-function ruledef(name) {
+function ruleset(name) {
     var args = [];
     for (var _i = 1; _i < arguments.length; _i++) {
         args[_i - 1] = arguments[_i];
@@ -85,7 +90,7 @@ function ruledef(name) {
         rules.push(rule(args[i], args[i + 1]));
     }
     return {
-        type: 'ruledef',
+        type: 'ruleset',
         name: name,
         rules: rules
     };
@@ -268,7 +273,8 @@ function output(value) {
                 }
                 return {
                     type: 'array',
-                    elements: ret
+                    elements: ret,
+                    access: []
                 };
             }
             else {
@@ -288,14 +294,16 @@ function output(value) {
                 }
                 return {
                     type: 'object',
-                    members: members
+                    members: members,
+                    access: []
                 };
             }
         case 'string':
             if (value.match(/^\$(\d+)/)) {
                 return {
                     type: 'backref',
-                    index: RegExp.$1
+                    index: RegExp.$1,
+                    access: []
                 };
             }
             else if (value.match(/^@([a-zA-Z_]+)/)) {
@@ -308,14 +316,11 @@ function output(value) {
                 var ref = function (name) {
                     // don't use a regexp here because it will mess up the backrefs just prior to this call
                     return name[0] <= '9'
-                        ? { type: 'backref', index: name }
-                        : { type: 'varref', name: name };
+                        ? { type: 'backref', index: name, access: [] }
+                        : { type: 'constref', name: name, access: [] };
                 };
                 if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
-                    return { type: 'spread', refs: [ref(RegExp.$1)] };
-                }
-                else if (value.match(/^...\(\$([0-9]+|[a-zA-Z_]+),\$([0-9]+|[a-zA-Z_]+)\)/)) {
-                    return { type: 'spread', refs: [ref(RegExp.$1), ref(RegExp.$2)] };
+                    return { type: 'spread', value: ref(RegExp.$1) };
                 }
                 else {
                     throw new Error();

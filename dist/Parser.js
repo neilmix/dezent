@@ -4,10 +4,6 @@
 exports.__esModule = true;
 exports.findLineAndChar = exports.parsingError = exports.parserError = exports.Parser = exports.MatchStatus = exports.parseGrammar = exports.parseText = exports.findDezentGrammar = exports.errorMessages = exports.ErrorCode = void 0;
 // todo:
-// - pivot operator
-// - object spread requires/produces tuples
-// - remove multi-arg spread
-// - object & array accessors
 // - documentation
 // - command line script w/tests
 // - package license
@@ -20,6 +16,7 @@ exports.findLineAndChar = exports.parsingError = exports.parserError = exports.P
 // - backref within pattern
 // - regex-like search-and-find
 // speculative/research todo:
+// - compile-time data-type checking
 // - packrat cache eviction to free memory
 // - error messaging
 // - error recovery
@@ -36,12 +33,16 @@ var ErrorCode;
     ErrorCode[ErrorCode["MultipleReturn"] = 1002] = "MultipleReturn";
     ErrorCode[ErrorCode["RuleNotFound"] = 1003] = "RuleNotFound";
     ErrorCode[ErrorCode["InvalidSpread"] = 1004] = "InvalidSpread";
-    ErrorCode[ErrorCode["SpreadArraySizeMismatch"] = 1005] = "SpreadArraySizeMismatch";
-    ErrorCode[ErrorCode["ReturnNotFound"] = 1006] = "ReturnNotFound";
-    ErrorCode[ErrorCode["CaptureCountMismatch"] = 1007] = "CaptureCountMismatch";
-    ErrorCode[ErrorCode["InvalidBackRef"] = 1008] = "InvalidBackRef";
-    ErrorCode[ErrorCode["InvalidVarRef"] = 1009] = "InvalidVarRef";
-    ErrorCode[ErrorCode["InvalidPivot"] = 1010] = "InvalidPivot";
+    ErrorCode[ErrorCode["ReturnNotFound"] = 1005] = "ReturnNotFound";
+    ErrorCode[ErrorCode["CaptureCountMismatch"] = 1006] = "CaptureCountMismatch";
+    ErrorCode[ErrorCode["InvalidBackRef"] = 1007] = "InvalidBackRef";
+    ErrorCode[ErrorCode["InvalidConstRef"] = 1008] = "InvalidConstRef";
+    ErrorCode[ErrorCode["InvalidPivot"] = 1009] = "InvalidPivot";
+    ErrorCode[ErrorCode["PivotArraySizeMismatch"] = 1010] = "PivotArraySizeMismatch";
+    ErrorCode[ErrorCode["InvalidObjectTuple"] = 1011] = "InvalidObjectTuple";
+    ErrorCode[ErrorCode["InvalidAccessRoot"] = 1012] = "InvalidAccessRoot";
+    ErrorCode[ErrorCode["InvalidAccessIndex"] = 1013] = "InvalidAccessIndex";
+    ErrorCode[ErrorCode["InvalidAccessProperty"] = 1014] = "InvalidAccessProperty";
     ErrorCode[ErrorCode["ArrayOverrun"] = 2001] = "ArrayOverrun";
     ErrorCode[ErrorCode["MismatchOutputFrames"] = 2002] = "MismatchOutputFrames";
     ErrorCode[ErrorCode["CaptureAlreadyInProgress"] = 2003] = "CaptureAlreadyInProgress";
@@ -60,12 +61,16 @@ exports.errorMessages = {
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
     1004: "Spread argument is neither an array nor object: $1",
-    1005: "All arrays in a spread must be of the same length",
-    1006: "Grammar does not contain a return rule",
-    1007: "All options within a rule must have the same number of captures",
-    1008: "Invalid back reference: $$1",
-    1009: "Invalid variable reference: $$1",
-    1010: "Invalid pivot argment: $1",
+    1005: "Grammar does not contain a return rule",
+    1006: "All options within a rule must have the same number of captures",
+    1007: "Invalid back reference: $$1",
+    1008: "Invalid variable reference: $$1",
+    1009: "Invalid pivot argment: $1",
+    1010: "All subarrays in a pivot must be of the same length",
+    1011: "When spreading an array into an object, array elements must be arrays of length 2 but instead received: $1",
+    1012: "Attempted to access property of non-object value: $1",
+    1013: "Attempted to access property using a key that was not a string or number: $1",
+    1014: "Attempted to access a property that doesn't exist: $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -117,12 +122,12 @@ var MatchStatus;
     MatchStatus[MatchStatus["Fail"] = 2] = "Fail";
 })(MatchStatus = exports.MatchStatus || (exports.MatchStatus = {}));
 var Parser = /** @class */ (function () {
-    function Parser(root, text, ruledefs, options, debugLog) {
+    function Parser(root, text, ruleset, options, debugLog) {
         this.stack = [];
         this.output = new OutputContext_1.OutputContext();
         this.omitFails = 0;
         this.text = text;
-        this.ruledefs = ruledefs;
+        this.ruleset = ruleset;
         this.options = options || {};
         this.debugLog = debugLog;
         this.enter(root);
@@ -141,7 +146,7 @@ var Parser = /** @class */ (function () {
                         this.enter(current.items[current.index]);
                         break;
                     case "ruleref":
-                        this.enter(this.ruledefs[current.node.name]);
+                        this.enter(this.ruleset[current.node.name]);
                         break;
                     case "string":
                     case "class":
@@ -166,7 +171,7 @@ var Parser = /** @class */ (function () {
                     // our parsing is complete!
                     break;
                 }
-                if (["ruledef", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
+                if (["ruleset", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
                     if (!exited.node["canFail"]) {
                         this.omitFails--;
                     }
@@ -198,7 +203,7 @@ var Parser = /** @class */ (function () {
                         next.status = MatchStatus.Pass;
                     }
                     switch (next.node.type) {
-                        case "ruledef":
+                        case "ruleset":
                             this.output.exitFrame(next.node, true);
                             break;
                         case "rule":
@@ -224,7 +229,7 @@ var Parser = /** @class */ (function () {
                     if (["capture", "group"].includes(exited.node.type)) {
                         this.output.exitGroup(false);
                     }
-                    if (["ruledef", "rule", "capture", "group"].includes(next.node.type)) {
+                    if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
                             next.status = MatchStatus.Fail;
                         }
@@ -243,7 +248,7 @@ var Parser = /** @class */ (function () {
                         next.status = MatchStatus.Fail;
                     }
                     switch (next.node.type) {
-                        case "ruledef":
+                        case "ruleset":
                             if (next.node.name == 'return') {
                                 parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
                             }
@@ -276,13 +281,13 @@ var Parser = /** @class */ (function () {
     Parser.prototype.enter = function (node) {
         var current = this.top();
         var items;
-        if (["ruledef", "rule", "pattern", "capture", "group"].includes(node.type)) {
+        if (["ruleset", "rule", "pattern", "capture", "group"].includes(node.type)) {
             if (!node["canFail"]) {
                 this.omitFails++;
             }
         }
         switch (node.type) {
-            case "ruledef":
+            case "ruleset":
                 items = node.rules;
                 this.output.enterFrame(node);
                 break;

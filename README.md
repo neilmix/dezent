@@ -92,11 +92,11 @@ Dezent uses top-down parsing starting with the return rule. It is expected to co
 'aaa'
 ```
 
-## rule set
+## ruleset
 ```
 {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'
 ```
-Rule sets provide abstraction, reusability, and recursion within Dezent grammars. A set is given a name and one or more rules that match input. Rule sets are referred to within patterns via the set's name. The rules are evaluated in order, and the first rule to match will yield the set's output, thereby termination matching for the rule set. If no rules match, the set will fail to match. Each rule set name must be unique within the grammar.
+Rulesets provide abstraction, reusability, and recursion within Dezent grammars. A ruleset is given a name and one or more rules that match input. Rulesets are referred to within patterns via the ruleset's name. Its rules are evaluated in order, and the first rule to match will yield the ruleset's output, thereby termination matching for the ruleset. If no rules match, the ruleset will fail to match. Each ruleset name must be unique within the grammar.
 
 **Examples**
 ```javascript
@@ -120,9 +120,7 @@ Rule sets provide abstraction, reusability, and recursion within Dezent grammars
 ['1', ['2', '3']]
 ```
 
-## = variable assignment
-
-## -> rule
+## rule
 ```
 pattern _ ( '|' _ pattern _ )* _ '->' _ value
 ```
@@ -137,7 +135,7 @@ Rules are the core of Dezent's pattern matching power. Each rule consists of one
 undefined
 ```
 
-## patterns
+## pattern
 Patterns consist of a sequence of tokens that match (or fail to match) input text.
 
 **Syntax**
@@ -167,6 +165,8 @@ Patterns consist of a sequence of tokens that match (or fail to match) input tex
 ## + repeate 1 or more
 
 ## ? maybe
+
+## = constant
 
 # Reference - Output
 

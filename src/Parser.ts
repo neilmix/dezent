@@ -41,7 +41,7 @@ export enum ErrorCode {
     ReturnNotFound            = 1005,
     CaptureCountMismatch      = 1006,
     InvalidBackRef            = 1007,
-    InvalidVarRef             = 1008,
+    InvalidConstRef             = 1008,
     InvalidPivot              = 1009,
     PivotArraySizeMismatch    = 1010,
     InvalidObjectTuple        = 1011,

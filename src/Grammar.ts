@@ -31,7 +31,7 @@ export interface RangeNode extends Node {
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = RulesetNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
-export type ValueNode = BackRefNode | VarRefNode | MetaRefNode | PivotNode | SpreadNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
+export type ValueNode = BackRefNode | ConstRefNode | MetaRefNode | PivotNode | SpreadNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 export interface MetaData {
 }
@@ -80,10 +80,10 @@ export interface EscapeNode       extends RangeNode    { type: 'escape',    valu
 export interface CharNode         extends RangeNode    { type: 'char',      value: string }
 
 export interface BackRefNode      extends OutputNode { type: 'backref',   index: string }
-export interface VarRefNode       extends OutputNode { type: 'varref',    name: string }
+export interface ConstRefNode       extends OutputNode { type: 'constref',    name: string }
 export interface MetaRefNode      extends OutputNode { type: 'metaref',   name: string }
-export interface PivotNode        extends OutputNode { type: 'pivot',     value: BackRefNode|VarRefNode|ObjectNode|ArrayNode|PivotNode }
-export interface SpreadNode       extends OutputNode { type: 'spread',    value: BackRefNode|VarRefNode|PivotNode|ObjectNode|ArrayNode }
+export interface PivotNode        extends OutputNode { type: 'pivot',     value: BackRefNode|ConstRefNode|ObjectNode|ArrayNode|PivotNode }
+export interface SpreadNode       extends OutputNode { type: 'spread',    value: BackRefNode|ConstRefNode|PivotNode|ObjectNode|ArrayNode }
 export interface ObjectNode       extends OutputNode { type: 'object',    members: (MemberNode|SpreadNode)[] }
 export interface ArrayNode        extends OutputNode { type: 'array',     elements: ValueNode[] }
 export interface NumberNode       extends OutputNode { type: 'number',    value: string }
@@ -106,11 +106,11 @@ export function createUncompiledDezentGrammar():Grammar {
 	// - grouping parens (and predicate/modifier) must be surrounded by whitespace
 	// - character classes don't support spaces - use \\u0020
 	// - collapse can only happen with backrefs
-	// - spread operator can only be used with backref or varref
+	// - spread operator can only be used with backref or constref
 
 	return {
 		ruleset: [
-			returndef(`_ ( {returndef|ruleset} _ | {vardef} _ )*`, 
+			returndef(`_ ( {returndef|ruleset} _ | {constant} _ )*`, 
 				{ ruleset: "$1", vars: { '...$2': '' } }),
 
 			ruleset('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
@@ -125,7 +125,7 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('ruleset', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
 				{ type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
 
-			ruleset('vardef', `'$' {identifier} _ '=' _ {value} _ ';'`,
+			ruleset('constant', `'$' {identifier} _ '=' _ {value} _ ';'`,
 				['$1', '$2']),
 			
 			ruleset('rule', `{options} _ '->' _ {value}`,
@@ -188,22 +188,22 @@ export function createUncompiledDezentGrammar():Grammar {
 				`'?'`, { repeat: false, required: false },
 				`''`,  { repeat: false, required: true }),
 
-			ruleset('value', `{backref|varref|metaref|pivot|object|array|string|number|boolean|null}`,
+			ruleset('value', `{backref|constref|metaref|pivot|object|array|string|number|boolean|null}`,
 				'$1'),
 
 			ruleset('backref', `'$' {[0-9]+} {access}`,
 				{ type: 'backref', index: '$1', access: '$2', '...$meta': '' }),
 
-			ruleset('varref', `'$' {identifier} {access}`,
-				{ type: 'varref', name: '$1', access: '$2', '...$meta': '' }),
+			ruleset('constref', `'$' {identifier} {access}`,
+				{ type: 'constref', name: '$1', access: '$2', '...$meta': '' }),
 
 			ruleset('metaref', `'@' {'position'|'length'}`,
 				{ type: 'metaref', name: '$1' }),
 
-			ruleset('pivot', `'^' {backref|varref|array|pivot}`,
+			ruleset('pivot', `'^' {backref|constref|array|pivot}`,
 				{ type: 'pivot', value: '$1', '...$meta':'' }),
 
-			ruleset('spread', `'...' {backref|varref|pivot|object|array|string}`, 
+			ruleset('spread', `'...' {backref|constref|pivot|object|array|string}`, 
 				{ type: 'spread', value: '$1', '...$meta': '' }),
 
 			ruleset('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}`,
@@ -243,7 +243,7 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('dotAccess', `'.' {identifier}`,
 				{ name: '$1', '...$meta': '' }),
 
-			ruleset('bracketAccess', `'[' _ {backref|varref|metaref|string|index} _ ']'`,
+			ruleset('bracketAccess', `'[' _ {backref|constref|metaref|string|index} _ ']'`,
 				{ value: '$1', '...$meta': '' }),
 
 			ruleset('index', `[0-9]+`,
@@ -495,11 +495,11 @@ function output(value: any) : ValueNode {
 					name: RegExp.$1
 				}
 			} else if (value.match(/^\.\.\./)) {
-				let ref = function(name:string):BackRefNode|VarRefNode { 
+				let ref = function(name:string):BackRefNode|ConstRefNode { 
 					// don't use a regexp here because it will mess up the backrefs just prior to this call
 					return name[0] <= '9'
 						? { type: 'backref', index: name, access: [] } 
-						: { type: 'varref', name: name, access: [] };
+						: { type: 'constref', name: name, access: [] };
 				}
 				if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
 					return { type: 'spread', value: ref(RegExp.$1) };

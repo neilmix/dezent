@@ -73,12 +73,20 @@ test("backref outputs", function () {
     expectParse("\n        return {foo} {bar} -> [$1, $2];\n        foo = {.}{.} -> { $1: $2 };\n        bar = {.}{.} -> { $1: $2 };\n    ", 'abcd').toEqual([{ a: 'b' }, { c: 'd' }]);
     expectParse("return ... -> $0;", 'aaa').toEqual('aaa');
 });
+test("pivot", function () {
+    expectParse("return .* -> ^[[1,2,3],[4,5,6]];").toEqual([[1, 4], [2, 5], [3, 6]]);
+    expectParse("return .* -> ^^[[1,2,3],[4,5,6]];").toEqual([[1, 2, 3], [4, 5, 6]]);
+    expectParseFail("return .* -> ^[1,2,3];");
+    expectParseFail("return .* -> ^[[1,2],[1,2,3]];");
+});
 test("spread", function () {
-    expectParse("return .* -> [ ...[1,2,3], ...[4,5,6]];").toEqual([1, 2, 3, 4, 5, 6]);
+    expectParse("return .* -> [ 'a', ...[1,2,3], ...[4,5,6], 'b'];").toEqual(['a', 1, 2, 3, 4, 5, 6, 'b']);
+    expectParse("return .* -> [ 'x', ...{a: 1, b:2}, 'y' ];").toEqual(['x', ['a', 1], ['b', 2], 'y']);
+    expectParse("return .* -> { a: 1, ...[['b',2], ['c',3]], d: 4 };").toEqual({ a: 1, b: 2, c: 3, d: 4 });
+    expectParse("return .* -> { a: 1, ...{b: 2, c: 3 }, d: 4 };").toEqual({ a: 1, b: 2, c: 3, d: 4 });
+    expectParse("return .* -> [ ...'foo' ];").toEqual(['f', 'o', 'o']);
     expectParse("return {'a'}* {'b'}* -> [...$1, ...$2];", 'aaabbb').toEqual(['a', 'a', 'a', 'b', 'b', 'b']);
-    expectParse("return {[a-c]}* {[d-f]}* -> [...($1,$2)];", 'abcdef').toEqual(['a', 'd', 'b', 'e', 'c', 'f']);
-    expectParse("return {[a-c]}* {[d-f]}* -> {...($1,$2)};", 'abcdef').toEqual({ a: 'd', b: 'e', c: 'f' });
-    expectParse("\n        return {foo} -> [...$1];\n        foo = {.}{.}{.}{.}{.}{.} -> { $1: $4, $2: $5, $3: $6 };\n    ", 'abcdef').toEqual(['a', 'd', 'b', 'e', 'c', 'f']);
+    expectParse("\n        return {foo} -> [...$1];\n        foo = {.}{.}{.}{.}{.}{.} -> { $1: $4, $2: $5, $3: $6 };\n    ", 'abcdef').toEqual([['a', 'd'], ['b', 'e'], ['c', 'f']]);
 });
 test("the 'any' terminal", function () {
     expectParse("return {.} -> $1;", "x").toEqual('x');
@@ -139,15 +147,25 @@ test("variables", function () {
     expectParse("$foo = ['bar', {baz: true}]; return .* -> $foo;").toEqual(['bar', { baz: true }]);
     expectParse("$foo = $1; return {.*} -> $foo;", 'blah').toEqual('blah');
     expectParse("$foo = { foo: 'a', bar: 'b' }; return .* -> { baz: 'c', ...$foo, bee: [...$foo] };")
-        .toEqual({ baz: 'c', foo: 'a', bar: 'b', bee: ['foo', 'a', 'bar', 'b'] });
-    expectParse("$a = ['foo', 'bar']; $b = ['a', 'b']; return .* -> { baz: 'c', ...($a, $b) };")
-        .toEqual({ baz: 'c', foo: 'a', bar: 'b' });
+        .toEqual({ baz: 'c', foo: 'a', bar: 'b', bee: [['foo', 'a'], ['bar', 'b']] });
     expectGrammarFail("return .* -> $foo;");
 });
 test("metas", function () {
     expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> { pos: @position, length: @length };\n    ", '123456').toEqual({ pos: 1, length: 3 });
     expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> $meta;\n        $meta = { pos: @position, length: @length };\n    ", '123456').toEqual({ pos: 1, length: 3 });
     expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> { foo: 'bar', ...$meta };\n        $meta = { pos: @position, length: @length };\n    ", '123456').toEqual({ foo: 'bar', pos: 1, length: 3 });
+});
+test("access", function () {
+    expectParse("return .* -> {a:1}.a;").toEqual(1);
+    expectParse("return .* -> {a:1}['a'];").toEqual(1);
+    expectParse("return .* -> [1][0];").toEqual(1);
+    expectParse("return .* -> [1]['0'];").toEqual(1);
+    expectParse("$foo = {a:1}; return .* -> $foo.a;").toEqual(1);
+    expectParse("$foo = {a:1}; return .* -> $foo['a'];").toEqual(1);
+    expectParse("$foo = 'foo'; return .* -> $foo[0];").toEqual('f');
+    expectParse("foo = .* -> {a: 1}; return {foo} -> $1.a;").toEqual(1);
+    expectParse("foo = .* -> {a: 1}; return {foo} -> $1['a'];").toEqual(1);
+    expectParse("$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;").toEqual(2);
 });
 test("dezent grammar documentation", function () {
     var uncompiledDezent = Grammar_1.createUncompiledDezentGrammar();
@@ -170,13 +188,21 @@ test("expected grammar terminals", function () {
     expect(parseGrammarError("return ( . ([ab] {'f'} 'foo)) -> $1;").expected.sort()).toEqual(["'", "\\"]);
 });
 test("grammar errors", function () {
-    expect(parseGrammarError("return foo -> null; foo = . -> null; foo = .. -> 1;").char).toEqual(38);
-    expect(parseGrammarError("return . -> 1; return . -> 2;").char).toEqual(16);
-    expect(parseGrammarError("return foo -> true;").char).toEqual(8);
-    expect(parseError("foo = . -> $0; return {foo} -> [...$1];", 'a').char).toEqual(33);
-    expect(parseError("return {'a'}* {'b'}* -> [...($1,$2)];", 'abb').char).toEqual(26);
-    expect(parseError("foo = . -> true;", 'a').code).toEqual(1006);
-    expect(parseGrammarError("return {.} | {.} {.} -> true;").char).toEqual(8);
-    expect(parseGrammarError("return {.} -> $2;").char).toEqual(15);
-    expect(parseGrammarError("return . -> $foo;").char).toEqual(13);
+    /* 1001 */ expect(parseGrammarError("return foo -> null; foo = . -> null; foo = .. -> 1;").char).toEqual(38);
+    /* 1002 */ expect(parseGrammarError("return . -> 1; return . -> 2;").char).toEqual(16);
+    /* 1003 */ expect(parseGrammarError("return foo -> true;").char).toEqual(8);
+    /* 1004 */ expect(parseError("foo = . -> 1; return {foo} -> [...$1];", 'a').char).toEqual(32);
+    /* 1005 */ expect(parseError("foo = . -> true;", 'a').code).toEqual(1005);
+    /* 1006 */ expect(parseGrammarError("return {.} | {.} {.} -> true;").char).toEqual(8);
+    /* 1007 */ expect(parseGrammarError("return {.} -> $2;").char).toEqual(15);
+    /* 1008 */ expect(parseGrammarError("return . -> $foo;").char).toEqual(13);
+    /* 1009 */ expect(parseError("$foo = 'foo'; return . -> ^$foo;", 'a').char).toEqual(27);
+    /* 1010 */ expect(parseError("return . -> ^[[1,2],[1,2,3]];", 'a').char).toEqual(13);
+    /* 1011 */ expect(parseError("return . -> { ...[1] };", 'a').char).toEqual(15);
+    /* 1012 */ expect(parseError("$foo = 234; return .* -> $foo[1];", 'a').char).toEqual(30);
+    /* 1013 */ expect(parseError("$foo = {}; return .* -> [1][$foo];", 'a').char).toEqual(28);
+    /* 1013 */ expect(parseError("return .* -> {}.foo;", 'a').char).toEqual(16);
+});
+test("commants", function () {
+    expectParse("\n        // return .* -> 1;\n        /*\n           return .* -> 2;\n        */\n        return .* -> 3;\n    ").toEqual(3);
 });
