@@ -16,6 +16,7 @@
 // - regex-like search-and-find
 
 // speculative/research todo:
+// - compile-time data-type checking
 // - packrat cache eviction to free memory
 // - error messaging
 // - error recovery
@@ -45,6 +46,9 @@ export enum ErrorCode {
     InvalidPivot              = 1009,
     PivotArraySizeMismatch    = 1010,
     InvalidObjectTuple        = 1011,
+    InvalidAccessRoot         = 1012,
+    InvalidAccessIndex        = 1013,
+    InvalidAccessProperty     = 1014,
 
     ArrayOverrun              = 2001,
     MismatchOutputFrames      = 2002,
@@ -72,6 +76,9 @@ export const errorMessages = {
     1009: "Invalid pivot argment: $1",
     1010: "All subarrays in a pivot must be of the same length",
     1011: "When spreading an array into an object, array elements must be arrays of length 2 but instead received: $1",
+    1012: "Attempted to access property of non-object value: $1",
+    1013: "Attempted to access property using a key that was not a string or number: $1",
+    1014: "Attempted to access a property that doesn't exist: $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",

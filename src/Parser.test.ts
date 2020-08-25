@@ -205,6 +205,19 @@ test("metas", () => {
     `, '123456').toEqual({ foo: 'bar', pos: 1, length: 3 });
 });
 
+test("access", () => {
+    expectParse(`return .* -> {a:1}.a;`).toEqual(1);
+    expectParse(`return .* -> {a:1}['a'];`).toEqual(1);
+    expectParse(`return .* -> [1][0];`).toEqual(1);
+    expectParse(`return .* -> [1]['0'];`).toEqual(1);
+    expectParse(`$foo = {a:1}; return .* -> $foo.a;`).toEqual(1);
+    expectParse(`$foo = {a:1}; return .* -> $foo['a'];`).toEqual(1);
+    expectParse(`$foo = 'foo'; return .* -> $foo[0];`).toEqual('f');
+    expectParse(`foo = .* -> {a: 1}; return {foo} -> $1.a;`).toEqual(1);
+    expectParse(`foo = .* -> {a: 1}; return {foo} -> $1['a'];`).toEqual(1);
+    expectParse(`$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;`).toEqual(2);
+});
+
 test("dezent grammar documentation", () => {
     let uncompiledDezent = createUncompiledDezentGrammar();
     let textDezent = readFileSync("./test/grammar.dezent").toString();
@@ -241,6 +254,9 @@ test("grammar errors", () => {
     /* 1009 */ expect(parseError(`$foo = 'foo'; return . -> ^$foo;`, 'a').char).toEqual(27);
     /* 1010 */ expect(parseError(`return . -> ^[[1,2],[1,2,3]];`,'a').char).toEqual(13);
     /* 1011 */ expect(parseError(`return . -> { ...[1] };`, 'a').char).toEqual(15);
+    /* 1012 */ expect(parseError(`$foo = 234; return .* -> $foo[1];`, 'a').char).toEqual(30);
+    /* 1013 */ expect(parseError(`$foo = {}; return .* -> [1][$foo];`, 'a').char).toEqual(28);
+    /* 1013 */ expect(parseError(`return .* -> {}.foo;`, 'a').char).toEqual(16);
 });
 
 test("commants", () => {

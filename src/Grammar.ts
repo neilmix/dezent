@@ -15,7 +15,8 @@ export interface Node {
 	meta?: Meta
 }
 export interface OutputNode extends Node {
-	collapse?: boolean
+	collapse?: boolean,
+	access?: {name?: string, value?: ValueNode, meta: Meta}[]
 }
 
 export interface SelectorNode extends Node { options: PatternNode[], canFail?: boolean }
@@ -190,11 +191,11 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruledef('value', `{backref|varref|metaref|pivot|object|array|string|number|boolean|null}`,
 				'$1'),
 
-			ruledef('backref', `'$' {[0-9]+}`,
-				{ type: 'backref', index: '$1', '...$meta': '' }),
+			ruledef('backref', `'$' {[0-9]+} {access}`,
+				{ type: 'backref', index: '$1', access: '$2', '...$meta': '' }),
 
-			ruledef('varref', `'$' {identifier}`,
-				{ type: 'varref', name: '$1', '...$meta': '' }),
+			ruledef('varref', `'$' {identifier} {access}`,
+				{ type: 'varref', name: '$1', access: '$2', '...$meta': '' }),
 
 			ruledef('metaref', `'@' {'position'|'length'}`,
 				{ type: 'metaref', name: '$1' }),
@@ -205,15 +206,15 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruledef('spread', `'...' {backref|varref|pivot|object|array|string}`, 
 				{ type: 'spread', value: '$1', '...$meta': '' }),
 
-			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}'`,
-				{ type: 'object', members: ['...$1', '$2?'] }),
+			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}`,
+				{ type: 'object', members: ['...$1', '$2?'], access: '$3' }),
 
 			ruledef('member', 
 				`{spread}`, '$1',
 				`{backref|string|identifierAsStringNode} _ ':' _ {value}`, { type: 'member', name: '$1', value: '$2' }),
 
-			ruledef('array', `'[' ( _ {element} _ ',' )* _ {element}? _ ']'`,
-				{ type: 'array', elements: ['...$1', '$2?'] }),
+			ruledef('array', `'[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}`,
+				{ type: 'array', elements: ['...$1', '$2?'], access: '$3' }),
 
 			ruledef('element',
 				`{value|spread} '?'`, { '...$1':'', collapse: true },
@@ -235,6 +236,18 @@ export function createUncompiledDezentGrammar():Grammar {
 
 			ruledef('null', `'null'`,
 				{ type: 'null' }),
+
+			ruledef('access', `{dotAccess|bracketAccess}*`,
+				'$1'),
+
+			ruledef('dotAccess', `'.' {identifier}`,
+				{ name: '$1', '...$meta': '' }),
+
+			ruledef('bracketAccess', `'[' _ {backref|varref|metaref|string|index} _ ']'`,
+				{ value: '$1', '...$meta': '' }),
+
+			ruledef('index', `[0-9]+`,
+				{ type: 'number', value: '$0' }),
 
 			ruledef('escape', `'\\\\' {unicode|charstr}`,
 				{ type: 'escape', value: '$1' }),
@@ -446,7 +459,8 @@ function output(value: any) : ValueNode {
 				}
 				return { 
 					type: 'array',
-					elements: ret
+					elements: ret,
+					access: []
 				}
 			} else {
 				let members = [];
@@ -464,14 +478,16 @@ function output(value: any) : ValueNode {
 				}
 				return {
 					type: 'object',
-					members: members
+					members: members,
+					access: []
 				}
 			}
 		case 'string':
 			if (value.match(/^\$(\d+)/)) {
 				return {
 					type: 'backref',
-					index: RegExp.$1
+					index: RegExp.$1,
+					access: []
 				}
 			} else if (value.match(/^@([a-zA-Z_]+)/)) {
 				return {
@@ -482,8 +498,8 @@ function output(value: any) : ValueNode {
 				let ref = function(name:string):BackRefNode|VarRefNode { 
 					// don't use a regexp here because it will mess up the backrefs just prior to this call
 					return name[0] <= '9'
-						? { type: 'backref', index: name } 
-						: { type: 'varref', name: name };
+						? { type: 'backref', index: name, access: [] } 
+						: { type: 'varref', name: name, access: [] };
 				}
 				if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
 					return { type: 'spread', value: ref(RegExp.$1) };

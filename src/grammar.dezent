@@ -83,11 +83,11 @@ modifier =
 value = { backref | varref | metaref | pivot | object | array | string | number | boolean | null } 
 	-> $1;
 
-backref = '$' { [0-9]+ } 
-	-> { type: 'backref', index: $1, ...$meta };
+backref = '$' { [0-9]+ } {access}
+	-> { type: 'backref', index: $1, access: $2, ...$meta };
 
-varref = '$' { identifier }
-	-> { type: 'varref', name: $1, ...$meta };
+varref = '$' { identifier } {access}
+	-> { type: 'varref', name: $1, access: $2, ...$meta };
 
 metaref = '@' { 'position' | 'length' }
 	-> { type: 'metaref', name: $1 };
@@ -98,15 +98,15 @@ pivot = '^' {backref|varref|array|pivot}
 spread = '...' {backref|varref|pivot|object|array|string} 
 	-> { type: 'spread', value: $1, ...$meta };
 
-object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' 
-	-> { type: 'object', members: [...$1, $2?] };
+object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}
+	-> { type: 'object', members: [...$1, $2?], access: $3 };
 
 member = 
 	{spread} -> $1,
 	{backref|string|identifierAsStringNode} _ ':' _ {value} -> { type: 'member', name: $1, value: $2 };
 
-array = '[' ( _ {element} _ ',' )* _ {element}? _ ']' 
-	-> { type: 'array', elements: [...$1, $2?] };
+array = '[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}
+	-> { type: 'array', elements: [...$1, $2?], access: $3 };
 
 element = 
 	{value|spread} '?' -> { ...$1, collapse: true },
@@ -128,6 +128,18 @@ boolean =
 
 null = 'null' 
 	-> { type: 'null' };
+
+access = {dotAccess|bracketAccess}* 
+	-> $1;
+
+dotAccess = '.' {identifier} 
+	-> { name: $1, ...$meta };
+
+bracketAccess = '[' _ {backref|varref|metaref|string|index} _ ']' 
+	-> { value: $1, ...$meta };
+
+index = [0-9]+
+	-> { type: 'number', value: $0 };
 
 escape = '\\' { unicode | charstr }
 	-> { type: 'escape', value: $1 };

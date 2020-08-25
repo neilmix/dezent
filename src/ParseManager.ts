@@ -255,13 +255,13 @@ export class ParseManager {
             },
             varref: (node:VarRefNode, backrefs, vars, metas) => {
                 let resolved = vars[node.name];
-                return builders[resolved.type](resolved, backrefs, vars, metas);
+                return buildValue(resolved, backrefs, vars, metas);
             },
             metaref: (node:MetaRefNode, backrefs, vars, metas) => {
                 return metas[node.name];
             },
             pivot: (node:PivotNode, backrefs, vars, metas) => {
-                let value = builders[node.value.type](node.value, backrefs, vars, metas);
+                let value = buildValue(node.value, backrefs, vars, metas);
                 if (!Array.isArray(value)) {
                     grammarError(ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(value));
                 }
@@ -285,7 +285,7 @@ export class ParseManager {
                 return ret;
             },
             spread: (node:SpreadNode, backrefs, vars, metas) => {
-                let value = builders[node.value.type](node.value, backrefs, vars, metas);
+                let value = buildValue(node.value, backrefs, vars, metas);
                 if (!value || (typeof value != 'object' && typeof value != 'string')) {
                     grammarError(ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(value));
                 }
@@ -301,7 +301,7 @@ export class ParseManager {
                 let ret = {};
                 for (let member of node.members) {
                     if (member.type == "spread") {
-                        let tuples = builders.spread(member, backrefs, vars, metas);
+                        let tuples = buildValue(member, backrefs, vars, metas);;
                         for (let tuple of tuples) {
                             if (!Array.isArray(tuple) || tuple.length != 2) {
                                 grammarError(ErrorCode.InvalidObjectTuple, grammar.text, member.meta, JSON.stringify(tuple));
@@ -309,8 +309,8 @@ export class ParseManager {
                             ret[tuple[0]] = tuple[1];
                         }
                     } else {
-                        ret[builders[member.name.type](member.name, backrefs, vars, metas)] 
-                            = builders[member.value.type](member.value, backrefs, vars, metas);
+                        ret[buildValue(member.name, backrefs, vars, metas)] 
+                            = buildValue(member.value, backrefs, vars, metas);
                     }
                 }
                 return ret;
@@ -319,9 +319,9 @@ export class ParseManager {
                 let ret = [];
                 for (let elem of node.elements) {
                     if (elem.type == "spread") {
-                        ret = ret.concat(builders.spread(elem, backrefs, vars, metas));
+                        ret = ret.concat(buildValue(elem, backrefs, vars, metas));
                     } else {
-                        let val = builders[elem.type](elem, backrefs, vars, metas);
+                        let val = buildValue(elem, backrefs, vars, metas);;
                         if (!elem.collapse || val != null) {
                             ret.push(val);
                         }
@@ -353,7 +353,7 @@ export class ParseManager {
                 return null;
             } else if (token.outputs && token.value) {
                 let backrefs = token.outputs.map((v) => buildOutput(v));
-                return builders[token.value.type](
+                return buildValue(
                     token.value, 
                     backrefs, 
                     grammar.vars,
@@ -362,6 +362,29 @@ export class ParseManager {
             } else {
                 return text.substr(token.pos, token.length);
             }
+        }
+
+        function buildValue(node:ValueNode, backrefs, vars, metas) {
+            let out = builders[node.type](node, backrefs, vars, metas);
+            if (node.access) for (let prop of node.access) {
+                if (out == null || (typeof out != 'object' && typeof out != 'string')) {
+                    grammarError(ErrorCode.InvalidAccessRoot, grammar.text, prop.meta, JSON.stringify(out));
+                }
+                let index;
+                if (prop.value) {
+                    index = buildValue(prop.value, backrefs, vars, metas);
+                    if (typeof index != 'string' && typeof index != 'number') {
+                        grammarError(ErrorCode.InvalidAccessIndex, grammar.text, prop.meta, JSON.stringify(index));
+                    }
+                } else {
+                    index = prop.name;
+                }
+                if (!out.hasOwnProperty(index)) {
+                    grammarError(ErrorCode.InvalidAccessProperty, grammar.text, prop.meta, index);
+                }
+                out = out[index];
+            }
+            return out;
         }
     }
 
