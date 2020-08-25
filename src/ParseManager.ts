@@ -5,7 +5,7 @@ import {
 } from './Parser';
 
 import { 
-    Grammar, Node, SelectorNode, Meta, RuleDefNode, ReturnNode, RuleNode, TokenNode, PatternNode, RuleRefNode, ClassNode, AnyNode,
+    Grammar, Node, SelectorNode, Meta, RulesetNode, ReturnNode, RuleNode, TokenNode, PatternNode, RuleRefNode, ClassNode, AnyNode,
     ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, VarRefNode, 
     MetaRefNode, PivotNode, SpreadNode, StringTextNode, EscapeNode,
 } from './Grammar';
@@ -60,35 +60,35 @@ export class ParseManager {
 
         grammar.text = text;
 
-        let ruledefLookup = grammar.ruledefLookup = {};
-        for (let ruledef of grammar.ruledefs) {
-            if (ruledefLookup[ruledef.name]) {
-                if (ruledef.name == 'return') {
-                    grammarError(ErrorCode.MultipleReturn, text, ruledef.meta, ruledef.name);
+        let rulesetLookup = grammar.rulesetLookup = {};
+        for (let ruleset of grammar.ruleset) {
+            if (rulesetLookup[ruleset.name]) {
+                if (ruleset.name == 'return') {
+                    grammarError(ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
                 } else {
-                    grammarError(ErrorCode.DuplicateDefine, text, ruledef.meta, ruledef.name);
+                    grammarError(ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
                 }
             }
-            ruledefLookup[ruledef.name] = ruledef;
+            rulesetLookup[ruleset.name] = ruleset;
         }
 
-        for (let ruledef of grammar.ruledefs) {
-            let rules = ruledef.rules;
+        for (let ruleset of grammar.ruleset) {
+            let rules = ruleset.rules;
             for (let i = 0; i < rules.length; i++) {
-                rules[i].ruledefName = ruledef["name"] || "return";
+                rules[i].rulesetName = ruleset["name"] || "return";
                 rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
             }
 
             // perform sanity checks
-            visitParseNodes("ruleref", ruledef, null, null, (node:RuleRefNode) => {
-                if (!ruledefLookup[node.name]) {
+            visitParseNodes("ruleref", ruleset, null, null, (node:RuleRefNode) => {
+                if (!rulesetLookup[node.name]) {
                     grammarError(ErrorCode.RuleNotFound, text, node.meta, node.name);
                 }
             });
 
             // figure out if our selectors are capable of failing, which helps in
             // identifying expected tokens for good error messaging.
-            visitParseNodes("pattern", ruledef, null, null, (node:PatternNode) => {
+            visitParseNodes("pattern", ruleset, null, null, (node:PatternNode) => {
                 for (let token of node.tokens) {
                     if (token.required && !(token.descriptor.type == "string" && token.descriptor.pattern == '')) {
                         node.canFail = true;
@@ -97,7 +97,7 @@ export class ParseManager {
                 }
                 node.canFail = false;
             });
-            visitParseNodes(["capture","group","rule"], ruledef, null, null, (node:SelectorNode) => {
+            visitParseNodes(["capture","group","rule"], ruleset, null, null, (node:SelectorNode) => {
                 node.canFail = true;
                 for (let pattern of node.options) {
                     if (!pattern.canFail) {
@@ -106,13 +106,13 @@ export class ParseManager {
                     }
                 }
             });
-            if (ruledef.name == 'return') {
-                ruledef.canFail = true;
+            if (ruleset.name == 'return') {
+                ruleset.canFail = true;
             } else {
-                ruledef.canFail = true;
-                for (let rule of ruledef.rules) {
+                ruleset.canFail = true;
+                for (let rule of ruleset.rules) {
                     if (!rule.canFail) {
-                        ruledef.canFail = false;
+                        ruleset.canFail = false;
                         break;
                     }
                 }
@@ -224,9 +224,9 @@ export class ParseManager {
         // pre-process the grammar
         let ret:ReturnNode;
     
-        for (let ruledef of grammar.ruledefs) {
-            if (ruledef.name == 'return') {
-                ret = <ReturnNode>ruledef;
+        for (let ruleset of grammar.ruleset) {
+            if (ruleset.name == 'return') {
+                ret = <ReturnNode>ruleset;
             }
         }
     
@@ -235,7 +235,7 @@ export class ParseManager {
         }
     
         // now parse
-        let parser = this.currentParser = new Parser(ret, text, grammar.ruledefLookup, this.options, this.debugLog);
+        let parser = this.currentParser = new Parser(ret, text, grammar.rulesetLookup, this.options, this.debugLog);
         parser.parse();
 
         let builders : {
@@ -447,7 +447,7 @@ function visitParseNodes(
     }
     let items = [];
     switch(root.type) {
-        case "ruledef": items = (<RuleDefNode>root).rules; break;
+        case "ruleset": items = (<RulesetNode>root).rules; break;
         case "rule": case "capture": case "group": items = (<SelectorNode>root).options; break;
         case "pattern": items = (<PatternNode>root).tokens; break;
         case "token": items = [(<TokenNode>root).descriptor]; break;

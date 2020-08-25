@@ -2,8 +2,8 @@
 // the dezent parser uses this grammar to parse grammar
 // documents prior to parsing.
 
-return _ ( {returndef|ruledef} _ | {vardef} _ )* 
-	-> { ruledefs: $1, vars: { ...$2 } };
+return _ ( {returndef|ruleset} _ | {vardef} _ )* 
+	-> { ruleset: $1, vars: { ...$2 } };
 
 _ = ( singleLineComment | multiLineComment | whitespace? )* -> null;
 
@@ -12,10 +12,10 @@ multiLineComment  = '/*' ( !'*/' . )* '*/' -> null;
 whitespace        = [\u0020\t-\r]+ -> null;
 
 returndef = 'return' whitespace _ {rule} _ ';' 
-	-> { type: 'ruledef', name: 'return', rules: [$1], ...$meta };
+	-> { type: 'ruleset', name: 'return', rules: [$1], ...$meta };
 
-ruledef = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
-	-> { type: 'ruledef', name: $1, rules: [$2, ...$3], ...$meta };
+ruleset = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';' 
+	-> { type: 'ruleset', name: $1, rules: [$2, ...$3], ...$meta };
 
 vardef = '$' {identifier} _ '=' _ {value} _ ';'
 	-> [$1, $2];

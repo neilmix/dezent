@@ -1,8 +1,8 @@
 export type Grammar = { 
 	text?: string,
-	ruledefs: RuleDefNode[], 
+	ruleset: RulesetNode[], 
 	vars: { [key:string]: ValueNode }, 
-	ruledefLookup?: { [key:string]: RuleDefNode } 
+	rulesetLookup?: { [key:string]: RulesetNode } 
 };
 
 export interface Meta {
@@ -30,20 +30,20 @@ export interface RangeNode extends Node {
 }
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
-export type ParseNode = RuleDefNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
+export type ParseNode = RulesetNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
 export type ValueNode = BackRefNode | VarRefNode | MetaRefNode | PivotNode | SpreadNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 export interface MetaData {
 }
 
-export interface RuleDefNode extends Node { 
-	type: 'ruledef',
+export interface RulesetNode extends Node { 
+	type: 'ruleset',
 	name: string,
 	rules: RuleNode[],
 	canFail?: boolean
 }
 
-export interface ReturnNode extends RuleDefNode {
+export interface ReturnNode extends RulesetNode {
 	name: 'return'
 }
 
@@ -51,7 +51,7 @@ export interface RuleNode extends SelectorNode {
 	type: 'rule',
 	value: ValueNode, 
 	captures?: boolean[], 
-	ruledefName?: string
+	rulesetName?: string
 }
 
 export interface PatternNode extends Node { 
@@ -109,159 +109,159 @@ export function createUncompiledDezentGrammar():Grammar {
 	// - spread operator can only be used with backref or varref
 
 	return {
-		ruledefs: [
-			returndef(`_ ( {returndef|ruledef} _ | {vardef} _ )*`, 
-				{ ruledefs: "$1", vars: { '...$2': '' } }),
+		ruleset: [
+			returndef(`_ ( {returndef|ruleset} _ | {vardef} _ )*`, 
+				{ ruleset: "$1", vars: { '...$2': '' } }),
 
-			ruledef('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
+			ruleset('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
 
-			ruledef('singleLineComment', `'//' ( !'\\n' . )* '\\n'`, null),
-			ruledef('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, null),
-			ruledef('whitespace',        `[\\u0020\\t-\\r]+`, null),
+			ruleset('singleLineComment', `'//' ( !'\\n' . )* '\\n'`, null),
+			ruleset('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, null),
+			ruleset('whitespace',        `[\\u0020\\t-\\r]+`, null),
 
-			ruledef('returndef', `'return' whitespace _ {rule} _ ';'`,
-				{ type: 'ruledef', name: 'return', rules: ['$1'], '...$meta': '' }),
+			ruleset('returndef', `'return' whitespace _ {rule} _ ';'`,
+				{ type: 'ruleset', name: 'return', rules: ['$1'], '...$meta': '' }),
 
-			ruledef('ruledef', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
-				{ type: 'ruledef', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
+			ruleset('ruleset', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`,
+				{ type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
 
-			ruledef('vardef', `'$' {identifier} _ '=' _ {value} _ ';'`,
+			ruleset('vardef', `'$' {identifier} _ '=' _ {value} _ ';'`,
 				['$1', '$2']),
 			
-			ruledef('rule', `{options} _ '->' _ {value}`,
+			ruleset('rule', `{options} _ '->' _ {value}`,
 				{ type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
 			
-			ruledef('options', `{pattern} _ ( '|' _ {pattern} _ )*`,
+			ruleset('options', `{pattern} _ ( '|' _ {pattern} _ )*`,
 				{ options: ['$1', '...$2'] }),
 
-			ruledef('pattern', `( {token} _ )+`,
+			ruleset('pattern', `( {token} _ )+`,
 				{ type: 'pattern', tokens: '$1' }),
 
-			ruledef('token', `{predicate} {capture|group|string|class|ruleref|any} {modifier}`,
+			ruleset('token', `{predicate} {capture|group|string|class|ruleref|any} {modifier}`,
 				{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
 			
-			ruledef('capture', `'{' _ {captureOptions} _ '}'`,
+			ruleset('capture', `'{' _ {captureOptions} _ '}'`,
 				{ type: 'capture', '...$1': '' }),
 
-			ruledef('group', `'(' _ {options} _ ')'`,
+			ruleset('group', `'(' _ {options} _ ')'`,
 				{ type: 'group', '...$1': '' }),
 
-			ruledef('captureOptions', `{capturePattern} _ ( '|' _ {capturePattern} _ )*`,
+			ruleset('captureOptions', `{capturePattern} _ ( '|' _ {capturePattern} _ )*`,
 				{ options: ['$1', '...$2'] }),
 
-			ruledef('capturePattern', `( {captureToken} _ )+`,
+			ruleset('capturePattern', `( {captureToken} _ )+`,
 				{ type: 'pattern', tokens: '$1' }),
 
-			ruledef('captureToken', `{predicate} {captureGroup|string|class|ruleref|any} {modifier}`,
+			ruleset('captureToken', `{predicate} {captureGroup|string|class|ruleref|any} {modifier}`,
 				{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
 
-			ruledef('captureGroup', `'(' _ {captureOptions} _ ')'`,
+			ruleset('captureGroup', `'(' _ {captureOptions} _ ')'`,
 				{ type: 'group', '...$1': '' }),
 
-			ruledef('class', `'[' {classComponent}* ']'`,
+			ruleset('class', `'[' {classComponent}* ']'`,
 				{ type: 'class', ranges: '$1' }),
 			
-			ruledef('classComponent',
+			ruleset('classComponent',
 				`{classChar} '-' {classChar}`, ['$1', '$2'],
 				`{classChar}`, ['$1', '$1']),
 
-			ruledef('classChar', `!']' {escape|char}`, 
+			ruleset('classChar', `!']' {escape|char}`, 
 				'$1'),
 
-			ruledef('char', `charstr`,
+			ruleset('char', `charstr`,
 				{ type: 'char', value: '$0' }),
 			
-			ruledef('any', `'.'`, 
+			ruleset('any', `'.'`, 
 				{ type: 'any' }),
 
-			ruledef('ruleref', `{identifier}`,
+			ruleset('ruleref', `{identifier}`,
 				{ type: 'ruleref', name: '$1', '...$meta': '' }),
 
-			ruledef('predicate',
+			ruleset('predicate',
 				`'&'`, { and: true, not: false },
 				`'!'`, { and: false, not: true },
 				`''`,  { and: false, not: false }),
 
-			ruledef('modifier',
+			ruleset('modifier',
 				`'*'`, { repeat: true, required: false },
 				`'+'`, { repeat: true, required: true },
 				`'?'`, { repeat: false, required: false },
 				`''`,  { repeat: false, required: true }),
 
-			ruledef('value', `{backref|varref|metaref|pivot|object|array|string|number|boolean|null}`,
+			ruleset('value', `{backref|varref|metaref|pivot|object|array|string|number|boolean|null}`,
 				'$1'),
 
-			ruledef('backref', `'$' {[0-9]+} {access}`,
+			ruleset('backref', `'$' {[0-9]+} {access}`,
 				{ type: 'backref', index: '$1', access: '$2', '...$meta': '' }),
 
-			ruledef('varref', `'$' {identifier} {access}`,
+			ruleset('varref', `'$' {identifier} {access}`,
 				{ type: 'varref', name: '$1', access: '$2', '...$meta': '' }),
 
-			ruledef('metaref', `'@' {'position'|'length'}`,
+			ruleset('metaref', `'@' {'position'|'length'}`,
 				{ type: 'metaref', name: '$1' }),
 
-			ruledef('pivot', `'^' {backref|varref|array|pivot}`,
+			ruleset('pivot', `'^' {backref|varref|array|pivot}`,
 				{ type: 'pivot', value: '$1', '...$meta':'' }),
 
-			ruledef('spread', `'...' {backref|varref|pivot|object|array|string}`, 
+			ruleset('spread', `'...' {backref|varref|pivot|object|array|string}`, 
 				{ type: 'spread', value: '$1', '...$meta': '' }),
 
-			ruledef('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}`,
+			ruleset('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}`,
 				{ type: 'object', members: ['...$1', '$2?'], access: '$3' }),
 
-			ruledef('member', 
+			ruleset('member', 
 				`{spread}`, '$1',
 				`{backref|string|identifierAsStringNode} _ ':' _ {value}`, { type: 'member', name: '$1', value: '$2' }),
 
-			ruledef('array', `'[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}`,
+			ruleset('array', `'[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}`,
 				{ type: 'array', elements: ['...$1', '$2?'], access: '$3' }),
 
-			ruledef('element',
+			ruleset('element',
 				`{value|spread} '?'`, { '...$1':'', collapse: true },
 				`{value|spread}`, { '...$1':'', collapse: false }),
 
-			ruledef('string', `'\\'' {escape|stringText}* '\\''`,
+			ruleset('string', `'\\'' {escape|stringText}* '\\''`,
 				{ type: 'string', tokens: '$1' }),
 
-			ruledef('stringText', `( !['\\\\] . )+`,
+			ruleset('stringText', `( !['\\\\] . )+`,
 				{ type: 'text', value: '$0' }),
 
-			ruledef('number', 
+			ruleset('number', 
 				`'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?`, { type: 'number', value: '$0' },
 				`'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?`, { type: 'number', value: '$0' }),
 			
-			ruledef('boolean',
+			ruleset('boolean',
 				`'true'`, { type: 'boolean', value: true },
 				`'false'`, { type: 'boolean', value: false }),
 
-			ruledef('null', `'null'`,
+			ruleset('null', `'null'`,
 				{ type: 'null' }),
 
-			ruledef('access', `{dotAccess|bracketAccess}*`,
+			ruleset('access', `{dotAccess|bracketAccess}*`,
 				'$1'),
 
-			ruledef('dotAccess', `'.' {identifier}`,
+			ruleset('dotAccess', `'.' {identifier}`,
 				{ name: '$1', '...$meta': '' }),
 
-			ruledef('bracketAccess', `'[' _ {backref|varref|metaref|string|index} _ ']'`,
+			ruleset('bracketAccess', `'[' _ {backref|varref|metaref|string|index} _ ']'`,
 				{ value: '$1', '...$meta': '' }),
 
-			ruledef('index', `[0-9]+`,
+			ruleset('index', `[0-9]+`,
 				{ type: 'number', value: '$0' }),
 
-			ruledef('escape', `'\\\\' {unicode|charstr}`,
+			ruleset('escape', `'\\\\' {unicode|charstr}`,
 				{ type: 'escape', value: '$1' }),
 
-			ruledef('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`,
+			ruleset('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`,
 				'$0'),
 
-			ruledef('charstr', `!'\\n' .`,
+			ruleset('charstr', `!'\\n' .`,
 				'$0'),
 
-			ruledef('identifier', `[_a-zA-Z] [_a-zA-Z0-9]*`,
+			ruleset('identifier', `[_a-zA-Z] [_a-zA-Z0-9]*`,
 				'$0'),
 
-			ruledef('identifierAsStringNode', `{identifier}`,
+			ruleset('identifierAsStringNode', `{identifier}`,
 				{ type: 'string', tokens: [ {type: 'text', value: '$1' } ] }),
 		],
 		vars: {
@@ -272,19 +272,19 @@ export function createUncompiledDezentGrammar():Grammar {
 
 function returndef(options:string, output:any) : ReturnNode {
     return {
-		type: 'ruledef',
+		type: 'ruleset',
 		name: 'return',
 		rules: [rule(options, output)],
     }
 }
 
-function ruledef(name:string, ...args:any) : RuleDefNode {
+function ruleset(name:string, ...args:any) : RulesetNode {
 	let rules = [];
 	for (let i = 0; i < args.length; i += 2) {
 		rules.push(rule(args[i], args[i+1]));
 	}
 	return {
-		type: 'ruledef',
+		type: 'ruleset',
 		name: name,
 		rules: rules
 	}

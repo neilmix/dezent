@@ -78,12 +78,11 @@ Either of the above will produce this output:
 # Reference - Pattern Matching
 
 ## return
-Dezent uses top-down parsing starting with the return rule. It is expected to consume the entire document, and a parse error is triggered if it does not. There may be only one return rule per grammar.
-
-**Syntax**
 ```
 'return' whitespace _ rule _ ';'
 ```
+Dezent uses top-down parsing starting with the return rule. It is expected to consume the entire document, and a parse error is triggered if it does not. There may be only one return rule per grammar.
+
 **Examples**
 ```javascript
 > new Dezent(`return 'a' -> $0;`).parse('a');
@@ -93,13 +92,12 @@ Dezent uses top-down parsing starting with the return rule. It is expected to co
 'aaa'
 ```
 
-## = rule definitions
-Rule definitions provide abstraction, reusability, and recursion within Dezent grammars. Each rule definition has a name and one or more rules that match input. Definitions are invoked via a rule reference within a pattern to the definition's name. A definition's rules are evaluated in order, and the first rule to match will yield its output. If no rules match, the reference will fail to match. Each rule name must be unique within the grammar.
-
-**Syntax**
+## rule set
 ```
 {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'
 ```
+Rule sets provide abstraction, reusability, and recursion within Dezent grammars. A set is given a name and one or more rules that match input. Rule sets are referred to within patterns via the set's name. The rules are evaluated in order, and the first rule to match will yield the set's output, thereby termination matching for the rule set. If no rules match, the set will fail to match. Each rule set name must be unique within the grammar.
+
 **Examples**
 ```javascript
 > new Dezent(`
@@ -125,12 +123,11 @@ Rule definitions provide abstraction, reusability, and recursion within Dezent g
 ## = variable assignment
 
 ## -> rule
-Rules are the core of Dezent's pattern matching power. Each rule consists of one or more patterns that may match and produce output. Patterns are evaluated in order from first to last, and the first pattern that matches will trigger the rule to return its output. If no patterns successfully match, the rule itself fails to match.
-
-**Syntax**
 ```
 pattern _ ( '|' _ pattern _ )* _ '->' _ value
 ```
+Rules are the core of Dezent's pattern matching power. Each rule consists of one or more patterns that may match and produce output. Patterns are evaluated in order from first to last, and the first pattern that matches will trigger the rule to return its output. If no patterns successfully match, the rule itself fails to match.
+
 **Examples**
 ```javascript
 > new Dezent(`return 'ab' | 'cd' -> $0;`).parse('cd');
