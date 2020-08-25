@@ -75,9 +75,9 @@ Either of the above will produce this output:
 
 # Tutorial
 
-# Reference
+# Reference - Pattern Matching
 
-## the return rule
+## return
 Dezent uses top-down parsing starting with the return rule. It is expected to consume the entire document, and a parse error is triggered if it does not. There may be only one return rule per grammar.
 
 **Syntax**
@@ -93,7 +93,7 @@ Dezent uses top-down parsing starting with the return rule. It is expected to co
 'aaa'
 ```
 
-## rule definitions
+## = rule definitions
 Rule definitions provide abstraction, reusability, and recursion within Dezent grammars. Each rule definition has a name and one or more rules that match input. Definitions are invoked via a rule reference within a pattern to the definition's name. A definition's rules are evaluated in order, and the first rule to match will yield its output. If no rules match, the reference will fail to match. Each rule name must be unique within the grammar.
 
 **Syntax**
@@ -122,7 +122,9 @@ Rule definitions provide abstraction, reusability, and recursion within Dezent g
 ['1', ['2', '3']]
 ```
 
-## rules
+## = variable assignment
+
+## -> rule
 Rules are the core of Dezent's pattern matching power. Each rule consists of one or more patterns that may match and produce output. Patterns are evaluated in order from first to last, and the first pattern that matches will trigger the rule to return its output. If no patterns successfully match, the rule itself fails to match.
 
 **Syntax**
@@ -145,4 +147,60 @@ Patterns consist of a sequence of tokens that match (or fail to match) input tex
 ```
 (predicate (capture|group|string|class|ruleref|any) modifier _)+
 ```
+
+## | option
+
+
+## ! predicate
+
+## & predicate
+
+## {} capture
+
+## () group
+
+## '' string
+
+## [] character class
+
+## . any character
+
+## * repeat 0 or more
+
+## + repeate 1 or more
+
+## ? maybe
+
+# Reference - Output
+
+## $0 back reference
+
+## $1 - $9 back reference
+
+## $identifier variable reference
+
+## @identifier meta reference
+
+## ^ pivot
+
+## ... spread
+
+## {} object
+
+## [] array
+
+## '' string
+
+## number
+
+## boolean
+
+## null
+
+## . property access
+
+## [] property access
+
+## \ escapes
+
 

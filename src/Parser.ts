@@ -2,7 +2,6 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - object & array accessors
 // - documentation
 // - command line script w/tests
 // - package license
