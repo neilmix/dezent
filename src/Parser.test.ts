@@ -268,3 +268,40 @@ test("commants", () => {
         return .* -> 3;
     `).toEqual(3);
 });
+
+test("packrat", () => {
+    function buildText(count) {
+        let text = 'a'.repeat(count) + 'b';
+    }
+
+    let grammar = `
+        return {theRule}* -> $1;
+        theRule =
+            {'a'}* {'c'} -> [$1, $2],
+            {'b'} -> $1,
+            {'a'} -> $1;
+    `;
+
+    let caching = new Dezent(grammar, {disableCache: false});
+    let noncaching = new Dezent(grammar, {disableCache: true});
+
+    function time(f:Function):number {
+        let t = new Date().getTime();
+        f();
+        return new Date().getTime() - t;
+    }
+
+    let log:any[][] = [['packrat cache performance results']];
+    function run(size:number) {
+        let text = 'a'.repeat(size) + 'b';
+        log.push(["size: ", size]);
+        log.push(["  uncached:", time(() => noncaching.parse(text))]);
+        log.push(["  cached:  ", time(() => caching.parse(text))]);
+    }
+
+    run(100);
+    run(1000);
+    run(2000);
+
+    console.log(log.map((i)=>i.join(' ')).join('\n'));
+});

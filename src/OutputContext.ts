@@ -44,18 +44,24 @@ export class OutputContext {
         this.stack.push(this.top);
     }
 
-    exitFrame(node:RulesetNode, success:boolean) {
+    exitFramePass(node:RulesetNode) : OutputToken {
         let frame = this.stack.pop();
         this.top = this.stack[this.stack.length - 1];
         if (frame.node != node) {
             parserError(ErrorCode.MismatchOutputFrames);
         }
-        if (success) {
-            if (!frame.output) {
-                // whoops, yield was never called
-                parserError(ErrorCode.EmptyOutput);
-            }
-            this.addTokenObject(frame.output);
+        if (!frame.output) {
+            // whoops, yield was never called
+            parserError(ErrorCode.EmptyOutput);
+        }
+        return frame.output;
+    }
+
+    exitFrameFail(node:RulesetNode) {
+        let frame = this.stack.pop();
+        this.top = this.stack[this.stack.length - 1];
+        if (frame.node != node) {
+            parserError(ErrorCode.MismatchOutputFrames);
         }
     }
 

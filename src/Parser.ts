@@ -2,11 +2,12 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
+// - packrat parsing
+// - left recursion
 // - documentation
 // - command line script w/tests
 // - package license
 // - performance/scale testing
-// - packrat parsing
 // - release?
 // - output callbacks
 // - @id
@@ -28,7 +29,7 @@ import {
  } from "./Grammar";
 
 import { ParseManager } from "./ParseManager";
-import { OutputContext } from "./OutputContext";
+import { OutputContext, OutputToken } from "./OutputContext";
 
 export enum ErrorCode {
     TextParsingError          = 1,
@@ -41,7 +42,7 @@ export enum ErrorCode {
     ReturnNotFound            = 1005,
     CaptureCountMismatch      = 1006,
     InvalidBackRef            = 1007,
-    InvalidConstRef             = 1008,
+    InvalidConstRef           = 1008,
     InvalidPivot              = 1009,
     PivotArraySizeMismatch    = 1010,
     InvalidObjectTuple        = 1011,
@@ -97,6 +98,7 @@ type ParseContextFrame = {
     index: number,
     pos: number,
     consumed: number,
+    output?: OutputToken,
 }
 
 let dezentGrammar:Grammar;
@@ -111,6 +113,7 @@ export function findDezentGrammar(options?:ParserOptions) : Grammar{
 
 export interface ParserOptions {
     debugErrors?: boolean,
+    disableCache?: boolean,
 }
 
 export function parseText(grammar:string|Grammar, text:string, options?:ParserOptions) : any {
@@ -144,6 +147,7 @@ export class Parser {
     text : string;
     ruleset: {[key:string]:RulesetNode};
     output : OutputContext = new OutputContext();
+    parseCache : ParseCache 
     options : ParserOptions;
     omitFails : number = 0;
     debugLog : any[][];
@@ -153,6 +157,7 @@ export class Parser {
         this.ruleset = ruleset;
         this.options = options || {};
         this.debugLog = debugLog;
+        this.parseCache = new ParseCache(!options.disableCache);
         this.enter(root);
     }
 
@@ -183,9 +188,9 @@ export class Parser {
                         if (matched) {
                             this.output.addToken(current.pos, consumed);
                             current.consumed = consumed;
-                            current.status = MatchStatus.Pass;
+                            this.parseCache.store(current, MatchStatus.Pass);
                         } else {
-                            current.status = MatchStatus.Fail;
+                            this.parseCache.store(current, MatchStatus.Fail);
                         }
                         break;
                 }
@@ -204,10 +209,9 @@ export class Parser {
                 if (exited.node["pattern"] || exited.node.type == "ruleref") {
                     this.debug(exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
                 }
-                if (next.node.type == "token" && next.node.not) {
-                    exited.status = exited.status == MatchStatus.Pass ? MatchStatus.Fail : MatchStatus.Pass;
-                }
-                if (exited.status == MatchStatus.Pass) {
+                if ((next.node.type == "token" && next.node.not && exited.status == MatchStatus.Fail) || 
+                    ((next.node.type != "token" || !next.node.not) && exited.status == MatchStatus.Pass)) 
+                {
                     if (exited.pos + exited.consumed > maxPos) {
                         maxPos = exited.pos + exited.consumed;
                         failedPatterns = {};
@@ -221,14 +225,15 @@ export class Parser {
                     }
                     if (next.node.type == "pattern") {
                         if (++next.index >= next.items.length) {
-                            next.status = MatchStatus.Pass;
+                            this.parseCache.store(next, MatchStatus.Pass);
                         } // otherwise stay at Continue
                     } else {
-                        next.status = MatchStatus.Pass;
+                        this.parseCache.store(next, MatchStatus.Pass);
                     }
                     switch (next.node.type) {
                         case "ruleset":
-                            this.output.exitFrame(next.node, true);
+                            next.output = this.output.exitFramePass(next.node);
+                            this.output.addTokenObject(next.output);
                             break;
                         case "rule":
                             this.output.yield(next.node, exited.pos, exited.consumed);
@@ -254,18 +259,18 @@ export class Parser {
                     }
                     if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
-                            next.status = MatchStatus.Fail;
+                            this.parseCache.store(next, MatchStatus.Fail);
                         }
                     } else if (next.node.type == "token") {
                         if (!next.node.required) {
                             // nodes that are not required always pass
-                            next.status = MatchStatus.Pass;
+                            this.parseCache.store(next, MatchStatus.Pass);
                         } else if (next.status == MatchStatus.Continue) {
                             // this node's descriptor never passed - it failed
-                            next.status = MatchStatus.Fail;
+                            this.parseCache.store(next, MatchStatus.Fail);
                         } // it is already marked as Pass
                     } else {
-                        next.status = MatchStatus.Fail;
+                        this.parseCache.store(next, MatchStatus.Fail);
                     }
                     switch (next.node.type) {
                         case "ruleset":
@@ -273,7 +278,7 @@ export class Parser {
                                 parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
                             }
                             if (next.status == MatchStatus.Fail) {
-                                this.output.exitFrame(next.node, false);
+                                this.output.exitFrameFail(next.node);
                             }
                             break;
                         case "capture":
@@ -303,6 +308,7 @@ export class Parser {
 
     enter(node:ParseNode) {
         let current = this.top();
+        let pos = current ? current.pos + current.consumed : 0;
         let items;
 
         if (["ruleset", "rule", "pattern", "capture", "group"].includes(node.type)) {
@@ -310,6 +316,19 @@ export class Parser {
                 this.omitFails++;
             }
         }
+        if (["capture","group"].includes(node.type)) {
+            this.output.enterGroup();
+        }
+
+        let frame = this.parseCache.retrieve(pos, node);
+        if (frame) {
+            this.stack.push(frame);
+            if (frame.output) {
+                this.output.addTokenObject(frame.output);
+            }
+            return;
+        }
+
         switch (node.type) {
             case "ruleset": 
                 items = node.rules;
@@ -320,12 +339,10 @@ export class Parser {
                 items = node.options; 
                 break;
             case "capture": 
-                this.output.enterGroup();
                 this.output.startCapture(node);
                 items = node.options; 
                 break;
             case "group": 
-                this.output.enterGroup();
                 items = node.options; 
                 break;
             case "pattern": 
@@ -343,9 +360,9 @@ export class Parser {
             node: node,
             items: items,
             index: 0,
-            pos: current ? current.pos + current.consumed : 0,
+            pos: pos,
             consumed: 0,
-        })
+        });
     }
 
     top() : ParseContextFrame|null { 
@@ -355,6 +372,37 @@ export class Parser {
     debug(...args:any[]) {
         if (this.options.debugErrors) {
             this.debugLog.push(args);
+        }
+    }
+}
+
+class ParseCache {
+    passFail:ParseContextFrame[][] = [];
+    enabled:boolean = true;
+
+    constructor(enabled:boolean) {
+        this.enabled = enabled;
+    }
+
+    passFailPos(pos:number) : ParseContextFrame[] {
+        if (!this.passFail[pos]) {
+            this.passFail[pos] = [];
+        }
+        return this.passFail[pos];
+    }
+
+    store(frame:ParseContextFrame, status:MatchStatus) {
+        frame.status = status;
+        if (this.enabled) {
+            this.passFailPos(frame.pos)[frame.node.id] = frame;
+        }
+    }
+
+    retrieve(pos, node):ParseContextFrame|undefined {
+        if (this.enabled) {
+            return this.passFailPos(pos)[node.id];
+        } else {
+            return undefined;
         }
     }
 }

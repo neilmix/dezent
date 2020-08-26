@@ -72,12 +72,18 @@ export class ParseManager {
             rulesetLookup[ruleset.name] = ruleset;
         }
 
+        let nodeSequence = 0;
         for (let ruleset of grammar.ruleset) {
             let rules = ruleset.rules;
             for (let i = 0; i < rules.length; i++) {
                 rules[i].rulesetName = ruleset["name"] || "return";
                 rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
             }
+
+            // assign an id to every node
+            visitParseNodes(null, ruleset, null, (node:Node) => {
+                node.id = ++nodeSequence;
+            }, null);
 
             // perform sanity checks
             visitParseNodes("ruleref", ruleset, null, null, (node:RuleRefNode) => {
@@ -433,7 +439,7 @@ function buildString(node:StringNode) {
 }
 
 function visitParseNodes(
-    types:string|string[], 
+    types:null|string|string[], 
     root:Node, 
     data?, 
     enter?:(node:Node,data)=>void, 
@@ -442,7 +448,7 @@ function visitParseNodes(
     if (typeof types == "string") {
         types = [types];
     }
-    if (enter && types.includes(root.type)) {
+    if (enter && (types == null || types.includes(root.type))) {
         enter(root, data);
     }
     let items = [];
@@ -456,7 +462,7 @@ function visitParseNodes(
     for (let item of items) {
         visitParseNodes(types, item, data, enter, exit);
     }
-    if (exit && types.includes(root.type)) {
+    if (exit && (types == null || types.includes(root.type))) {
         exit(root, data);
     }
 }

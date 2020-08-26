@@ -11,6 +11,7 @@ export interface Meta {
 }
 
 export interface Node { 
+	id?: number,
 	type: string,
 	meta?: Meta
 }
