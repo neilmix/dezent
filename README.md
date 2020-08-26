@@ -77,7 +77,7 @@ Either of the above will produce this output:
 
 # Reference - Pattern Matching
 
-## return
+## `return`
 ```
 'return' whitespace _ rule _ ';'
 ```
@@ -92,7 +92,7 @@ Dezent uses top-down parsing starting with the return rule. It is expected to co
 'aaa'
 ```
 
-## ruleset
+## `= ;` ruleset
 ```
 {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'
 ```
@@ -120,11 +120,11 @@ Rulesets provide abstraction, reusability, and recursion within Dezent grammars.
 ['1', ['2', '3']]
 ```
 
-## rule
+## `->` rule
 ```
 pattern _ ( '|' _ pattern _ )* _ '->' _ value
 ```
-Rules are the core of Dezent's pattern matching power. Each rule consists of one or more patterns that may match and produce output. Patterns are evaluated in order from first to last, and the first pattern that matches will trigger the rule to return its output. If no patterns successfully match, the rule itself fails to match.
+Rules are the core of Dezent's pattern matching power. Each rule consists of one or more patterns that may match and produce output. Patterns are evaluated in order from first to last, and the first pattern that matches will trigger the rule to return its output, thereby terminating matching for this rule. If no patterns successfully match, the rule itself fails to match.
 
 **Examples**
 ```javascript
@@ -136,57 +136,55 @@ undefined
 ```
 
 ## pattern
-Patterns consist of a sequence of tokens that match (or fail to match) input text.
-
-**Syntax**
 ```
 (predicate (capture|group|string|class|ruleref|any) modifier _)+
 ```
+Patterns consist of a sequence of tokens that match (or fail to match) input text.
 
-## | option
+## `''` string
 
+## `\` escapes
 
-## ! predicate
+## `[]` character class
 
-## & predicate
+## `.` any character
 
-## {} capture
+## `*` repeat 0 or more
 
-## () group
+## `+` repeat 1 or more
 
-## '' string
+## `?` maybe
 
-## [] character class
+## `()` group
 
-## . any character
+## `{}` capture
 
-## * repeat 0 or more
+## `!` predicate
 
-## + repeate 1 or more
+## `&` predicate
 
-## ? maybe
+## `=` constant
 
-## = constant
 
 # Reference - Output
 
-## $0 back reference
+## `$0` back reference
 
-## $1 - $9 back reference
+## `$1` back reference
 
-## $identifier variable reference
+## `$identifier` constant reference
 
-## @identifier meta reference
+## `@identifier` meta reference
 
-## ^ pivot
+## `^` pivot
 
-## ... spread
+## `...` spread
 
-## {} object
+## `{}` object
 
-## [] array
+## `[]` array
 
-## '' string
+## `''` string
 
 ## number
 
@@ -194,10 +192,9 @@ Patterns consist of a sequence of tokens that match (or fail to match) input tex
 
 ## null
 
-## . property access
+## `.` property access
 
-## [] property access
+## `[]` property access
 
-## \ escapes
 
 
