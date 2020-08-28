@@ -155,6 +155,7 @@ test('capture and groups', () => {
         .toEqual(['a', null, [], ['a', 'a', 'a']]);
     expectParse(`return ('a'+ ({'b'})+ )+ -> $1;`, 'abaabbabbbabb')
         .toEqual('b'.repeat(8).split(""));
+    expectParse(`foo = {.} -> { foo: $1 }; return { foo . } -> $1;`, 'ab').toEqual('ab');
     expectParse(`return {(. .)+} -> $1;`, 'aaaa').toEqual('aaaa');
     expectParseFail(`return {(. .)+} -> 1;`, 'aaaaa');
     expectGrammarFail(`return {{.}} -> null;`);

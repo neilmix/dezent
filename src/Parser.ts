@@ -2,10 +2,6 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - build output from parse cache
-// - replace current output build with new output build
-// - remove output from parse frame
-// - test object+string capture combo?
 // - fix packrat performance
 // - left recursion
 // - documentation
@@ -23,6 +19,7 @@
 //   - don't create frames for terminals
 //   - don't cache failed frames, cache boolean instead
 //   - one-dimension cache
+// - optional trailing semicolon?
 
 // speculative/research todo:
 // - compile-time data-type checking
