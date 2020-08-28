@@ -109,7 +109,6 @@ export type ParseContextFrame = {
     index: number,
     pos: number,
     consumed: number,
-    output?: OutputToken,
 }
 
 let dezentGrammar:Grammar;
@@ -158,7 +157,6 @@ export class Parser {
     stack : ParseContextFrame[] = [];
     text : string;
     rulesets: {[key:string]:RulesetNode};
-    output : OutputContext = new OutputContext();
     parseCache : ParseCache 
     options : ParserOptions;
     omitFails : number = 0;
@@ -174,7 +172,7 @@ export class Parser {
         this.enter(root);
     }
 
-    parse() {
+    parse() : OutputContext {
         let maxPos = 0;
         let failedPatterns = {};
 
@@ -199,7 +197,6 @@ export class Parser {
                         let text = this.text.substr(this.top().pos);
                         let [matched, consumed] = current.node.match(text);
                         if (matched) {
-                            this.output.addToken(current.pos, consumed);
                             current.consumed = consumed;
                             this.parseCache.store(current, MatchStatus.Pass);
                         } else {
@@ -229,9 +226,6 @@ export class Parser {
                         maxPos = exited.pos + exited.consumed;
                         failedPatterns = {};
                     }
-                    if (["capture","group"].includes(exited.node.type)) {
-                        this.output.exitGroup(true);
-                    }
                     // consume, but only if there's not a predicate
                     if (exited.node.type != "token" || !(exited.node.and || exited.node.not)) {
                         next.consumed += exited.consumed;
@@ -243,32 +237,17 @@ export class Parser {
                     } else {
                         this.parseCache.store(next, MatchStatus.Pass);
                     }
-                    switch (next.node.type) {
-                        case "ruleset":
-                            next.output = this.output.exitFramePass(next.node);
-                            this.output.addTokenObject(next.output);
-                            break;
-                        case "rule":
-                            this.output.yield(next.node, exited.pos, exited.consumed);
-                            break;
-                        case "token":
-                            // when repeating, make sure we consumed to avoid infinite loops
-                            if (next.node.repeat && exited.consumed > 0) {
-                                this.enter(next.node.descriptor);
-                            }
-                            break;
-                        case "capture":
-                            this.output.endCapture(next.node, true);        
-                            break;
+                    if (next.node.type == "token") {
+                        // when repeating, make sure we consumed to avoid infinite loops
+                        if (next.node.repeat && exited.consumed > 0) {
+                            this.enter(next.node.descriptor);
+                        }
                     }
                 } else { // exited.matchStatus == MatchStatus.FAIL
                     if (exited.pos == maxPos && exited.node["pattern"]) {
                         if (!this.omitFails && exited.node["pattern"]) {
                             failedPatterns[exited.node["pattern"]] = true;
                         }
-                    }
-                    if (["capture","group"].includes(exited.node.type)) {
-                        this.output.exitGroup(false);
                     }
                     if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
@@ -285,20 +264,8 @@ export class Parser {
                     } else {
                         this.parseCache.store(next, MatchStatus.Fail);
                     }
-                    switch (next.node.type) {
-                        case "ruleset":
-                            if (next.node.name == 'return') {
-                                parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
-                            }
-                            if (next.status == MatchStatus.Fail) {
-                                this.output.exitFrameFail(next.node);
-                            }
-                            break;
-                        case "capture":
-                            if (next.status == MatchStatus.Fail) {
-                                this.output.endCapture(next.node, false);
-                            }
-                            break;
+                    if (next.node.type == "ruleset" && next.node.name == 'return') {
+                        parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
                     }
                 }
             }
@@ -317,7 +284,7 @@ export class Parser {
                         output.enterFrame(frame.node);
                         break;
                     case "rule":
-                        output.reset(frame.node);
+                        output.setRule(frame.node);
                         break;
                     case "capture":
                         output.startCapture(frame.node);
@@ -331,32 +298,33 @@ export class Parser {
             }, 
             (frame:ParseContextFrame) => {
                 if (["group","capture"].includes(frame.node.type)) {
-                    output.exitGroup(true);
+                    output.exitGroup();
                 }
                 switch (frame.node.type) {
                     case "ruleset":
-                        output.addTokenObject(output.exitFramePass(frame.node));
+                        output.addTokenObject(output.exitFrame(frame.node));
                         break;
                     case "rule":
                         output.yield(frame.node, frame.pos, frame.consumed);
                         break;
                     case "capture":
-                        output.endCapture(frame.node, true);        
+                        output.endCapture(frame.node);        
                         break;
                 }
             }
         );
-        this.output = output;
-
-        if (!this.output.result) {
+        
+        if (!output.result) {
             parserError(ErrorCode.EmptyOutput);
         }
-        if (this.output.result.pos != 0) {
+        if (output.result.pos != 0) {
             parserError(ErrorCode.InputConsumedBeforeResult);
         }
-        if (this.output.result.length != this.text.length) {
+        if (output.result.length != this.text.length) {
             parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
         }
+
+        return output;
 
         function expectedTerminals() {
             return Object.keys(failedPatterns);
@@ -373,31 +341,22 @@ export class Parser {
                 this.omitFails++;
             }
         }
-        if (["capture","group"].includes(node.type)) {
-            this.output.enterGroup();
-        }
 
         let frame = this.parseCache.retrieve(pos, node);
         if (frame) {
             frame.depth = this.stack.length;
             this.stack.push(frame);
-            if (frame.output) {
-                this.output.addTokenObject(frame.output);
-            }
             return;
         }
 
         switch (node.type) {
             case "ruleset": 
                 items = node.rules;
-                this.output.enterFrame(node);
                 break;
             case "rule": 
-                this.output.reset(node);
                 items = node.options; 
                 break;
             case "capture": 
-                this.output.startCapture(node);
                 items = node.options; 
                 break;
             case "group": 

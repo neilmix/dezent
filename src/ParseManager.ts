@@ -242,7 +242,7 @@ export class ParseManager {
     
         // now parse
         let parser = this.currentParser = new Parser(ret, text, grammar.rulesetLookup, this.options, this.debugLog);
-        parser.parse();
+        let output = parser.parse();
 
         let builders : {
             [key:string]: (
@@ -350,7 +350,7 @@ export class ParseManager {
         };
                 
         // build our output value    
-        return buildOutput(parser.output.result);
+        return buildOutput(output.result);
     
         function buildOutput(token:OutputToken|OutputToken[]) {
             if (Array.isArray(token)) {
@@ -414,10 +414,6 @@ export class ParseManager {
         }
         if (this.currentParser) {
             console.error("Parser stack:\n", this.currentParser.stack);
-            console.error("Output stack:\n", this.currentParser.output.stack);
-            if (this.currentParser.output.result) {
-                console.error("Output:\n", JSON.stringify(this.currentParser.output.result));
-            }
         }
     }
 }

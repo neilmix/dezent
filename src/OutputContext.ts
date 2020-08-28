@@ -44,7 +44,7 @@ export class OutputContext {
         this.stack.push(this.top);
     }
 
-    exitFramePass(node:RulesetNode) : OutputToken {
+    exitFrame(node:RulesetNode) : OutputToken {
         let frame = this.stack.pop();
         this.top = this.stack[this.stack.length - 1];
         if (frame.node != node) {
@@ -57,24 +57,14 @@ export class OutputContext {
         return frame.output;
     }
 
-    exitFrameFail(node:RulesetNode) {
-        let frame = this.stack.pop();
-        this.top = this.stack[this.stack.length - 1];
-        if (frame.node != node) {
-            parserError(ErrorCode.MismatchOutputFrames);
-        }
-    }
-
     enterGroup() {
         this.top.tokensStack.push(this.top.tokens);
         this.top.tokens = [];
     }
 
-    exitGroup(success:boolean) {
-        if (success) {
-            let index = this.top.tokensStack.length - 1;
-            this.top.tokensStack[index] = this.top.tokensStack[index].concat(this.top.tokens);
-        }
+    exitGroup() {
+        let index = this.top.tokensStack.length - 1;
+        this.top.tokensStack[index] = this.top.tokensStack[index].concat(this.top.tokens);
         this.top.tokens = this.top.tokensStack.pop();
     }
 
@@ -86,25 +76,23 @@ export class OutputContext {
         this.top.capture = [];
     }
 
-    endCapture(node:CaptureNode, success:boolean) {
+    endCapture(node:CaptureNode) {
         if (this.top.captureNode != node) {
             parserError(ErrorCode.MismatchEndCapture);
         }
 
-        if (success) {
-            // move our capture into an output
-            let token:OutputToken;
-            if (this.top.capture.length > 1) {
-                this.top.tokens.push({
-                    captureIndex: this.top.captureNode.index,
-                    pos: this.top.capture[0].pos,
-                    length: this.top.capture.reduce((t, c) => t + c.length, 0)
-                });
-            } else if (this.top.capture.length == 1) {
-                this.top.tokens.push(this.top.capture[0]);
-            } else {
-                // didn't match...
-            }
+        // move our capture into an output
+        let token:OutputToken;
+        if (this.top.capture.length > 1) {
+            this.top.tokens.push({
+                captureIndex: this.top.captureNode.index,
+                pos: this.top.capture[0].pos,
+                length: this.top.capture.reduce((t, c) => t + c.length, 0)
+            });
+        } else if (this.top.capture.length == 1) {
+            this.top.tokens.push(this.top.capture[0]);
+        } else {
+            // didn't match...
         }
 
         this.top.captureNode = null;
@@ -165,7 +153,7 @@ export class OutputContext {
         }
     }
 
-    reset(rule:RuleNode) {
+    setRule(rule:RuleNode) {
         this.top.rule = rule;
         this.top.tokens = [];
     }
