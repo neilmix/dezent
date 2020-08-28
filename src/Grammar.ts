@@ -81,7 +81,7 @@ export interface EscapeNode       extends RangeNode    { type: 'escape',    valu
 export interface CharNode         extends RangeNode    { type: 'char',      value: string }
 
 export interface BackRefNode      extends OutputNode { type: 'backref',   index: string }
-export interface ConstRefNode       extends OutputNode { type: 'constref',    name: string }
+export interface ConstRefNode     extends OutputNode { type: 'constref',    name: string }
 export interface MetaRefNode      extends OutputNode { type: 'metaref',   name: string }
 export interface PivotNode        extends OutputNode { type: 'pivot',     value: BackRefNode|ConstRefNode|ObjectNode|ArrayNode|PivotNode }
 export interface SpreadNode       extends OutputNode { type: 'spread',    value: BackRefNode|ConstRefNode|PivotNode|ObjectNode|ArrayNode }

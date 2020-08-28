@@ -44,6 +44,11 @@ function parseGrammarError(grammar:string) {
     }
 }
 
+// test("dezent grammar documentation", () => {
+//     let textDezent = readFileSync("./test/grammar.dezent").toString();
+//     parseGrammar(textDezent);
+// });
+
 test("boolean / null outputs", () => {
     expectParse("return .* -> true;").toBe(true);
     expectParse("return .* -> false;").toBe(false);
@@ -282,8 +287,8 @@ test("packrat", () => {
             {'a'} -> $1;
     `;
 
-    let caching = new Dezent(grammar, {disableCache: false});
-    let noncaching = new Dezent(grammar, {disableCache: true});
+    let caching = new Dezent(grammar, {disablePassFailCache: false});
+    let noncaching = new Dezent(grammar, {disablePassFailCache: true});
 
     function time(f:Function):number {
         let t = new Date().getTime();

@@ -2,7 +2,11 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - packrat parsing
+// - build output from parse cache
+// - replace current output build with new output build
+// - remove output from parse frame
+// - test object+string capture combo?
+// - fix packrat performance
 // - left recursion
 // - documentation
 // - command line script w/tests
@@ -14,6 +18,11 @@
 // - string interpolation
 // - backref within pattern
 // - regex-like search-and-find
+// - refactor omitFails to be on the frame?
+// - memory optimization:
+//   - don't create frames for terminals
+//   - don't cache failed frames, cache boolean instead
+//   - one-dimension cache
 
 // speculative/research todo:
 // - compile-time data-type checking
@@ -26,8 +35,9 @@
 import { 
     Grammar, createUncompiledDezentGrammar, RulesetNode, ReturnNode,
     ParseNode, RuleNode, PatternNode, TokenNode
- } from "./Grammar";
+} from "./Grammar";
 
+import { ParseCache } from "./ParseCache";
 import { ParseManager } from "./ParseManager";
 import { OutputContext, OutputToken } from "./OutputContext";
 
@@ -91,7 +101,8 @@ export const errorMessages = {
     2010: "Multiple outputs were found for a non-repeating capture",
 }
 
-type ParseContextFrame = {
+export type ParseContextFrame = {
+    depth: number,
     status: MatchStatus,
     node: ParseNode,
     items: RuleNode[] | PatternNode[] | TokenNode[],
@@ -113,7 +124,7 @@ export function findDezentGrammar(options?:ParserOptions) : Grammar{
 
 export interface ParserOptions {
     debugErrors?: boolean,
-    disableCache?: boolean,
+    disablePassFailCache?: boolean,
 }
 
 export function parseText(grammar:string|Grammar, text:string, options?:ParserOptions) : any {
@@ -143,21 +154,23 @@ export enum MatchStatus {
 }
 
 export class Parser {
+    root : ReturnNode;
     stack : ParseContextFrame[] = [];
     text : string;
-    ruleset: {[key:string]:RulesetNode};
+    rulesets: {[key:string]:RulesetNode};
     output : OutputContext = new OutputContext();
     parseCache : ParseCache 
     options : ParserOptions;
     omitFails : number = 0;
     debugLog : any[][];
     
-    constructor(root:ReturnNode, text:string, ruleset:{[key:string]:RulesetNode}, options:ParserOptions, debugLog:string[][]) {
+    constructor(root:ReturnNode, text:string, rulesets:{[key:string]:RulesetNode}, options:ParserOptions, debugLog:string[][]) {
+        this.root = root;
         this.text = text;
-        this.ruleset = ruleset;
+        this.rulesets = rulesets;
         this.options = options || {};
         this.debugLog = debugLog;
-        this.parseCache = new ParseCache(!options.disableCache);
+        this.parseCache = new ParseCache(!options.disablePassFailCache);
         this.enter(root);
     }
 
@@ -178,7 +191,7 @@ export class Parser {
                         this.enter(current.items[current.index]);
                         break;
                     case "ruleref":
-                        this.enter(this.ruleset[current.node.name]);
+                        this.enter(this.rulesets[current.node.name]);
                         break;
                     case "string":
                     case "class":
@@ -291,6 +304,50 @@ export class Parser {
             }
         } 
 
+        let output = new OutputContext();
+        this.parseCache.visitPassFrames(
+            this.root, 
+            this.rulesets, 
+            (frame:ParseContextFrame) => {
+                if (["group","capture"].includes(frame.node.type)) {
+                    output.enterGroup();
+                }
+                switch (frame.node.type) {
+                    case "ruleset": 
+                        output.enterFrame(frame.node);
+                        break;
+                    case "rule":
+                        output.reset(frame.node);
+                        break;
+                    case "capture":
+                        output.startCapture(frame.node);
+                        break;
+                    case "string":
+                    case "class":
+                    case "any":
+                        output.addToken(frame.pos, frame.consumed);
+                        break;
+                }
+            }, 
+            (frame:ParseContextFrame) => {
+                if (["group","capture"].includes(frame.node.type)) {
+                    output.exitGroup(true);
+                }
+                switch (frame.node.type) {
+                    case "ruleset":
+                        output.addTokenObject(output.exitFramePass(frame.node));
+                        break;
+                    case "rule":
+                        output.yield(frame.node, frame.pos, frame.consumed);
+                        break;
+                    case "capture":
+                        output.endCapture(frame.node, true);        
+                        break;
+                }
+            }
+        );
+        this.output = output;
+
         if (!this.output.result) {
             parserError(ErrorCode.EmptyOutput);
         }
@@ -322,6 +379,7 @@ export class Parser {
 
         let frame = this.parseCache.retrieve(pos, node);
         if (frame) {
+            frame.depth = this.stack.length;
             this.stack.push(frame);
             if (frame.output) {
                 this.output.addTokenObject(frame.output);
@@ -356,6 +414,7 @@ export class Parser {
                 break;
         }
         this.stack.push({
+            depth: this.stack.length,
             status: MatchStatus.Continue,
             node: node,
             items: items,
@@ -372,37 +431,6 @@ export class Parser {
     debug(...args:any[]) {
         if (this.options.debugErrors) {
             this.debugLog.push(args);
-        }
-    }
-}
-
-class ParseCache {
-    passFail:ParseContextFrame[][] = [];
-    enabled:boolean = true;
-
-    constructor(enabled:boolean) {
-        this.enabled = enabled;
-    }
-
-    passFailPos(pos:number) : ParseContextFrame[] {
-        if (!this.passFail[pos]) {
-            this.passFail[pos] = [];
-        }
-        return this.passFail[pos];
-    }
-
-    store(frame:ParseContextFrame, status:MatchStatus) {
-        frame.status = status;
-        if (this.enabled) {
-            this.passFailPos(frame.pos)[frame.node.id] = frame;
-        }
-    }
-
-    retrieve(pos, node):ParseContextFrame|undefined {
-        if (this.enabled) {
-            return this.passFailPos(pos)[node.id];
-        } else {
-            return undefined;
         }
     }
 }
