@@ -27,21 +27,21 @@ export interface ParseError extends DezentError {
 
 export default class Dezent {
     debugErrors: boolean;
-
+    options:parser.ParserOptions;
     error:DezentError|GrammarError|ParseError;
 
     private grammar:Grammar;
 
     constructor(grammarStr:string, options?:parser.ParserOptions) {
-        options = options || {};
-        this.debugErrors = !!options.debugErrors;
+        this.options = options || {};
+        this.debugErrors = !!this.options.debugErrors;
         this.error = null;
-        this.grammar = parser.parseGrammar(grammarStr);
+        this.grammar = parser.parseGrammar(grammarStr, this.options);
     }
 
     parse(text:string) {
         try {
-            return parser.parseText(this.grammar, text);
+            return parser.parseText(this.grammar, text, this.options);
         } catch (e) {
             this.error = e;
             if (this.debugErrors) {

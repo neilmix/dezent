@@ -44,11 +44,6 @@ function parseGrammarError(grammar:string) {
     }
 }
 
-// test("dezent grammar documentation", () => {
-//     let textDezent = readFileSync("./test/grammar.dezent").toString();
-//     parseGrammar(textDezent);
-// });
-
 test("boolean / null outputs", () => {
     expectParse("return .* -> true;").toBe(true);
     expectParse("return .* -> false;").toBe(false);
@@ -288,9 +283,12 @@ test("packrat", () => {
             {'a'} -> $1;
     `;
 
-    let caching = new Dezent(grammar, {disablePassFailCache: false});
-    let noncaching = new Dezent(grammar, {disablePassFailCache: true});
+    let caching = new Dezent(grammar, {disableCacheLookup: false});
+    let noncaching = new Dezent(grammar, {disableCacheLookup: true});
 
+    expect(caching.parse('aaaab')).toEqual(['a','a','a','a','b']);
+    expect(noncaching.parse('aaaab')).toEqual(['a','a','a','a','b']);
+    
     function time(f:Function):number {
         let t = new Date().getTime();
         f();
@@ -298,16 +296,20 @@ test("packrat", () => {
     }
 
     let log:any[][] = [['packrat cache performance results']];
-    function run(size:number) {
+    function run(size:number, runUncached:boolean) {
         let text = 'a'.repeat(size) + 'b';
         log.push(["size: ", size]);
-        log.push(["  uncached:", time(() => noncaching.parse(text))]);
+        if (runUncached) {
+            log.push(["  uncached:", time(() => noncaching.parse(text))]);
+        }
         log.push(["  cached:  ", time(() => caching.parse(text))]);
     }
 
-    run(100);
-    run(1000);
-    run(2000);
+    run(100, true);
+    run(1000, true);
+    run(2000, true);
+    run(4000, false);
+    run(8000, false);
 
     console.log(log.map((i)=>i.join(' ')).join('\n'));
 });

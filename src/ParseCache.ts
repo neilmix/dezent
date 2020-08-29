@@ -3,10 +3,10 @@ import { ReturnNode, RulesetNode, TokenNode } from "./Grammar";
 
 export class ParseCache {
     passFail:ParseContextFrame[][] = [];
-    passFailEnabled:boolean = true;
+    passFailRetrieveEnabled:boolean = true;
 
-    constructor(enabled:boolean) {
-        this.passFailEnabled = enabled;
+    constructor(cacheLookupEnabled:boolean) {
+        this.passFailRetrieveEnabled = cacheLookupEnabled;
     }
 
     passFailPos(pos:number) : ParseContextFrame[] {
@@ -16,15 +16,13 @@ export class ParseCache {
         return this.passFail[pos];
     }
 
-    store(frame:ParseContextFrame, status:MatchStatus) {
+    store(frame:ParseContextFrame, status:MatchStatus, pos?:number) {
         frame.status = status;
-        if (this.passFailEnabled) {
-            this.passFailPos(frame.pos)[frame.node.id] = frame;
-        }
+        this.passFailPos(pos||frame.pos)[frame.node.id] = frame;
     }
 
     retrieve(pos, node):ParseContextFrame|undefined {
-        if (this.passFailEnabled) {
+        if (this.passFailRetrieveEnabled) {
             return this.passFailPos(pos)[node.id];
         } else {
             return undefined;

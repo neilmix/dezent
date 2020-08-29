@@ -2,7 +2,6 @@
 // Powerful pattern matching and parsing that's readable, recursive, and structured.
 
 // todo:
-// - fix packrat performance
 // - left recursion
 // - documentation
 // - command line script w/tests
@@ -20,6 +19,8 @@
 //   - don't cache failed frames, cache boolean instead
 //   - one-dimension cache
 // - optional trailing semicolon?
+// - refactor: OutputBuilder, GrammarCompiler
+// - perf optimization - linear time
 
 // speculative/research todo:
 // - compile-time data-type checking
@@ -37,6 +38,7 @@ import {
 import { ParseCache } from "./ParseCache";
 import { ParseManager } from "./ParseManager";
 import { OutputContext, OutputToken } from "./OutputContext";
+import { EROFS } from "constants";
 
 export enum ErrorCode {
     TextParsingError          = 1,
@@ -99,7 +101,6 @@ export const errorMessages = {
 }
 
 export type ParseContextFrame = {
-    depth: number,
     status: MatchStatus,
     node: ParseNode,
     items: RuleNode[] | PatternNode[] | TokenNode[],
@@ -120,7 +121,7 @@ export function findDezentGrammar(options?:ParserOptions) : Grammar{
 
 export interface ParserOptions {
     debugErrors?: boolean,
-    disablePassFailCache?: boolean,
+    disableCacheLookup?: boolean,
 }
 
 export function parseText(grammar:string|Grammar, text:string, options?:ParserOptions) : any {
@@ -165,7 +166,7 @@ export class Parser {
         this.rulesets = rulesets;
         this.options = options || {};
         this.debugLog = debugLog;
-        this.parseCache = new ParseCache(!options.disablePassFailCache);
+        this.parseCache = new ParseCache(!options.disableCacheLookup);
         this.enter(root);
     }
 
@@ -237,6 +238,9 @@ export class Parser {
                     if (next.node.type == "token") {
                         // when repeating, make sure we consumed to avoid infinite loops
                         if (next.node.repeat && exited.consumed > 0) {
+                            // cache intermediate positions of tokens to avoid pathological
+                            // bad grammar performance.
+                            this.parseCache.store(next, next.status, exited.pos);
                             this.enter(next.node.descriptor);
                         }
                     }
@@ -341,7 +345,14 @@ export class Parser {
 
         let frame = this.parseCache.retrieve(pos, node);
         if (frame) {
-            frame.depth = this.stack.length;
+            if (frame.status == MatchStatus.Continue) {
+                parserError(ErrorCode.Unreachable);
+            }
+            // a repeating token frame will place itself in the cache multiple times,
+            // but its pos will reflect its first entry in the cache. So, we may
+            // want to update the frame pos and consumed here.
+            frame.consumed -= pos - frame.pos;
+            frame.pos = pos;
             this.stack.push(frame);
             return;
         }
@@ -370,7 +381,6 @@ export class Parser {
                 break;
         }
         this.stack.push({
-            depth: this.stack.length,
             status: MatchStatus.Continue,
             node: node,
             items: items,
