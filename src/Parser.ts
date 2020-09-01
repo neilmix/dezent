@@ -195,14 +195,15 @@ export class Parser {
                         let [matched, consumed] = current.node.match(text);
                         if (matched) {
                             current.consumed = consumed;
-                            this.parseCache.store(current, MatchStatus.Pass);
+                            current.status = MatchStatus.Pass;
                         } else {
-                            this.parseCache.store(current, MatchStatus.Fail);
+                            current.status = MatchStatus.Fail;
                         }
                         break;
                 }
             } else {
                 let exited = this.stack.pop();
+                this.parseCache.store(exited);
                 let next = this.top();
                 if (!next) {
                     // our parsing is complete!
@@ -229,17 +230,17 @@ export class Parser {
                     }
                     if (next.node.type == "pattern") {
                         if (++next.index >= next.items.length) {
-                            this.parseCache.store(next, MatchStatus.Pass);
+                            next.status = MatchStatus.Pass;
                         } // otherwise stay at Continue
                     } else {
-                        this.parseCache.store(next, MatchStatus.Pass);
+                        next.status = MatchStatus.Pass;
                     }
                     if (next.node.type == "token") {
                         // when repeating, make sure we consumed to avoid infinite loops
                         if (next.node.repeat && exited.consumed > 0) {
                             // cache intermediate positions of tokens to avoid pathological
                             // bad grammar performance.
-                            this.parseCache.store(next, next.status, exited.pos);
+                            this.parseCache.store(next, exited.pos);
                             this.enter(next.node.descriptor);
                         }
                     }
@@ -251,18 +252,18 @@ export class Parser {
                     }
                     if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
-                            this.parseCache.store(next, MatchStatus.Fail);
+                            next.status = MatchStatus.Fail;
                         }
                     } else if (next.node.type == "token") {
                         if (!next.node.required) {
                             // nodes that are not required always pass
-                            this.parseCache.store(next, MatchStatus.Pass);
+                            next.status = MatchStatus.Pass;
                         } else if (next.status == MatchStatus.Continue) {
                             // this node's descriptor never passed - it failed
-                            this.parseCache.store(next, MatchStatus.Fail);
+                            next.status = MatchStatus.Fail;
                         } // it is already marked as Pass
                     } else {
-                        this.parseCache.store(next, MatchStatus.Fail);
+                        next.status = MatchStatus.Fail;
                     }
                     if (next.node.type == "ruleset" && next.node.name == 'return') {
                         parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());

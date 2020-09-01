@@ -16,8 +16,7 @@ export class ParseCache {
         return this.passFail[pos];
     }
 
-    store(frame:ParseContextFrame, status:MatchStatus, pos?:number) {
-        frame.status = status;
+    store(frame:ParseContextFrame, pos?:number) {
         this.passFailPos(pos||frame.pos)[frame.node.id] = frame;
     }
 
