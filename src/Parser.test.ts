@@ -219,6 +219,18 @@ test("access", () => {
     expectParse(`$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;`).toEqual(2);
 });
 
+// test("left recursion", () => {
+//     let grammar = `
+//         expr =
+//             {expr} '+' {num} -> [$1,'+',$2],
+//             num -> $0;
+//         num = [0-9]+ -> $0;
+//         return {expr} -> $1;
+//     `;
+//     expectParse(grammar, '5').toEqual('5');
+//     expectParse(grammar, '5+4').toEqual(['+','5','4']);
+// });
+
 test("dezent grammar documentation", () => {
     let uncompiledDezent = createUncompiledDezentGrammar();
     let textDezent = readFileSync("./test/grammar.dezent").toString();
@@ -260,7 +272,7 @@ test("grammar errors", () => {
     /* 1013 */ expect(parseError(`return .* -> {}.foo;`, 'a').char).toEqual(16);
 });
 
-test("commants", () => {
+test("comments", () => {
     expectParse(`
         // return .* -> 1;
         /*

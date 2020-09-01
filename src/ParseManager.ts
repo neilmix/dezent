@@ -77,6 +77,7 @@ export class ParseManager {
             let rules = ruleset.rules;
             for (let i = 0; i < rules.length; i++) {
                 rules[i].rulesetName = ruleset["name"] || "return";
+                rules[i].rulesetIndex = i;
                 rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
             }
 
@@ -227,7 +228,6 @@ export class ParseManager {
     }
 
     parseTextWithGrammar(grammar:Grammar, text:string) : any {
-        // pre-process the grammar
         let ret:ReturnNode;
     
         for (let ruleset of grammar.ruleset) {

@@ -52,7 +52,8 @@ export interface RuleNode extends SelectorNode {
 	type: 'rule',
 	value: ValueNode, 
 	captures?: boolean[], 
-	rulesetName?: string
+	rulesetName?: string,
+	rulesetIndex?: number,
 }
 
 export interface PatternNode extends Node { 

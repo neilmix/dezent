@@ -1,8 +1,6 @@
-// tagline:
-// Powerful pattern matching and parsing that's readable, recursive, and structured.
-
 // todo:
 // - left recursion
+// - document left recursion algo in comments
 // - documentation
 // - command line script w/tests
 // - package license
@@ -21,6 +19,8 @@
 // - optional trailing semicolon?
 // - refactor: OutputBuilder, GrammarCompiler
 // - perf optimization - linear time
+// - handle number vs string backrefs in output gracefully
+// - remove/disable property accesses?
 
 // speculative/research todo:
 // - compile-time data-type checking
@@ -38,7 +38,6 @@ import {
 import { ParseCache } from "./ParseCache";
 import { ParseManager } from "./ParseManager";
 import { OutputContext, OutputToken } from "./OutputContext";
-import { EROFS } from "constants";
 
 export enum ErrorCode {
     TextParsingError          = 1,
