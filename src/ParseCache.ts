@@ -12,7 +12,12 @@ export class ParseCache {
     }
 
     store(frame:ParseContextFrame, pos?:number) {
-        this.passFail[(pos||frame.pos)*this.maxid + frame.node.id] = frame;
+        let key = this.key(pos||frame.pos, frame.node.id);
+        if (this.passFail[key] && this.passFailRetrieveEnabled) {
+            parserError(ErrorCode.Unreachable);
+        }
+        this.passFail[key] = frame;
+        frame.cached = true;
     }
 
     retrieve(pos, node):ParseContextFrame|undefined {
@@ -24,7 +29,11 @@ export class ParseCache {
     }
     
     get(pos:number, id:number) {
-        return this.passFail[pos*this.maxid + id];
+        return this.passFail[this.key(pos, id)];
+    }
+
+    key(pos:number, id:number) {
+        return pos*this.maxid + id;
     }
 
     visitPassFrames(root:ReturnNode, rulesets: {[key:string]:RulesetNode}, enter:Function, exit:Function) {

@@ -106,6 +106,7 @@ export type ParseContextFrame = {
     index: number,
     pos: number,
     consumed: number,
+    cached: boolean,
 }
 
 let dezentGrammar:Grammar;
@@ -203,7 +204,9 @@ export class Parser {
                 }
             } else {
                 let exited = this.stack.pop();
-                this.parseCache.store(exited);
+                if (!exited.cached) {
+                    this.parseCache.store(exited);
+                }
                 let next = this.top();
                 if (!next) {
                     // our parsing is complete!
@@ -387,6 +390,7 @@ export class Parser {
             index: 0,
             pos: pos,
             consumed: 0,
+            cached: false,
         });
     }
 
