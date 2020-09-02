@@ -159,13 +159,13 @@ export class Parser {
     omitFails : number = 0;
     debugLog : any[][];
     
-    constructor(root:ReturnNode, text:string, rulesets:{[key:string]:RulesetNode}, options:ParserOptions, debugLog:string[][]) {
+    constructor(root:ReturnNode, text:string, rulesets:{[key:string]:RulesetNode}, maxid: number, options:ParserOptions, debugLog:string[][]) {
         this.root = root;
         this.text = text;
         this.rulesets = rulesets;
         this.options = options || {};
         this.debugLog = debugLog;
-        this.parseCache = new ParseCache(!options.disableCacheLookup);
+        this.parseCache = new ParseCache(maxid, !options.disableCacheLookup);
         this.enter(root);
     }
 

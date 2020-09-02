@@ -125,7 +125,7 @@ export class ParseManager {
                 }
             }
         }
-        
+        grammar.maxid = nodeSequence;
         return grammar;
     }
 
@@ -241,7 +241,7 @@ export class ParseManager {
         }
     
         // now parse
-        let parser = this.currentParser = new Parser(ret, text, grammar.rulesetLookup, this.options, this.debugLog);
+        let parser = this.currentParser = new Parser(ret, text, grammar.rulesetLookup, grammar.maxid, this.options, this.debugLog);
         let output = parser.parse();
 
         let builders : {

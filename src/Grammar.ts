@@ -1,5 +1,6 @@
 export type Grammar = { 
 	text?: string,
+	maxid?: number,
 	ruleset: RulesetNode[], 
 	vars: { [key:string]: ValueNode }, 
 	rulesetLookup?: { [key:string]: RulesetNode } 
