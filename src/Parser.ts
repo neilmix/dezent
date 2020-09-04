@@ -68,6 +68,7 @@ export enum ErrorCode {
     CaptureOutputNotFound     = 2008,
     InputConsumedBeforeResult = 2009,
     MultipleOutputsForCapture = 2010,
+    AssertionFailure          = 2011,
 }
 
 export const errorMessages = {
@@ -97,6 +98,7 @@ export const errorMessages = {
     2008: "No output was found during capture",
     2009: "The result does not start at input index 0",
     2010: "Multiple outputs were found for a non-repeating capture",
+    2011: "Assertion failed",
 }
 
 export type ParseContextFrame = {
@@ -107,6 +109,9 @@ export type ParseContextFrame = {
     pos: number,
     consumed: number,
     cached: boolean,
+    leftOffset: number,
+    leftContinuation?: ParseContextFrame[],
+    nextFrame?: ParseContextFrame,
 }
 
 let dezentGrammar:Grammar;
@@ -167,7 +172,7 @@ export class Parser {
         this.options = options || {};
         this.debugLog = debugLog;
         this.parseCache = new ParseCache(maxid, !options.disableCacheLookup);
-        this.enter(root);
+        this.enter(root, -1);
     }
 
     parse() : OutputContext {
@@ -178,16 +183,17 @@ export class Parser {
             let current = this.top();
 
             if (current.index > current.items.length) {
+                debugger;
                 parserError(ErrorCode.ArrayOverrun);
             }
 
             if (current.status == MatchStatus.Continue) {
                 switch (current.node.type) {
                     default:
-                        this.enter(current.items[current.index]);
+                        this.enter(current.items[current.index], current.leftOffset);
                         break;
                     case "ruleref":
-                        this.enter(this.rulesets[current.node.name]);
+                        this.enter(this.rulesets[current.node.name], current.leftOffset);
                         break;
                     case "string":
                     case "class":
@@ -220,6 +226,38 @@ export class Parser {
                 if (exited.node["pattern"] || exited.node.type == "ruleref") {
                     this.debug(exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
                 }
+                // special handling is required for left recursion
+                if (next.leftContinuation) {
+                    debugger;
+                    if (exited.status == MatchStatus.Pass) {
+                        assert(exited.node.type == "rule");
+                        // try again using a copy of our continuation, but update our leftOffsets 
+                        // to reflect further consumption
+                        next.consumed = exited.consumed;
+                        let continuation = next.leftContinuation.map((frame) => Object.assign({}, frame));
+                        continuation.forEach((frame) => frame.leftOffset = exited.consumed);
+                        this.stack = this.stack.concat(continuation);
+                        // update the state of the ruleset at the top of our stack
+                        let top = this.stack[this.stack.length-1];
+                        assert(top.node.type == "ruleset");
+                        top.consumed = exited.consumed;
+                        top.index = (<RuleNode>exited.node).rulesetIndex;
+                        top.nextFrame = exited;
+                        // we got at least one successful continuation - mark our base ruleset as a success
+                        next.status = MatchStatus.Pass;
+                        next.nextFrame = exited;
+                        continue;
+                    } else if (next.status == MatchStatus.Continue && exited.leftOffset == -1) {
+                        // we never got a successful pass through our recursion - we failed
+                        next.status = MatchStatus.Fail;
+                        continue;
+                    } else if (next.status == MatchStatus.Pass) {
+                        // we previously successfully recursed, we're passing!
+                        // don't fall through or we'll get marked as a fail.
+                        continue;
+                    }
+                    // FALL THROUGH
+                }
                 if ((next.node.type == "token" && next.node.not && exited.status == MatchStatus.Fail) || 
                     ((next.node.type != "token" || !next.node.not) && exited.status == MatchStatus.Pass)) 
                 {
@@ -244,7 +282,7 @@ export class Parser {
                             // cache intermediate positions of tokens to avoid pathological
                             // bad grammar performance.
                             this.parseCache.store(next, exited.pos);
-                            this.enter(next.node.descriptor);
+                            this.enter(next.node.descriptor, next.leftOffset);
                         }
                     }
                 } else { // exited.matchStatus == MatchStatus.FAIL
@@ -335,7 +373,7 @@ export class Parser {
         }
     }
 
-    enter(node:ParseNode) {
+    enter(node:ParseNode, leftOffset:number) {
         let current = this.top();
         let pos = current ? current.pos + current.consumed : 0;
         let items;
@@ -344,20 +382,6 @@ export class Parser {
             if (!node["canFail"]) {
                 this.omitFails++;
             }
-        }
-
-        let frame = this.parseCache.retrieve(pos, node);
-        if (frame) {
-            if (frame.status == MatchStatus.Continue) {
-                parserError(ErrorCode.Unreachable);
-            }
-            // a repeating token frame will place itself in the cache multiple times,
-            // but its pos will reflect its first entry in the cache. So, we may
-            // want to update the frame pos and consumed here.
-            frame.consumed -= pos - frame.pos;
-            frame.pos = pos;
-            this.stack.push(frame);
-            return;
         }
 
         switch (node.type) {
@@ -383,15 +407,70 @@ export class Parser {
                 items = [];
                 break;
         }
-        this.stack.push({
-            status: MatchStatus.Continue,
-            node: node,
-            items: items,
-            index: 0,
-            pos: pos,
-            consumed: 0,
-            cached: false,
-        });
+
+        let frame = this.parseCache.retrieve(pos, node, leftOffset);
+        if (frame) {
+            if (frame.status == MatchStatus.Continue) {
+                assert(frame.node.type == "ruleset");
+                // left recursion detected
+                // build a continuation and set leftOffsets
+                let i = this.stack.length - 1;
+                while(this.stack[i].node.id != node.id) {
+                    this.stack[i].leftOffset = 0;
+                    i--;
+                    assert(i > 0);
+                }
+                debugger;
+                this.stack[i].leftContinuation = this.stack.slice(i + 1).map((f) => Object.assign({}, f));
+                this.stack.push({
+                    // the first time through we fail so that parsing can attempt subsequent rules that may pass
+                    status: MatchStatus.Fail,
+                    node: node,
+                    items: items,
+                    index: 0,
+                    pos: pos,
+                    consumed: 0,
+                    // prevent this frame from attempting to store on top of our base frame
+                    cached: true, 
+                    leftOffset: -1,        
+                });
+                this.stack[i].leftContinuation.push({
+                    // subsequent continuation executions need to pass at the top to kick off
+                    // downward descent through the stack
+                    status: MatchStatus.Pass,
+                    node: node,
+                    items: items,
+                    index: 0,      // this will get updated at execution
+                    pos: pos,
+                    consumed: 0,   // this will get updated at execution
+                    cached: false, 
+                    leftOffset: 0, // this will get updated at execution
+                })
+            } else {
+                // a repeating token frame will place itself in the cache multiple times,
+                // but its pos will reflect its first entry in the cache. So, we may
+                // want to update the frame pos and consumed here.
+                frame.consumed -= pos - frame.pos;
+                frame.pos = pos;
+                this.stack.push(frame);
+            }
+        } else {
+            let newFrame = {
+                status: MatchStatus.Continue,
+                node: node,
+                items: items,
+                index: 0,
+                pos: pos,
+                consumed: 0,
+                cached: false,
+                leftOffset: current ? current.leftOffset : -1,
+            }
+            this.stack.push(newFrame);
+            if (newFrame.node.type == "ruleset") {
+                // store rulesets early so we can detect left recursion
+                this.parseCache.store(newFrame);
+            }
+        }
     }
 
     top() : ParseContextFrame|null { 
@@ -410,6 +489,13 @@ export function parserError(code:ErrorCode) {
     let e = new Error(`Internal parser error ${code}: ${msg}`);
     e["code"] = code;
     throw e;
+}
+
+export function assert(condition:boolean) {
+    if (!condition) {
+        debugger;
+        parserError(ErrorCode.AssertionFailure);
+    }
 }
 
 export function parsingError(code:ErrorCode, text:string, pos:number, expected:string[]) {

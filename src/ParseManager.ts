@@ -406,12 +406,12 @@ export class ParseManager {
             lines.push(msg.join('\t').replace(/\n/g, '\\n'));
         }
         console.error("Debug log:\n", lines.join("\n"));
-        if (this.rawGrammar) {
-            console.error("Raw grammar:\n", this.rawGrammar);
-        }
-        if (this.compiledGrammar) {
-            console.error("Compiled grammar:\n", JSON.stringify(this.compiledGrammar));
-        }
+        // if (this.rawGrammar) {
+        //     console.error("Raw grammar:\n", this.rawGrammar);
+        // }
+        // if (this.compiledGrammar) {
+        //     console.error("Compiled grammar:\n", JSON.stringify(this.compiledGrammar));
+        // }
         if (this.currentParser) {
             console.error("Parser stack:\n", this.currentParser.stack);
         }

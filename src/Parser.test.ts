@@ -219,17 +219,19 @@ test("access", () => {
     expectParse(`$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;`).toEqual(2);
 });
 
-// test("left recursion", () => {
-//     let grammar = `
-//         expr =
-//             {expr} '+' {num} -> [$1,'+',$2],
-//             num -> $0;
-//         num = [0-9]+ -> $0;
-//         return {expr} -> $1;
-//     `;
-//     expectParse(grammar, '5').toEqual('5');
-//     expectParse(grammar, '5+4').toEqual(['+','5','4']);
-// });
+test("left recursion", () => {
+    let grammar = `
+        expr =
+            {expr} '+' {num} -> ['+',$1,$2],
+            num -> $0;
+        num = [0-9]+ -> $0;
+        return {expr} -> $1;
+    `;
+    expectParse(grammar, '5').toEqual('5');
+    expectParse(grammar, '5+4').toEqual(['+','5','4']);
+    expectParse(grammar, '5+4+3').toEqual(['+',['+','5','4'],'3']);
+    expectParse(grammar, '5+4+3+2').toEqual(['+',['+',['+','5','4'],'3'],'2']);
+});
 
 test("dezent grammar documentation", () => {
     let uncompiledDezent = createUncompiledDezentGrammar();
