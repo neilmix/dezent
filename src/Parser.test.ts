@@ -222,7 +222,10 @@ test("access", () => {
 test("left recursion", () => {
     let grammar = `
         expr =
-            {expr} '+' {num} -> ['+',$1,$2],
+            {expr} '+' {mult} -> ['+',$1,$2],
+            {mult} -> $1;
+        mult =
+            {mult} '*' {num} -> ['*',$1,$2],
             num -> $0;
         num = [0-9]+ -> $0;
         return {expr} -> $1;
@@ -231,6 +234,22 @@ test("left recursion", () => {
     expectParse(grammar, '5+4').toEqual(['+','5','4']);
     expectParse(grammar, '5+4+3').toEqual(['+',['+','5','4'],'3']);
     expectParse(grammar, '5+4+3+2').toEqual(['+',['+',['+','5','4'],'3'],'2']);
+    expectParse(grammar, '5*4+3*2').toEqual(['+',['*','5','4'],['*','3','2']]);
+    expectParse(grammar, '5*4*3+2').toEqual(['+',['*',['*','5','4'],'3'],'2']);
+
+    grammar = `
+        rule1 = rule2 -> $0;
+        rule2 = rule1 'b' -> $0, 'a' -> $0;
+        return rule1 -> $0;
+    `;
+    expectParse(grammar, 'ab').toEqual('ab');
+
+    grammar = `
+        rule1 = rule2 -> $0, 'a' -> $0;
+        rule2 = rule1 'b' -> $0;
+        return rule1 -> $0;
+    `;
+    expectParse(grammar, 'ab').toEqual('ab');
 });
 
 test("dezent grammar documentation", () => {

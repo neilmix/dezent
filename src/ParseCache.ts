@@ -31,7 +31,6 @@ export class ParseCache {
     }
 
     key(pos:number, id:number, leftOffset:number) {
-        leftOffset = leftOffset > 0 ? leftOffset : 0;
         return (pos+leftOffset)*this.maxid + id;
     }
 
@@ -46,7 +45,6 @@ export class ParseCache {
             switch (frame.node.type) {
                 case "ruleset": 
                     if (frame.nextFrame) {
-                        debugger;
                         visit(frame.nextFrame);
                         break;
                     }
@@ -85,6 +83,6 @@ export class ParseCache {
             exit(frame);
         }
 
-        visit(this.get(0, root.id, -1));
+        visit(this.get(0, root.id, 0));
     }
 }

@@ -172,7 +172,7 @@ export class Parser {
         this.options = options || {};
         this.debugLog = debugLog;
         this.parseCache = new ParseCache(maxid, !options.disableCacheLookup);
-        this.enter(root, -1);
+        this.enter(root);
     }
 
     parse() : OutputContext {
@@ -183,17 +183,16 @@ export class Parser {
             let current = this.top();
 
             if (current.index > current.items.length) {
-                debugger;
                 parserError(ErrorCode.ArrayOverrun);
             }
 
             if (current.status == MatchStatus.Continue) {
                 switch (current.node.type) {
                     default:
-                        this.enter(current.items[current.index], current.leftOffset);
+                        this.enter(current.items[current.index]);
                         break;
                     case "ruleref":
-                        this.enter(this.rulesets[current.node.name], current.leftOffset);
+                        this.enter(this.rulesets[current.node.name]);
                         break;
                     case "string":
                     case "class":
@@ -228,14 +227,13 @@ export class Parser {
                 }
                 // special handling is required for left recursion
                 if (next.leftContinuation) {
-                    debugger;
-                    if (exited.status == MatchStatus.Pass) {
+                    if (exited.status == MatchStatus.Pass && exited.consumed > next.consumed) {
                         assert(exited.node.type == "rule");
                         // try again using a copy of our continuation, but update our leftOffsets 
                         // to reflect further consumption
                         next.consumed = exited.consumed;
                         let continuation = next.leftContinuation.map((frame) => Object.assign({}, frame));
-                        continuation.forEach((frame) => frame.leftOffset = exited.consumed);
+                        continuation.forEach((frame) => frame.leftOffset += exited.consumed);
                         this.stack = this.stack.concat(continuation);
                         // update the state of the ruleset at the top of our stack
                         let top = this.stack[this.stack.length-1];
@@ -246,10 +244,6 @@ export class Parser {
                         // we got at least one successful continuation - mark our base ruleset as a success
                         next.status = MatchStatus.Pass;
                         next.nextFrame = exited;
-                        continue;
-                    } else if (next.status == MatchStatus.Continue && exited.leftOffset == -1) {
-                        // we never got a successful pass through our recursion - we failed
-                        next.status = MatchStatus.Fail;
                         continue;
                     } else if (next.status == MatchStatus.Pass) {
                         // we previously successfully recursed, we're passing!
@@ -282,7 +276,7 @@ export class Parser {
                             // cache intermediate positions of tokens to avoid pathological
                             // bad grammar performance.
                             this.parseCache.store(next, exited.pos);
-                            this.enter(next.node.descriptor, next.leftOffset);
+                            this.enter(next.node.descriptor);
                         }
                     }
                 } else { // exited.matchStatus == MatchStatus.FAIL
@@ -373,9 +367,10 @@ export class Parser {
         }
     }
 
-    enter(node:ParseNode, leftOffset:number) {
+    enter(node:ParseNode) {
         let current = this.top();
         let pos = current ? current.pos + current.consumed : 0;
+        let leftOffset = current ? current.leftOffset : 0;
         let items;
 
         if (["ruleset", "rule", "pattern", "capture", "group"].includes(node.type)) {
@@ -416,12 +411,15 @@ export class Parser {
                 // build a continuation and set leftOffsets
                 let i = this.stack.length - 1;
                 while(this.stack[i].node.id != node.id) {
-                    this.stack[i].leftOffset = 0;
+                    this.stack[i].leftOffset = leftOffset;
                     i--;
                     assert(i > 0);
                 }
-                debugger;
                 this.stack[i].leftContinuation = this.stack.slice(i + 1).map((f) => Object.assign({}, f));
+                // there may be intermediate rulesets in the continuation. Remember, rulesets are cached
+                // immediately upon creation (see below). So, we need to update the cached member
+                // of all our continuation frames just in case.
+                this.stack[i].leftContinuation.forEach((f) => f.cached = false);
                 this.stack.push({
                     // the first time through we fail so that parsing can attempt subsequent rules that may pass
                     status: MatchStatus.Fail,
@@ -432,7 +430,7 @@ export class Parser {
                     consumed: 0,
                     // prevent this frame from attempting to store on top of our base frame
                     cached: true, 
-                    leftOffset: -1,        
+                    leftOffset: leftOffset,        
                 });
                 this.stack[i].leftContinuation.push({
                     // subsequent continuation executions need to pass at the top to kick off
@@ -444,7 +442,7 @@ export class Parser {
                     pos: pos,
                     consumed: 0,   // this will get updated at execution
                     cached: false, 
-                    leftOffset: 0, // this will get updated at execution
+                    leftOffset: leftOffset, // this will get updated at execution
                 })
             } else {
                 // a repeating token frame will place itself in the cache multiple times,
@@ -463,7 +461,7 @@ export class Parser {
                 pos: pos,
                 consumed: 0,
                 cached: false,
-                leftOffset: current ? current.leftOffset : -1,
+                leftOffset: leftOffset,
             }
             this.stack.push(newFrame);
             if (newFrame.node.type == "ruleset") {
