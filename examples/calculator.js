@@ -9,6 +9,7 @@ const rl = readline.createInterface({
 let dez = new Dezent(`
     return _ {addsub} _ -> $1;
 
+    // whitespace rule
     _ = [ \\n]* -> null;
 
     addsub = 
@@ -30,7 +31,6 @@ let dez = new Dezent(`
     number = 
         '-'? ( [0-9]+ )? '.' [0-9]+  ( [eE] [-+] [0-9]+ )? -> { op: 'number', value: $0 },
         '-'? [0-9]+ ( [eE] [-+] [0-9]+ )? -> { op: 'number', value: $0 }; 
-    //    [0-9]+ -> $0;
 `);
 
 let ops = {
@@ -43,14 +43,14 @@ let ops = {
 };
 
 (input = () => {
-    rl.question('> ', (expr) => {
+    rl.question('enter expression: ', (expr) => {
         let result = dez.parse(expr);
         if (result) {
-            console.log("Output parse tree:");
+            console.log("Parse output:");
             console.log(JSON.stringify(result, null, 2));
-            console.log('Result:', ops[result.op](result));
+            console.log('Calculated result:', ops[result.op](result));
         } else {
-            console.log(dez.error);
+            console.log(dez.error.message);
         }
         input();
     });

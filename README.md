@@ -10,7 +10,7 @@ Dezent is ideal for:
 * Complex nested pattern matching
 * Converting text data into hierarchical data structures
 * Extracting numerous text segments into structured output
-* Recursive descent parsing (e.g. programming languages)
+* Recursive descent parsing
 
 <!---
 # Quick Start Example: Parsing URLs
@@ -72,8 +72,6 @@ Either of the above will produce this output:
 }
 ```
 -->
-
-# Tutorial
 
 # Reference - Pattern Matching
 

@@ -2,30 +2,30 @@
 // - documentation
 // - command line script w/tests
 // - package license
-// - performance/scale testing
 // - release?
-// - output callbacks
-// - @id
 // - string interpolation
-// - backref within pattern
-// - regex-like search-and-find
-// - refactor omitFails to be on the frame?
+// - handle number vs string backrefs in output gracefully
+// - streaming support
+//   - chunked parsing
+//   - sax-like output callbacks
+//   - cache eviction / progressive tabling / dynamic analysis
 // - memory optimization:
 //   - don't create frames for terminals
 //   - don't cache failed frames, cache boolean instead
-//   - one-dimension cache
-// - optional trailing semicolon?
+//   - recycle frames and arrays
+// - compiled grammar versioning
 // - refactor: OutputBuilder, GrammarCompiler
-// - perf optimization - linear time
-// - handle number vs string backrefs in output gracefully
+// - @id
+// - backref within pattern
+// - regex-like search-and-find
+// - refactor omitFails to be on the frame?
+// - optional trailing semicolon?
 // - remove/disable property accesses?
 
 // speculative/research todo:
 // - compile-time data-type checking
-// - packrat cache eviction to free memory
 // - error messaging
 // - error recovery
-// - chunked parsing
 // - macros/functions, e.g. definition(pattern1, pattern2)
 
 import { 
