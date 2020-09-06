@@ -412,6 +412,7 @@ var Parser = /** @class */ (function () {
                 // but its pos will reflect its first entry in the cache. So, we may
                 // want to update the frame pos and consumed here.
                 frame.consumed -= pos - frame.pos;
+                assert(frame.consumed >= 0);
                 frame.pos = pos;
                 this.stack.push(frame);
             }

@@ -169,7 +169,7 @@ test("access", function () {
     expectParse("$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;").toEqual(2);
 });
 test("left recursion", function () {
-    var grammar = "\n        expr =\n            {expr} '+' {mult} -> ['+',$1,$2],\n            {mult} -> $1;\n        mult =\n            {mult} '*' {num} -> ['*',$1,$2],\n            num -> $0;\n        num = [0-9]+ -> $0;\n        return {expr} -> $1;\n    ";
+    var grammar = "\n        _ = [ \\n]* -> null;\n        expr =\n            {expr} _ '+' _ {mult} -> ['+',$1,$2],\n            {mult} -> $1;\n        mult =\n            {mult} _ '*' _ {num} -> ['*',$1,$2],\n            num -> $0;\n        num = [0-9]+ -> $0;\n        return _ {expr} _ -> $1;\n    ";
     expectParse(grammar, '5').toEqual('5');
     expectParse(grammar, '5+4').toEqual(['+', '5', '4']);
     expectParse(grammar, '5+4+3').toEqual(['+', ['+', '5', '4'], '3']);

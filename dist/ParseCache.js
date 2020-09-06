@@ -4,19 +4,22 @@ exports.ParseCache = void 0;
 var Parser_1 = require("./Parser");
 var ParseCache = /** @class */ (function () {
     function ParseCache(maxid, cacheLookupEnabled) {
-        this.passFail = [];
-        this.passFailRetrieveEnabled = true;
+        this.frameCache = [];
+        this.cacheRetrieveEnabled = true;
         this.maxid = maxid;
-        this.passFailRetrieveEnabled = cacheLookupEnabled;
+        this.cacheRetrieveEnabled = cacheLookupEnabled;
     }
     ParseCache.prototype.store = function (frame, pos) {
-        var key = this.key(pos || frame.pos, frame.node.id, frame.leftOffset);
-        Parser_1.assert(!this.passFail[key] || !this.passFailRetrieveEnabled);
-        this.passFail[key] = frame;
+        pos = pos || frame.pos;
+        var key = this.key(frame.node.id, frame.leftOffset);
+        if (!this.frameCache[pos])
+            this.frameCache[pos] = [];
+        Parser_1.assert(!this.frameCache[pos][key] || !this.cacheRetrieveEnabled);
+        this.frameCache[pos][key] = frame;
         frame.cached = true;
     };
     ParseCache.prototype.retrieve = function (pos, node, leftOffset) {
-        if (this.passFailRetrieveEnabled) {
+        if (this.cacheRetrieveEnabled) {
             return this.get(pos, node.id, leftOffset);
         }
         else {
@@ -24,10 +27,12 @@ var ParseCache = /** @class */ (function () {
         }
     };
     ParseCache.prototype.get = function (pos, id, leftOffset) {
-        return this.passFail[this.key(pos, id, leftOffset)];
+        if (!this.frameCache[pos])
+            return undefined;
+        return this.frameCache[pos][this.key(id, leftOffset)];
     };
-    ParseCache.prototype.key = function (pos, id, leftOffset) {
-        return (pos + leftOffset) * this.maxid + id;
+    ParseCache.prototype.key = function (id, leftOffset) {
+        return leftOffset * this.maxid + id;
     };
     ParseCache.prototype.visitPassFrames = function (root, rulesets, enter, exit) {
         var _this = this;
