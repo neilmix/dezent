@@ -54,13 +54,19 @@ var ParseManager = /** @class */ (function () {
             }
             rulesetLookup[ruleset.name] = ruleset;
         }
+        var nodeSequence = 0;
         for (var _b = 0, _c = grammar.ruleset; _b < _c.length; _b++) {
             var ruleset = _c[_b];
             var rules = ruleset.rules;
             for (var i = 0; i < rules.length; i++) {
                 rules[i].rulesetName = ruleset["name"] || "return";
+                rules[i].rulesetIndex = i;
                 rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
             }
+            // assign an id to every node
+            visitParseNodes(null, ruleset, null, function (node) {
+                node.id = ++nodeSequence;
+            }, null);
             // perform sanity checks
             visitParseNodes("ruleref", ruleset, null, null, function (node) {
                 if (!rulesetLookup[node.name]) {
@@ -103,6 +109,7 @@ var ParseManager = /** @class */ (function () {
                 }
             }
         }
+        grammar.maxid = nodeSequence;
         return grammar;
     };
     ParseManager.prototype.compileRule = function (rule, vars, text) {
@@ -199,7 +206,6 @@ var ParseManager = /** @class */ (function () {
         return info.captures;
     };
     ParseManager.prototype.parseTextWithGrammar = function (grammar, text) {
-        // pre-process the grammar
         var ret;
         for (var _i = 0, _a = grammar.ruleset; _i < _a.length; _i++) {
             var ruleset = _a[_i];
@@ -211,8 +217,8 @@ var ParseManager = /** @class */ (function () {
             grammarError(Parser_1.ErrorCode.ReturnNotFound, text);
         }
         // now parse
-        var parser = this.currentParser = new Parser_1.Parser(ret, text, grammar.rulesetLookup, this.options, this.debugLog);
-        parser.parse();
+        var parser = this.currentParser = new Parser_1.Parser(ret, text, grammar.rulesetLookup, grammar.maxid, this.options, this.debugLog);
+        var output = parser.parse();
         var builders = {
             backref: function (node, backrefs) {
                 if (backrefs[node.index] === undefined) {
@@ -322,7 +328,7 @@ var ParseManager = /** @class */ (function () {
             }
         };
         // build our output value    
-        return buildOutput(parser.output.result);
+        return buildOutput(output.result);
         function buildOutput(token) {
             if (Array.isArray(token)) {
                 return token.map(function (v) { return buildOutput(v); });
@@ -380,18 +386,14 @@ var ParseManager = /** @class */ (function () {
             lines.push(msg.join('\t').replace(/\n/g, '\\n'));
         }
         console.error("Debug log:\n", lines.join("\n"));
-        if (this.rawGrammar) {
-            console.error("Raw grammar:\n", this.rawGrammar);
-        }
-        if (this.compiledGrammar) {
-            console.error("Compiled grammar:\n", JSON.stringify(this.compiledGrammar));
-        }
+        // if (this.rawGrammar) {
+        //     console.error("Raw grammar:\n", this.rawGrammar);
+        // }
+        // if (this.compiledGrammar) {
+        //     console.error("Compiled grammar:\n", JSON.stringify(this.compiledGrammar));
+        // }
         if (this.currentParser) {
             console.error("Parser stack:\n", this.currentParser.stack);
-            console.error("Output stack:\n", this.currentParser.output.stack);
-            if (this.currentParser.output.result) {
-                console.error("Output:\n", JSON.stringify(this.currentParser.output.result));
-            }
         }
     };
     return ParseManager;
@@ -420,7 +422,7 @@ function visitParseNodes(types, root, data, enter, exit) {
     if (typeof types == "string") {
         types = [types];
     }
-    if (enter && types.includes(root.type)) {
+    if (enter && (types == null || types.includes(root.type))) {
         enter(root, data);
     }
     var items = [];
@@ -445,7 +447,7 @@ function visitParseNodes(types, root, data, enter, exit) {
         var item = items_1[_i];
         visitParseNodes(types, item, data, enter, exit);
     }
-    if (exit && types.includes(root.type)) {
+    if (exit && (types == null || types.includes(root.type))) {
         exit(root, data);
     }
 }

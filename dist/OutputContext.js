@@ -17,29 +17,25 @@ var OutputContext = /** @class */ (function () {
         };
         this.stack.push(this.top);
     };
-    OutputContext.prototype.exitFrame = function (node, success) {
+    OutputContext.prototype.exitFrame = function (node) {
         var frame = this.stack.pop();
         this.top = this.stack[this.stack.length - 1];
         if (frame.node != node) {
             Parser_1.parserError(Parser_1.ErrorCode.MismatchOutputFrames);
         }
-        if (success) {
-            if (!frame.output) {
-                // whoops, yield was never called
-                Parser_1.parserError(Parser_1.ErrorCode.EmptyOutput);
-            }
-            this.addTokenObject(frame.output);
+        if (!frame.output) {
+            // whoops, yield was never called
+            Parser_1.parserError(Parser_1.ErrorCode.EmptyOutput);
         }
+        return frame.output;
     };
     OutputContext.prototype.enterGroup = function () {
         this.top.tokensStack.push(this.top.tokens);
         this.top.tokens = [];
     };
-    OutputContext.prototype.exitGroup = function (success) {
-        if (success) {
-            var index = this.top.tokensStack.length - 1;
-            this.top.tokensStack[index] = this.top.tokensStack[index].concat(this.top.tokens);
-        }
+    OutputContext.prototype.exitGroup = function () {
+        var index = this.top.tokensStack.length - 1;
+        this.top.tokensStack[index] = this.top.tokensStack[index].concat(this.top.tokens);
         this.top.tokens = this.top.tokensStack.pop();
     };
     OutputContext.prototype.startCapture = function (node) {
@@ -49,26 +45,24 @@ var OutputContext = /** @class */ (function () {
         this.top.captureNode = node;
         this.top.capture = [];
     };
-    OutputContext.prototype.endCapture = function (node, success) {
+    OutputContext.prototype.endCapture = function (node) {
         if (this.top.captureNode != node) {
             Parser_1.parserError(Parser_1.ErrorCode.MismatchEndCapture);
         }
-        if (success) {
-            // move our capture into an output
-            var token = void 0;
-            if (this.top.capture.length > 1) {
-                this.top.tokens.push({
-                    captureIndex: this.top.captureNode.index,
-                    pos: this.top.capture[0].pos,
-                    length: this.top.capture.reduce(function (t, c) { return t + c.length; }, 0)
-                });
-            }
-            else if (this.top.capture.length == 1) {
-                this.top.tokens.push(this.top.capture[0]);
-            }
-            else {
-                // didn't match...
-            }
+        // move our capture into an output
+        var token;
+        if (this.top.capture.length > 1) {
+            this.top.tokens.push({
+                captureIndex: this.top.captureNode.index,
+                pos: this.top.capture[0].pos,
+                length: this.top.capture.reduce(function (t, c) { return t + c.length; }, 0)
+            });
+        }
+        else if (this.top.capture.length == 1) {
+            this.top.tokens.push(this.top.capture[0]);
+        }
+        else {
+            // didn't match...
         }
         this.top.captureNode = null;
     };
@@ -127,7 +121,7 @@ var OutputContext = /** @class */ (function () {
             value: rule.value
         };
     };
-    OutputContext.prototype.reset = function (rule) {
+    OutputContext.prototype.setRule = function (rule) {
         this.top.rule = rule;
         this.top.tokens = [];
     };

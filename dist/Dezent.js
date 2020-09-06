@@ -3,14 +3,14 @@ exports.__esModule = true;
 var parser = require("./Parser");
 var Dezent = /** @class */ (function () {
     function Dezent(grammarStr, options) {
-        options = options || {};
-        this.debugErrors = !!options.debugErrors;
+        this.options = options || {};
+        this.debugErrors = !!this.options.debugErrors;
         this.error = null;
-        this.grammar = parser.parseGrammar(grammarStr);
+        this.grammar = parser.parseGrammar(grammarStr, this.options);
     }
     Dezent.prototype.parse = function (text) {
         try {
-            return parser.parseText(this.grammar, text);
+            return parser.parseText(this.grammar, text, this.options);
         }
         catch (e) {
             this.error = e;

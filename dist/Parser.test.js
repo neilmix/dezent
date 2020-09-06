@@ -120,6 +120,7 @@ test('capture and groups', function () {
         .toEqual(['a', null, [], ['a', 'a', 'a']]);
     expectParse("return ('a'+ ({'b'})+ )+ -> $1;", 'abaabbabbbabb')
         .toEqual('b'.repeat(8).split(""));
+    expectParse("foo = {.} -> { foo: $1 }; return { foo . } -> $1;", 'ab').toEqual('ab');
     expectParse("return {(. .)+} -> $1;", 'aaaa').toEqual('aaaa');
     expectParseFail("return {(. .)+} -> 1;", 'aaaaa');
     expectGrammarFail("return {{.}} -> null;");
@@ -167,6 +168,19 @@ test("access", function () {
     expectParse("foo = .* -> {a: 1}; return {foo} -> $1['a'];").toEqual(1);
     expectParse("$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;").toEqual(2);
 });
+test("left recursion", function () {
+    var grammar = "\n        expr =\n            {expr} '+' {mult} -> ['+',$1,$2],\n            {mult} -> $1;\n        mult =\n            {mult} '*' {num} -> ['*',$1,$2],\n            num -> $0;\n        num = [0-9]+ -> $0;\n        return {expr} -> $1;\n    ";
+    expectParse(grammar, '5').toEqual('5');
+    expectParse(grammar, '5+4').toEqual(['+', '5', '4']);
+    expectParse(grammar, '5+4+3').toEqual(['+', ['+', '5', '4'], '3']);
+    expectParse(grammar, '5+4+3+2').toEqual(['+', ['+', ['+', '5', '4'], '3'], '2']);
+    expectParse(grammar, '5*4+3*2').toEqual(['+', ['*', '5', '4'], ['*', '3', '2']]);
+    expectParse(grammar, '5*4*3+2').toEqual(['+', ['*', ['*', '5', '4'], '3'], '2']);
+    grammar = "\n        rule1 = rule2 -> $0;\n        rule2 = rule1 'b' -> $0, 'a' -> $0;\n        return rule1 -> $0;\n    ";
+    expectParse(grammar, 'ab').toEqual('ab');
+    grammar = "\n        rule1 = rule2 -> $0, 'a' -> $0;\n        rule2 = rule1 'b' -> $0;\n        return rule1 -> $0;\n    ";
+    expectParse(grammar, 'ab').toEqual('ab');
+});
 test("dezent grammar documentation", function () {
     var uncompiledDezent = Grammar_1.createUncompiledDezentGrammar();
     var textDezent = fs_1.readFileSync("./test/grammar.dezent").toString();
@@ -203,6 +217,36 @@ test("grammar errors", function () {
     /* 1013 */ expect(parseError("$foo = {}; return .* -> [1][$foo];", 'a').char).toEqual(28);
     /* 1013 */ expect(parseError("return .* -> {}.foo;", 'a').char).toEqual(16);
 });
-test("commants", function () {
+test("comments", function () {
     expectParse("\n        // return .* -> 1;\n        /*\n           return .* -> 2;\n        */\n        return .* -> 3;\n    ").toEqual(3);
+});
+test("packrat", function () {
+    function buildText(count) {
+        var text = 'a'.repeat(count) + 'b';
+    }
+    var grammar = "\n        return {theRule}* -> $1;\n        theRule =\n            {'a'}* {'c'} -> [$1, $2],\n            {'b'} -> $1,\n            {'a'} -> $1;\n    ";
+    var caching = new Dezent_1["default"](grammar, { disableCacheLookup: false });
+    var noncaching = new Dezent_1["default"](grammar, { disableCacheLookup: true });
+    expect(caching.parse('aaaab')).toEqual(['a', 'a', 'a', 'a', 'b']);
+    expect(noncaching.parse('aaaab')).toEqual(['a', 'a', 'a', 'a', 'b']);
+    function time(f) {
+        var t = new Date().getTime();
+        f();
+        return new Date().getTime() - t;
+    }
+    var log = [['packrat cache performance results']];
+    function run(size, runUncached) {
+        var text = 'a'.repeat(size) + 'b';
+        log.push(["size: ", size]);
+        if (runUncached) {
+            log.push(["  uncached:", time(function () { return noncaching.parse(text); })]);
+        }
+        log.push(["  cached:  ", time(function () { return caching.parse(text); })]);
+    }
+    run(100, true);
+    run(1000, true);
+    run(2000, true);
+    run(4000, false);
+    run(8000, false);
+    console.log(log.map(function (i) { return i.join(' '); }).join('\n'));
 });

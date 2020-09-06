@@ -221,14 +221,15 @@ test("access", () => {
 
 test("left recursion", () => {
     let grammar = `
+        _ = [ \\n]* -> null;
         expr =
-            {expr} '+' {mult} -> ['+',$1,$2],
+            {expr} _ '+' _ {mult} -> ['+',$1,$2],
             {mult} -> $1;
         mult =
-            {mult} '*' {num} -> ['*',$1,$2],
+            {mult} _ '*' _ {num} -> ['*',$1,$2],
             num -> $0;
         num = [0-9]+ -> $0;
-        return {expr} -> $1;
+        return _ {expr} _ -> $1;
     `;
     expectParse(grammar, '5').toEqual('5');
     expectParse(grammar, '5+4').toEqual(['+','5','4']);
@@ -249,7 +250,7 @@ test("left recursion", () => {
         rule2 = rule1 'b' -> $0;
         return rule1 -> $0;
     `;
-    expectParse(grammar, 'ab').toEqual('ab');
+    expectParse(grammar, 'ab').toEqual('ab');        
 });
 
 test("dezent grammar documentation", () => {

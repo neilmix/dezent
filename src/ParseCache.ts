@@ -3,23 +3,25 @@ import { Node, ReturnNode, RulesetNode, TokenNode } from "./Grammar";
 
 export class ParseCache {
     maxid:number;
-    passFail:ParseContextFrame[] = [];
-    passFailRetrieveEnabled:boolean = true;
+    frameCache:ParseContextFrame[][] = [];
+    cacheRetrieveEnabled:boolean = true;
 
     constructor(maxid: number, cacheLookupEnabled:boolean) {
         this.maxid = maxid;
-        this.passFailRetrieveEnabled = cacheLookupEnabled;
+        this.cacheRetrieveEnabled = cacheLookupEnabled;
     }
 
     store(frame:ParseContextFrame, pos?:number) {
-        let key = this.key(pos||frame.pos, frame.node.id, frame.leftOffset);
-        assert(!this.passFail[key] || !this.passFailRetrieveEnabled);
-        this.passFail[key] = frame;
+        pos = pos || frame.pos;
+        let key = this.key(frame.node.id, frame.leftOffset);
+        if (!this.frameCache[pos]) this.frameCache[pos] = [];
+        assert(!this.frameCache[pos][key] || !this.cacheRetrieveEnabled);
+        this.frameCache[pos][key] = frame;
         frame.cached = true;
     }
 
     retrieve(pos:number, node:Node, leftOffset:number):ParseContextFrame|undefined {
-        if (this.passFailRetrieveEnabled) {
+        if (this.cacheRetrieveEnabled) {
             return this.get(pos, node.id, leftOffset);
         } else {
             return undefined;
@@ -27,11 +29,12 @@ export class ParseCache {
     }
     
     get(pos:number, id:number, leftOffset:number) {
-        return this.passFail[this.key(pos, id, leftOffset)];
+        if (!this.frameCache[pos]) return undefined;
+        return this.frameCache[pos][this.key(id, leftOffset)];
     }
 
-    key(pos:number, id:number, leftOffset:number) {
-        return (pos+leftOffset)*this.maxid + id;
+    key(id:number, leftOffset:number) {
+        return leftOffset*this.maxid + id;
     }
 
     visitPassFrames(root:ReturnNode, rulesets: {[key:string]:RulesetNode}, enter:Function, exit:Function) {
