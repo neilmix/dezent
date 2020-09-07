@@ -1,32 +1,21 @@
-// todo:
-// - handle number vs string backrefs in output gracefully
-// - documentation
-// - command line script w/tests
-// - package license
-// - release?
-// - string interpolation
-// - streaming support
-//   - chunked parsing
-//   - sax-like output callbacks
-//   - cache eviction / progressive tabling / dynamic analysis
-// - memory optimization:
-//   - don't create frames for terminals
-//   - don't cache failed frames, cache boolean instead
-//   - recycle frames and arrays
-// - compiled grammar versioning
-// - refactor: OutputBuilder, GrammarCompiler
-// - @id
-// - backref within pattern
-// - regex-like search-and-find
-// - refactor omitFails to be on the frame?
-// - optional trailing semicolon?
-// - remove/disable property accesses?
-
-// speculative/research todo:
-// - compile-time data-type checking
-// - error messaging
-// - error recovery
-// - macros/functions, e.g. definition(pattern1, pattern2)
+/*
+ *  Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
+ *  Copyright (C) 2020  Neil Mix  <neilmix@gmail.com>
+ *  Commercial licensing and support are available, please contact neilmix@gmail.com.
+ * 
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Affero General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <https://www.gnu.org/licenses/>. 
+ */
 
 import { 
     Grammar, createUncompiledDezentGrammar, RulesetNode, ReturnNode,

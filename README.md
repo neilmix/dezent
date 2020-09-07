@@ -18,6 +18,8 @@ Dezent is currently in _alpha_. This is the first public release of Dezent, for 
 
 # License
 
+Dezent is made available under the GNU Affero General Public License. See License.txt for details. Commercial licensing and support are available, please contact neilmix@gmail.com.
+
 # Quick Start
 
 Dezent is inspired by [Parsing Expression Grammars](https://en.wikipedia.org/wiki/Parsing_expression_grammar) - if you understand the basic concepts of PEGs, Dezent will be easier to follow.

@@ -1,33 +1,51 @@
 "use strict";
+/*
+ *  Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
+ *  Copyright (C) 2020  Neil Mix  <neilmix@gmail.com>
+ *  Commercial licensing and support are available, please contact neilmix@gmail.com.
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Affero General Public License as
+ *  published by the Free Software Foundation, either version 3 of the
+ *  License, or (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Affero General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Affero General Public License
+ *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+exports.__esModule = true;
+exports.findLineAndChar = exports.parsingError = exports.assert = exports.parserError = exports.Parser = exports.MatchStatus = exports.parseGrammar = exports.parseText = exports.findDezentGrammar = exports.errorMessages = exports.ErrorCode = void 0;
 // todo:
+// - handle number vs string backrefs in output gracefully
 // - documentation
 // - command line script w/tests
 // - package license
-// - performance/scale testing
 // - release?
-// - output callbacks
-// - @id
 // - string interpolation
-// - backref within pattern
-// - regex-like search-and-find
-// - refactor omitFails to be on the frame?
+// - streaming support
+//   - chunked parsing
+//   - sax-like output callbacks
+//   - cache eviction / progressive tabling / dynamic analysis
 // - memory optimization:
 //   - don't create frames for terminals
 //   - don't cache failed frames, cache boolean instead
-//   - one-dimension cache
-// - optional trailing semicolon?
+//   - recycle frames and arrays
+// - compiled grammar versioning
 // - refactor: OutputBuilder, GrammarCompiler
-// - perf optimization - linear time
-// - handle number vs string backrefs in output gracefully
+// - @id
+// - backref within pattern
+// - regex-like search-and-find
+// - refactor omitFails to be on the frame?
+// - optional trailing semicolon?
 // - remove/disable property accesses?
-exports.__esModule = true;
-exports.findLineAndChar = exports.parsingError = exports.assert = exports.parserError = exports.Parser = exports.MatchStatus = exports.parseGrammar = exports.parseText = exports.findDezentGrammar = exports.errorMessages = exports.ErrorCode = void 0;
 // speculative/research todo:
 // - compile-time data-type checking
-// - packrat cache eviction to free memory
 // - error messaging
 // - error recovery
-// - chunked parsing
 // - macros/functions, e.g. definition(pattern1, pattern2)
 var Grammar_1 = require("./Grammar");
 var ParseCache_1 = require("./ParseCache");
