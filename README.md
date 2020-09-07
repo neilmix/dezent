@@ -391,9 +391,14 @@ Declares constants within your grammar. Constants cannot be used within rules, o
 
 ```javascript
 > new Dezent(`
+    $pi = 3.14;
+    return .* -> $pi;
+).parse('anything');
+3.14
+> new Dezent(`
     $myconst = { foo: 'bar' };
     return .* -> $myconst;
-`).parse('abc');
+`).parse('anything');
 { foo: 'bar' }
 ```
 
@@ -401,19 +406,181 @@ Declares constants within your grammar. Constants cannot be used within rules, o
 
 ## JSON-like
 
+Dezent rules yield output in JSON format. Keep in mind that Dezent grammar syntax uses single-quoted strings. Also, quotes around object member names are optional (as in javascript). The command-line tool yields standard JSON - with double-quote strings and quoted member names - when generating its output.
+
+```javascript
+> new Dezent(`
+    return .* -> {
+        bool: true,
+        number: 2.4e-5,
+        string: 'a string',
+        null: null,
+        array: [1, 2, 'another string']
+    };
+`).parse('anything');
+{ bool: true,
+  number: 0.000024,
+  string: 'a string',
+  null: null,
+  array: [ 1, 2, 'another string' ] }
+```
+
 ## `$0` back reference
 
-## `$1` back reference
+The $0 back reference returns the entire string matched during rule processing, regardless of any captures.
+
+```javascript
+> new Dezent(`return ... -> $0;`).parse('xyz');
+'xyz'
+> new Dezent(`return .{...}. -> $0;`).parse('abcde');
+'abcde'
+```
+
+## `$1...$n` back references
+
+Back references refer to sequences captured during a rule's parse. Each reference is numbered from 1 to n, left to right.
+
+```javascript
+> new Dezent(`return {.} {.} -> [$1, $2];`).parse('ab');
+[ 'a', 'b' ]
+```
+A repeated capture will always return an array as output, regardless of how many times the token matches.
+
+```javascript
+> new Dezent(`return 'a' {'b'}* 'a' -> $1;`).parse('abbba');
+[ 'b', 'b', 'b' ]
+> new Dezent(`return 'a' {'b'}* 'a' -> $1;`).parse('aa');
+[]
+> new Dezent(`return ( {[a-z]*} [0-9]* )* -> $1;`).parse('ab12cd34');
+[ 'ab', 'cd' ]
+```
+
+Note the subtle but powerful difference between repeats inside the capture vs. outside:
+```javascript
+> new Dezent(`return {'a'*} -> $1;`).parse('aaa');
+'aaa'
+> new Dezent(`return {'a'}* -> $1;`).parse('aaa');
+[ 'a', 'a', 'a' ]
+```
+
+When token matching is optional (the '?' modifier), null may be returned
+
+```javascript
+> new Dezent(`return 'a' {'b'}? 'a' -> $1;`).parse('aa');
+null
+```
+
+By default, captures yield string output. However, if a capture matches (and only matches) a rule reference, it yields the output of that rule.
+
+```javascript
+> new Dezent(`
+    rule1 = 'a' -> { value: $0 };
+    rule2 = 'b' -> { value: $0 };
+    return {rule1 | rule2} -> $1;
+`).parse('b');
+{ value: 'b' }
+```
+If a capture matches multiple tokens, the matching string segment is always returned.
+
+```javascript
+> new Dezent(`
+    rule1 = 'a' -> { value: $0 };
+    rule2 = 'b' -> { value: $0 };
+    return {rule1 rule2} -> $1;
+`).parse('ab');
+'ab'
+```
 
 ## `$identifier` constant reference
 
+You can define constants and refer to them in your output:
+
+```javascript
+> new Dezent(`
+    $pi = 3.14;
+    return .* -> $pi;
+`).parse('anything');
+3.14
+> new Dezent(`
+    $myconst = { foo: 'bar' };
+    return .* -> $myconst;
+`).parse('anything');
+{ foo: 'bar' }
+```
+
 ## `@identifier` meta reference
+
+There are two meta-references available in output: the ordinal position of the rule's match, and its length.
+
+```javascript
+> new Dezent(`
+    rule = (!'x' .)* -> { match: $0, pos: @position, length: @length };
+    return 'x'* {rule} 'x'* -> $1;
+`).parse('xabcx');
+{ match: 'abc', pos: 1, length: 3 }
+```
+
+Meta-references can be used within a constant definition and their values will be populated when the rule is processed.
+```javascript
+> new Dezent(`
+    $meta = { match: $0, pos: @position, length: @length };
+    rule = (!'x' .)* -> { type: 'rule', ...$meta };
+    return 'x'* {rule} 'x'* -> $1;
+`).parse('xabcx');
+{ match: 'abc', pos: 1, length: 3 }
+```
 
 ## `...` spread
 
+The spread operator allows you to incorporate one array or object within another array or object.
+```javascript
+> new Dezent(`
+    $array = [1, 2, 3];
+    return .* -> [ ...$array, 4, 5, 6];
+`).parse('anything');
+[ 1, 2, 3, 4, 5, 6 ]
+> new Dezent(`
+    $object = { foo: 1, bar: 2 };
+    return .* -> [ ...$object ];
+`).parse('anything');
+[ [ 'foo', 1 ], [ 'bar', 2 ] ]
+> new Dezent(`
+    $array = [ [ 'foo', 1 ], [ 'bar', 2 ] ];
+    return .* -> { ...$array };
+`).parse('anything');
+{ foo: 1, bar: 2 }
+> new Dezent(`
+    $object = { foo: 1, bar: 2 };
+    return .* -> { ...$object, baz: 3 };
+`).parse('anything');
+{ foo: 1, bar: 2, baz: 3 }
+```
 ## `^` pivot
 
-## `.` property access
+The pivot operator swaps an array's rows with its columns. This is particularly useful for spreading a pair of captures inside an object:
+```javascript
+> new Dezent(`
+    return {[a-z]}* {[0-9]}* -> 
+        { 
+            '1': $1, 
+            '2': $2, 
+            pivot: ^[$1, $2], 
+            spread: { ...^[$1, $2] }
+        };
+`).parse('abc123');
+{ '1': [ 'a', 'b', 'c' ],
+  '2': [ '1', '2', '3' ],
+  pivot: [ [ 'a', '1' ], [ 'b', '2' ], [ 'c', '3' ] ],
+  spread: { a: '1', b: '2', c: '3' } }
+```
 
-## `[]` property access
+## `.` or `[]` property access
 
+You can access object and array properties much like you would in javascript:
+```javascript
+> new Dezent(`
+    $myconst = { foo: 1, bar: [2, 3, 4] };
+    return .* -> [$myconst.foo, $myconst['bar'][2]];
+`).parse('anything');
+[ 1, 4 ]
+```
