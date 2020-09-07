@@ -1,10 +1,10 @@
 // todo:
+// - handle number vs string backrefs in output gracefully
 // - documentation
 // - command line script w/tests
 // - package license
 // - release?
 // - string interpolation
-// - handle number vs string backrefs in output gracefully
 // - streaming support
 //   - chunked parsing
 //   - sax-like output callbacks
