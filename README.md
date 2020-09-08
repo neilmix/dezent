@@ -33,6 +33,43 @@ The following examples are included in this distribution:
 
 # Reference - Dezent javascript library
 
+---
+## The Dezent object
+---
+The Dezent constructor parses and compiles your grammar:
+```javascript
+> Dezent = require('dezent').default;
+[Function: Dezent]
+> let d = new Dezent(`return {[a-zA-Z]+} ' '+ {[a-zA-Z]+} {[!.?]} -> [$1, $2, $3];`);
+```
+
+If your grammar has an error, you'll get an exception:
+```javascript
+> d = new Dezent(`return {[a-zA-Z]+} ' '+ {[a-zA-Z]+} {[!.?]} -> [$1, $2, $3]`);
+Error: Error parsing grammar: expected: ;
+At line 1 char 60:
+return {[a-zA-Z]+} ' '+ {[a-zA-Z]+} {[!.?]} -> [$1, $2, $3]
+                                                           ^
+```
+
+The parse method parses an input string:
+```javascript
+> d.parse('Hello world!');
+[ 'Hello', 'world', '!' ]
+```
+
+If the text doesn't parse correctly, the parse method returns undefined. To see what went wrong, examine the error member of the Dezent object:
+```javascript
+> d.parse('Hello to the whole world!');
+undefined
+> console.log(d.error.message);
+Parse failed: expected one of the following: 
+        a-z A-Z
+        ! . ?
+At line 1 char 9:
+Hello to the whole world!
+        ^
+```
 # Reference - dezent command-line util
 
 # Reference - Pattern Matching
