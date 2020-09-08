@@ -35,10 +35,8 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
   * [`^` pivot](#^-pivot)
   * [`.` or `[]` property access](#.-or-[]-property-access)
 
-<style>h1 { padding-bottom: 0; margin-bottom: 0; }</style>
 
 # Introduction
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 Dezent is a parser that makes complex pattern matching easier to build, maintain, and use. Think of it as pattern matching similar to regular expressions - plus reusable rules that can be nested recursively, plus whitespace-friendly syntax containing comments, plus malleable JSON output yielding data structures perfectly suited to your specific use-case.
 
@@ -48,18 +46,21 @@ Dezent is ideal for:
 * Extracting numerous text segments into structured output
 * Recursive descent parsing
 
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
 # Status
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 Dezent is currently in _alpha_. This is the first public release of Dezent, for the purpose of soliciting feedback. Dezent is fully functional and ready for use, and we encourage its use, but the grammar and APIs of Dezent may change as a result of public feedback, so please be aware that future releases might not be backward compatible with this release.
 
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
 # License
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 Dezent is made available under the GNU Affero General Public License. See License.txt for details. Commercial licensing and support are available, please contact neilmix@gmail.com.
 
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
 # Quick Start
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 Dezent is inspired by [Parsing Expression Grammars](https://en.wikipedia.org/wiki/Parsing_expression_grammar) - if you understand the basic concepts of PEGs, Dezent will be easier to follow.
 
@@ -70,8 +71,9 @@ The following examples are included in this distribution:
 <!-- * [JSONtoXML.js](examples/JSONtoXML.js): A utility that interactively reads JSON and translates it into XML. This example demonstrates recursive parsing and output string interpolation. -->
 * [calculator.js](examples/calculator.js): A utility that interactively parses and calculates simple math expressions follow proper order of operations including left-associativity. This example demonstrates a powerful parsing concept called left recursion.
 
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
 # Reference - javascript library
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 ## The Dezent object
 ---
@@ -109,8 +111,9 @@ At line 1 char 9:
 Hello to the whole world!
         ^
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
 # Reference - command-line util
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 ```bash
 % npm install -g dezent
@@ -124,12 +127,12 @@ usage: dezent [grammar path] [text path]
 ["Hello","world","!"]
 ```
 
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
 # Reference - grammar - pattern matching
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 ## `return`
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 'return' whitespace _ rule _ ';'
 ```
@@ -142,10 +145,11 @@ Dezent uses top-down parsing starting with the return rule. It is expected to co
 > new Dezent(`return {'a'*} -> $1;`).parse('aaa');
 'aaa'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
 ---
 ## `=` ruleset
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'
 ```
@@ -184,11 +188,11 @@ Dezent also support left recursion:
 `).parse('1+2+3');
 [ [ '1', '2' ], '3' ]
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `->` rule
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 pattern _ ( '|' _ pattern _ )* _ '->' _ value
 ```
@@ -201,6 +205,7 @@ Rules are the core of Dezent's pattern matching power. Each rule consists of one
 > new Dezent(`return 'a'|'b'|'c' -> $0;`).parse('d'); // does not match
 undefined
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## pattern
@@ -256,11 +261,11 @@ At line 1 char 3:
 abx
   ^
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `[]` character class
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 '[' ( classChar '-' classChar | classChar )* ']'
 ```
@@ -273,11 +278,11 @@ Character class terminals match one of a set of characters or range of character
 `).parse('myVarName_123');
 'myVarName_123'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `.` any character
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 The dot matches any character. 
 
 ```javascript
@@ -296,11 +301,11 @@ A repeating dot character is best used in conjunction with a not predicate.
 > new Dezent(`return 'a' (!'b' .)* 'b' -> $0;`).parse('axxxxxxb'); // does not match
 'axxxxxxb'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `''` string
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 ['] (escape|stringText)* [']
 ```
@@ -312,11 +317,11 @@ backslash will be replaced with the character itself.
 > new Dezent(`return 'abc\\txyz\\.' -> $0;`).parse('abc\txyz.');
 'abc\txyz.'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `*` modifier - repeat 0 or more
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 Indicates that this token should repeat 0 or more times. Repeat modifiers are greedy, which means they consume as much
 input as possible. 
 
@@ -342,11 +347,11 @@ Any capture contained within a repeated token will return an array as output, re
 > new Dezent(`return ( {[a-z]*} [0-9]* )* -> $1;`).parse('ab12cd34');
 [ 'ab', 'cd' ]
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `+` modifier - repeat 1 or more
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 Indicates that this token should repeat 1 or more times. Repeat modifiers are greedy, which means they consume as much
 input as possible. 
 
@@ -368,11 +373,11 @@ undefined
 > new Dezent(`return ( {[a-z]+} [0-9]+ )+ -> $1;`).parse('ab12cd34');
 [ 'ab', 'cd' ]
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `?` modifier - maybe
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 Indicates that the given token is not required to match. 
 
 ```javascript
@@ -389,11 +394,11 @@ A capture within a maybe token will return either the captured value or null, de
 > new Dezent(`return 'a' {'b'}? 'a' -> $1;`).parse('aa');
 null
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `()` group
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 '(' _ pattern _ ( '|' _ pattern _ )*  _ ')'
 ```
@@ -403,11 +408,11 @@ Groups a set of patterns into a single token. The first pattern to match wins, t
 > new Dezent(`return 'a' ('bc' | 'de') 'a' -> $0;`).parse('abca');
 'abca'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `{}` capture
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 '{' _ capturePattern _ ( '|' _ capturePattern _ )* _ '}'
 ```
@@ -453,22 +458,22 @@ If a capture matches multiple tokens, the matching string segment is always retu
 `).parse('ab');
 'ab'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `&` predicate - match
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 The 'and' predicate allows a pattern to match only if the predicate's token matches. Note that predicates do not consume input.
 
 ```javascript
 > new Dezent(`return &'foo' 'foobar' -> $0;`).parse('foobar');
 'foobar'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `!` predicate - does not match
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 The 'not' predicate allows a pattern to match only if the predicate's token does not match. Note that predicates do not consume input.
 
 ```javascript
@@ -483,11 +488,11 @@ The 'not' predicate is particularly useful in conjunction with the 'any' token.
 > new Dezent(`return '"' { (!'"' .)* } '"' -> $1;`).parse('"parsed string"');
 'parsed string'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `=` constant
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 '$' identifier _ '=' _ value _ ';'
 ```
@@ -505,14 +510,13 @@ Declares constants within your grammar. Constants cannot be used within rules, o
 `).parse('anything');
 { foo: 'bar' }
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 # Reference - grammar - output
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## JSON-like
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 Dezent rules yield output in JSON format. Keep in mind that Dezent grammar syntax uses single-quoted strings. Also, quotes around object member names are optional (as in javascript). The command-line tool yields standard JSON - with double-quote strings and quoted member names - when generating its output.
 
@@ -532,11 +536,11 @@ Dezent rules yield output in JSON format. Keep in mind that Dezent grammar synta
   null: null,
   array: [ 1, 2, 'another string' ] }
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `$0` back reference
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 The $0 back reference returns the entire string matched during rule processing, regardless of any captures.
 
@@ -546,11 +550,11 @@ The $0 back reference returns the entire string matched during rule processing, 
 > new Dezent(`return .{...}. -> $0;`).parse('abcde');
 'abcde'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `$1...$n` back references
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 Back references refer to sequences captured during a rule's parse. Each reference is numbered from 1 to n, left to right.
 
@@ -604,11 +608,11 @@ If a capture matches multiple tokens, the matching string segment is always retu
 `).parse('ab');
 'ab'
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `$identifier` constant reference
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 You can define constants and refer to them in your output:
 
@@ -624,11 +628,11 @@ You can define constants and refer to them in your output:
 `).parse('anything');
 { foo: 'bar' }
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `@identifier` meta reference
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 There are two meta-references available in output: the ordinal position of the rule's match, and its length.
 
@@ -649,11 +653,11 @@ Meta-references can be used within a constant definition and their values will b
 `).parse('xabcx');
 { match: 'abc', pos: 1, length: 3 }
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `...` spread
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 The spread operator allows you to incorporate one array or object within another array or object.
 ```javascript
@@ -678,10 +682,11 @@ The spread operator allows you to incorporate one array or object within another
 `).parse('anything');
 { foo: 1, bar: 2, baz: 3 }
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
 ---
 ## `^` pivot
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 The pivot operator swaps an array's rows with its columns. This is particularly useful for spreading a pair of captures inside an object:
 ```javascript
@@ -699,11 +704,11 @@ The pivot operator swaps an array's rows with its columns. This is particularly 
   pivot: [ [ 'a', '1' ], [ 'b', '2' ], [ 'c', '3' ] ],
   spread: { a: '1', b: '2', c: '3' } }
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
 ## `.` or `[]` property access
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 
 You can access object and array properties much like you would in javascript:
 ```javascript
@@ -713,3 +718,4 @@ You can access object and array properties much like you would in javascript:
 `).parse('anything');
 [ 1, 4 ]
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
