@@ -11,29 +11,29 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
 * [Reference - command-line util](#Reference---command-line-util)
 * [Reference - grammar - pattern matching](#Reference---grammar---pattern-matching)
   * [return](#return)
-  * [`=` ruleset](#=-ruleset)
-  * [`->` rule](#->-rule)
+  * [`=` ruleset](#-ruleset)
+  * [`->` rule](#-rule)
   * [pattern](#pattern)
-  * [\[\] character class](#[]-character-class)
-  * [. any character](#.-any-character)
-  * [`''` string](#''-string)
-  * [`*` modifier - repeat 0 or more](#*-modifier---repeat-0-or-more)
-  * [`+` modifier - repeat 1 or more](#+-modifier---repeat-1-or-more)
-  * [`?` modifier - maybe](#?-modifier---maybe)
-  * [`()` group](#%29%29-group)
+  * [\[\] character class](#-character-class)
+  * [. any character](#-any-character)
+  * [`''` string](#-string)
+  * [`*` modifier - repeat 0 or more](#-modifier---repeat-0-or-more)
+  * [`+` modifier - repeat 1 or more](#-modifier---repeat-1-or-more)
+  * [`?` modifier - maybe](#-modifier---maybe)
+  * [`()` group](#-group)
   * [`{}` capture](#{}-capture)
-  * [`&` predicate - match](#&-predicate---match)
-  * [`!` predicate - does not match](#!-predicate---does-not-match)
-  * [`=` constant](#=-constant)
+  * [`&` predicate - match](#-predicate---match)
+  * [`!` predicate - does not match](#-predicate---does-not-match)
+  * [`=` constant](#-constant)
 * [Reference - grammar - output](#Reference---grammar---output)
   * [JSON-like](#JSON-like)
-  * [`$0` back reference](#$0-back-reference)
-  * [`$1...$n` back references](#$1...$n-back-references)
+  * [`$0` back reference](#0-back-reference)
+  * [`$1...$n` back references](#1n-back-references)
   * [`$identifier` constant reference](#$identifier-constant-reference)
-  * [`@identifier` meta reference](#@identifier-meta-reference)
-  * [`...` spread](#...-spread)
-  * [`^` pivot](#^-pivot)
-  * [`.` or `[]` property access](#.-or-[]-property-access)
+  * [`@identifier` meta reference](#identifier-meta-reference)
+  * [`...` spread](#-spread)
+  * [`^` pivot](#-pivot)
+  * [`.` or `[]` property access](#-or--property-access)
 
 
 # Introduction
@@ -210,7 +210,6 @@ undefined
 ---
 ## pattern
 ---
-<div style="text-align: right"><a href="#table-of-contents">table of contents</a></div>
 ```
 (predicate (capture|group|string|class|ruleref|any) modifier _)+
 ```
