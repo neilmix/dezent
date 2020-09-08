@@ -18,6 +18,7 @@
  */
 
 import "jest";
+import { execSync } from "child_process";
 
 import "./Parser";
 import Dezent from "./Dezent";
@@ -288,6 +289,17 @@ test("dezent grammar documentation", () => {
     hackedGrammar.vars.meta = prevMeta;
 
     expect(parsedDezent).toEqual(uncompiledDezent);
+});
+
+test("command line util", () => {
+    let stdout = execSync("dezent src/grammar.dezent src/grammar.dezent");
+    let json = JSON.parse(stdout.toString());
+    expect(json).not.toBe(null);
+    expect(typeof json).toBe('object');
+
+    stdout = execSync("cat src/grammar.dezent | dezent src/grammar.dezent -");
+    expect(json).not.toBe(null);
+    expect(typeof json).toBe('object');
 });
 
 test("expected grammar terminals", () => {
