@@ -23,7 +23,8 @@ import {
 } from './Parser';
 
 import { 
-    Grammar, Node, SelectorNode, Meta, RulesetNode, ReturnNode, RuleNode, TokenNode, PatternNode, RuleRefNode, ClassNode, AnyNode,
+    Grammar, GrammarVersion, Node, SelectorNode, Meta, RulesetNode, ReturnNode, RuleNode, TokenNode, PatternNode, 
+    RuleRefNode, ClassNode, AnyNode,
     ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, ConstRefNode, 
     MetaRefNode, PivotNode, SpreadNode, StringTextNode, EscapeNode,
 } from './Grammar';
@@ -76,6 +77,7 @@ export class ParseManager {
         // We have to do this up-front because not every branch
         // of the grammar tree may be visited/executed at runtime
 
+        grammar.version = GrammarVersion;
         grammar.text = text;
 
         let rulesetLookup = grammar.rulesetLookup = {};

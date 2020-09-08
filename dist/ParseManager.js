@@ -20,6 +20,7 @@
 exports.__esModule = true;
 exports.grammarError = exports.ParseManager = void 0;
 var Parser_1 = require("./Parser");
+var Grammar_1 = require("./Grammar");
 var ParseManager = /** @class */ (function () {
     function ParseManager(options) {
         this.debugLog = [];
@@ -58,6 +59,7 @@ var ParseManager = /** @class */ (function () {
         // - other helpful sanity checks
         // We have to do this up-front because not every branch
         // of the grammar tree may be visited/executed at runtime
+        grammar.version = Grammar_1.GrammarVersion;
         grammar.text = text;
         var rulesetLookup = grammar.rulesetLookup = {};
         for (var _i = 0, _a = grammar.ruleset; _i < _a.length; _i++) {

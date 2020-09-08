@@ -275,7 +275,7 @@ test("left recursion", () => {
 
 test("dezent grammar documentation", () => {
     let uncompiledDezent = createUncompiledDezentGrammar();
-    let textDezent = readFileSync("./test/grammar.dezent").toString();
+    let textDezent = readFileSync("./src/grammar.dezent").toString();
     let hackedGrammar = findDezentGrammar();
 
     // Our bootstrap grammar does not contain any metas because it's created

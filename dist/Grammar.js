@@ -18,7 +18,8 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 exports.__esModule = true;
-exports.createUncompiledDezentGrammar = void 0;
+exports.createUncompiledDezentGrammar = exports.GrammarVersion = void 0;
+exports.GrammarVersion = 1;
 var kNull = { type: 'null' };
 function createUncompiledDezentGrammar() {
     // This is a mini DSL that allows us to build an AST

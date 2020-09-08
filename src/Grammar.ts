@@ -17,7 +17,10 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>. 
  */
 
+export const GrammarVersion = 1;
+
 export type Grammar = { 
+	version?: 1,
 	text?: string,
 	maxid?: number,
 	ruleset: RulesetNode[], 

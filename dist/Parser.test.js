@@ -19,6 +19,7 @@
  */
 exports.__esModule = true;
 require("jest");
+var child_process_1 = require("child_process");
 require("./Parser");
 var Dezent_1 = require("./Dezent");
 var Parser_1 = require("./Parser");
@@ -201,7 +202,7 @@ test("left recursion", function () {
 });
 test("dezent grammar documentation", function () {
     var uncompiledDezent = Grammar_1.createUncompiledDezentGrammar();
-    var textDezent = fs_1.readFileSync("./test/grammar.dezent").toString();
+    var textDezent = fs_1.readFileSync("./src/grammar.dezent").toString();
     var hackedGrammar = Parser_1.findDezentGrammar();
     // Our bootstrap grammar does not contain any metas because it's created
     // somewhat manually, not parsed from source. But it does contain rules
@@ -213,6 +214,15 @@ test("dezent grammar documentation", function () {
     var parsedDezent = Parser_1.parseText(hackedGrammar, textDezent, { debugErrors: true });
     hackedGrammar.vars.meta = prevMeta;
     expect(parsedDezent).toEqual(uncompiledDezent);
+});
+test("command line util", function () {
+    var stdout = child_process_1.execSync("dezent src/grammar.dezent src/grammar.dezent");
+    var json = JSON.parse(stdout.toString());
+    expect(json).not.toBe(null);
+    expect(typeof json).toBe('object');
+    stdout = child_process_1.execSync("cat src/grammar.dezent | dezent src/grammar.dezent -");
+    expect(json).not.toBe(null);
+    expect(typeof json).toBe('object');
 });
 test("expected grammar terminals", function () {
     expect(parseGrammarError('return . -> {}').expected.sort()).toEqual([';']);
