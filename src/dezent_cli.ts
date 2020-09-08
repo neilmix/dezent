@@ -43,7 +43,9 @@ if (process.argv[2] == '-' && process.argv[3] == '-') {
     usage();
 }
 
-let output = 
-    new Dezent(read(process.argv[2]).toString())
-        .parse(read(process.argv[3]).toString());
+let d = new Dezent(read(process.argv[2]).toString());
+let output = d.parse(read(process.argv[3]).toString());
+if (!output) {
+    throw d.error;
+}
 process.stdout.write(JSON.stringify(output));

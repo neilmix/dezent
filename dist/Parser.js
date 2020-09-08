@@ -19,34 +19,6 @@
  */
 exports.__esModule = true;
 exports.findLineAndChar = exports.parsingError = exports.assert = exports.parserError = exports.Parser = exports.MatchStatus = exports.parseGrammar = exports.parseText = exports.findDezentGrammar = exports.errorMessages = exports.ErrorCode = void 0;
-// todo:
-// - handle number vs string backrefs in output gracefully
-// - documentation
-// - command line script w/tests
-// - package license
-// - release?
-// - string interpolation
-// - streaming support
-//   - chunked parsing
-//   - sax-like output callbacks
-//   - cache eviction / progressive tabling / dynamic analysis
-// - memory optimization:
-//   - don't create frames for terminals
-//   - don't cache failed frames, cache boolean instead
-//   - recycle frames and arrays
-// - compiled grammar versioning
-// - refactor: OutputBuilder, GrammarCompiler
-// - @id
-// - backref within pattern
-// - regex-like search-and-find
-// - refactor omitFails to be on the frame?
-// - optional trailing semicolon?
-// - remove/disable property accesses?
-// speculative/research todo:
-// - compile-time data-type checking
-// - error messaging
-// - error recovery
-// - macros/functions, e.g. definition(pattern1, pattern2)
 var Grammar_1 = require("./Grammar");
 var ParseCache_1 = require("./ParseCache");
 var ParseManager_1 = require("./ParseManager");
