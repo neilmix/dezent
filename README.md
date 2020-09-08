@@ -63,7 +63,7 @@ Dezent is made available under the GNU Affero General Public License. See Licens
 
 Dezent is inspired by [Parsing Expression Grammars](https://en.wikipedia.org/wiki/Parsing_expression_grammar) - if you understand the basic concepts of PEGs, Dezent will be easier to follow.
 
-The Dezent javascript library and the dezent command-line tool are included in this distribution, see below for documentation. To parse a document, you must create a grammar that describes how your document is parsed. Reference documentation for grammars is include below.
+The Dezent javascript library and the dezent command-line tool are included in this distribution, see below for documentation. To parse a document, you must create a grammar that describes how your document is parsed. Reference documentation for grammars is included below.
 
 The following examples are included in this distribution:
 * [URLparser.js](examples/URLparser.js): A utility to interactively read and parse URLs. This example demonstrates general-purpose complex pattern matching.
