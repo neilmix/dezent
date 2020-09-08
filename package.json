@@ -13,10 +13,11 @@
     "test": "npm run compile-debug && jest test/Parser.test.js",
     "test-debug": "npm run compile-debug && node ./node_modules/.bin/jest ./test/Parser.test.js --runInBand",
     "clean": "rm -f *.js && rm -fr test && rm -fr dist",
-    "prepublishOnly": "npm run clean && npm run dist"
+    "prepublishOnly": "npm run clean && npm run dist && git remote update && echo 'Verifying local repo is same as remote...' && git diff --no-ext-diff --quiet --exit-code",
+    "postpublish" : "git tag v`./getversion` && git push --tags"
   },
   "author": "Neil Mix <neilmix@gmail.com>",
-  "license": "???",
+  "license": "SEE LICENSE IN License.txt",
   "devDependencies": {
     "@types/jest": "^23.3.2",
     "jest": "^23.6.0"
