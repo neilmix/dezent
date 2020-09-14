@@ -2,6 +2,13 @@
   "name": "dezent",
   "version": "0.8.0",
   "description": "Powerful pattern matching and parsing that's readable, recursive, and structured.",
+  "keywords": ["parse", "parsing", "parser", "patterns", "pattern matching"],
+  "homepage": "https://github.com/neilmix/dezent",
+  "repository": "github:neilmix/dezent",
+  "bugs": { 
+    "url": "https://github.com/neilmix/dezent/issues",
+    "email": "neilmix@gmail.com"
+  },
   "main": "./dist/Dezent.js",
   "bin": {
     "dezent": "./dist/dezent_cli.js"
