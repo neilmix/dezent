@@ -297,7 +297,7 @@ undefined
 A repeating dot character is best used in conjunction with a not predicate.
 
 ```javascript
-> new Dezent(`return 'a' (!'b' .)* 'b' -> $0;`).parse('axxxxxxb'); // does not match
+> new Dezent(`return 'a' (!'b' .)* 'b' -> $0;`).parse('axxxxxxb');
 'axxxxxxb'
 ```
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
