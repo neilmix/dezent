@@ -92,6 +92,7 @@ export type ParseContextFrame = {
     status: MatchStatus,
     node: ParseNode,
     items: RuleNode[] | PatternNode[] | TokenNode[],
+    paths: number,
     index: number,
     pos: number,
     consumed: number,
@@ -275,7 +276,11 @@ export class Parser {
                     if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
                             next.status = MatchStatus.Fail;
+                        } else if (next.paths > 0) {
+                            next.paths--;
+                            assert(next.paths >= 1);
                         }
+
                     } else if (next.node.type == "token") {
                         if (!next.node.required) {
                             // nodes that are not required always pass
@@ -359,6 +364,7 @@ export class Parser {
         let pos = current ? current.pos + current.consumed : 0;
         let leftOffset = current ? current.leftOffset : 0;
         let items;
+        let paths;
 
         if (["ruleset", "rule", "pattern", "capture", "group"].includes(node.type)) {
             if (!node["canFail"]) {
@@ -369,24 +375,25 @@ export class Parser {
         switch (node.type) {
             case "ruleset": 
                 items = node.rules;
+                paths = items.length;
                 break;
             case "rule": 
-                items = node.options; 
-                break;
             case "capture": 
-                items = node.options; 
-                break;
             case "group": 
-                items = node.options; 
+                items = node.options;
+                paths = items.length; 
                 break;
             case "pattern": 
                 items = node.tokens; 
+                paths = 1;
                 break;
             case "token":
                 items = [node.descriptor];
+                paths = 1;
                 break;
             default:
                 items = [];
+                paths = 1;
                 break;
         }
 
@@ -406,12 +413,13 @@ export class Parser {
                 // there may be intermediate rulesets in the continuation. Remember, rulesets are cached
                 // immediately upon creation (see below). So, we need to update the cached member
                 // of all our continuation frames just in case.
-                this.stack[i].leftContinuation.forEach((f) => f.cached = false);
+                this.stack[i].leftContinuation.forEach((f) => { f.cached = false, f.paths = -1 });
                 this.stack.push({
                     // the first time through we fail so that parsing can attempt subsequent rules that may pass
                     status: MatchStatus.Fail,
                     node: node,
                     items: items,
+                    paths: current.paths + paths,
                     index: 0,
                     pos: pos,
                     consumed: 0,
@@ -425,6 +433,7 @@ export class Parser {
                     status: MatchStatus.Pass,
                     node: node,
                     items: items,
+                    paths: -1,
                     index: 0,      // this will get updated at execution
                     pos: pos,
                     consumed: 0,   // this will get updated at execution
@@ -445,6 +454,7 @@ export class Parser {
                 status: MatchStatus.Continue,
                 node: node,
                 items: items,
+                paths: current ? current.paths + paths-1 : paths,
                 index: 0,
                 pos: pos,
                 consumed: 0,
