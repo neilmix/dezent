@@ -29,7 +29,7 @@ import {
     MetaRefNode, PivotNode, SpreadNode, StringTextNode, EscapeNode,
 } from './Grammar';
 
-import { OutputToken } from './OutputContext';
+import { buildString, ValueBuilder } from './Output';
 
 export class ParseManager {
     options:ParserOptions;
@@ -263,155 +263,7 @@ export class ParseManager {
         // now parse
         let parser = this.currentParser = new Parser(ret, text, grammar.rulesetLookup, grammar.maxid, this.options, this.debugLog);
         let output = parser.parse();
-
-        let builders : {
-            [key:string]: (
-                node: ValueNode, 
-                backrefs: OutputToken[], 
-                vars: { [key:string]: ValueNode }, 
-                metas: { position: number, length: number }
-            ) => any
-        } = {
-            backref: (node:BackRefNode, backrefs) => {
-                if (backrefs[node.index] === undefined) {
-                    parserError(ErrorCode.BackRefNotFound);
-                } else {
-                   return backrefs[node.index];
-                }
-            },
-            constref: (node:ConstRefNode, backrefs, vars, metas) => {
-                let resolved = vars[node.name];
-                return buildValue(resolved, backrefs, vars, metas);
-            },
-            metaref: (node:MetaRefNode, backrefs, vars, metas) => {
-                return metas[node.name];
-            },
-            pivot: (node:PivotNode, backrefs, vars, metas) => {
-                let value = buildValue(node.value, backrefs, vars, metas);
-                if (!Array.isArray(value)) {
-                    grammarError(ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(value));
-                }
-                value.map((item) => {
-                    if (!Array.isArray(item)) {
-                        grammarError(ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(item));
-                    }
-                    if (item.length != value[0].length) {
-                        grammarError(ErrorCode.PivotArraySizeMismatch, grammar.text, node.meta);
-                    }
-                })
-                let ret = [];
-                for (let item of value[0]) {
-                    ret.push([]);
-                }
-                for (let i = 0; i < value.length; i++) {
-                    for (let j = 0; j < value[0].length; j++) {
-                        ret[j][i] = value[i][j];
-                    }
-                }
-                return ret;
-            },
-            spread: (node:SpreadNode, backrefs, vars, metas) => {
-                let value = buildValue(node.value, backrefs, vars, metas);
-                if (!value || (typeof value != 'object' && typeof value != 'string')) {
-                    grammarError(ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(value));
-                }
-                if (typeof value == "string") {
-                    return value.split('');
-                } else if (Array.isArray(value)) {
-                    return value;
-                } else {
-                    return Object.entries(value);
-                }
-            },
-            object: (node:ObjectNode, backrefs, vars, metas) => {
-                let ret = {};
-                for (let member of node.members) {
-                    if (member.type == "spread") {
-                        let tuples = buildValue(member, backrefs, vars, metas);;
-                        for (let tuple of tuples) {
-                            if (!Array.isArray(tuple) || tuple.length != 2) {
-                                grammarError(ErrorCode.InvalidObjectTuple, grammar.text, member.meta, JSON.stringify(tuple));
-                            }
-                            ret[tuple[0]] = tuple[1];
-                        }
-                    } else {
-                        ret[buildValue(member.name, backrefs, vars, metas)] 
-                            = buildValue(member.value, backrefs, vars, metas);
-                    }
-                }
-                return ret;
-            },
-            array: (node:ArrayNode, backrefs, vars, metas) => {
-                let ret = [];
-                for (let elem of node.elements) {
-                    if (elem.type == "spread") {
-                        ret = ret.concat(buildValue(elem, backrefs, vars, metas));
-                    } else {
-                        let val = buildValue(elem, backrefs, vars, metas);;
-                        if (!elem.collapse || val != null) {
-                            ret.push(val);
-                        }
-                    }
-                }
-                return ret;
-            },
-            string: (node:StringNode) => {
-                return buildString(node);
-            },
-            number: (node:NumberNode) => {
-                return Number(node.value);
-            },
-            boolean: (node:BooleanNode) => {
-                return node.value;
-            },
-            null: () => {
-                return null;
-            },
-        };
-                
-        // build our output value    
-        return buildOutput(output.result);
-    
-        function buildOutput(token:OutputToken|OutputToken[]) {
-            if (Array.isArray(token)) {
-                return token.map((v) => buildOutput(v));
-            } else if (token == null) {
-                return null;
-            } else if (token.outputs && token.value) {
-                let backrefs = token.outputs.map((v) => buildOutput(v));
-                return buildValue(
-                    token.value, 
-                    backrefs, 
-                    grammar.vars,
-                    { position: token.pos, length: token.length }
-                );
-            } else {
-                return text.substr(token.pos, token.length);
-            }
-        }
-
-        function buildValue(node:ValueNode, backrefs, vars, metas) {
-            let out = builders[node.type](node, backrefs, vars, metas);
-            if (node.access) for (let prop of node.access) {
-                if (out == null || (typeof out != 'object' && typeof out != 'string')) {
-                    grammarError(ErrorCode.InvalidAccessRoot, grammar.text, prop.meta, JSON.stringify(out));
-                }
-                let index;
-                if (prop.value) {
-                    index = buildValue(prop.value, backrefs, vars, metas);
-                    if (typeof index != 'string' && typeof index != 'number') {
-                        grammarError(ErrorCode.InvalidAccessIndex, grammar.text, prop.meta, JSON.stringify(index));
-                    }
-                } else {
-                    index = prop.name;
-                }
-                if (!out.hasOwnProperty(index)) {
-                    grammarError(ErrorCode.InvalidAccessProperty, grammar.text, prop.meta, index);
-                }
-                out = out[index];
-            }
-            return out;
-        }
+        return new ValueBuilder(grammar, output).value();
     }
 
     debug(...args:any[]) {
@@ -436,22 +288,6 @@ export class ParseManager {
             console.error("Parser stack:\n", this.currentParser.stack);
         }
     }
-}
-
-function buildString(node:StringNode) {
-    return node.tokens.map((node:StringTextNode|EscapeNode) => {
-        if (node.type == "text") {
-            return node.value;
-        } else if (node.value[0] == 'u') {
-            return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
-        } else if(node.value.length > 1) {
-            parserError(ErrorCode.Unreachable);
-        } else if ("bfnrt".indexOf(node.value) >= 0) {
-            return ({ b:'\b', f:'\f', n:'\n', r:'\r', t:'\t' })[node.value];
-        } else {
-            return node.value;
-        }
-    }).join("")
 }
 
 function visitParseNodes(

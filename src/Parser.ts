@@ -24,7 +24,7 @@ import {
 
 import { ParseCache } from "./ParseCache";
 import { ParseManager } from "./ParseManager";
-import { OutputContext, OutputToken } from "./OutputContext";
+import { Output } from "./Output";
 
 export enum ErrorCode {
     TextParsingError          = 1,
@@ -88,7 +88,7 @@ export const errorMessages = {
     2011: "Assertion failed",
 }
 
-export type ParseContextFrame = {
+export type ParseFrame = {
     status: MatchStatus,
     node: ParseNode,
     items: RuleNode[] | PatternNode[] | TokenNode[],
@@ -96,10 +96,12 @@ export type ParseContextFrame = {
     index: number,
     pos: number,
     consumed: number,
+    wantOutput: boolean,
     cached: boolean,
     leftOffset: number,
-    leftContinuation?: ParseContextFrame[],
-    nextFrame?: ParseContextFrame,
+    leftContinuation?: ParseFrame[],
+    captures?: Output[],
+    output?: Output,
 }
 
 let dezentGrammar:Grammar;
@@ -145,7 +147,7 @@ export enum MatchStatus {
 
 export class Parser {
     root : ReturnNode;
-    stack : ParseContextFrame[] = [];
+    stack : ParseFrame[] = [];
     text : string;
     rulesets: {[key:string]:RulesetNode};
     parseCache : ParseCache 
@@ -163,9 +165,10 @@ export class Parser {
         this.enter(root);
     }
 
-    parse() : OutputContext {
+    parse() : Output {
         let maxPos = 0;
         let failedPatterns = {};
+        let exited:ParseFrame;
 
         while (this.stack.length) {
             let current = this.top();
@@ -196,7 +199,7 @@ export class Parser {
                         break;
                 }
             } else {
-                let exited = this.stack.pop();
+                exited = this.stack.pop();
                 if (!exited.cached) {
                     this.parseCache.store(exited);
                 }
@@ -228,10 +231,14 @@ export class Parser {
                         assert(top.node.type == "ruleset");
                         top.consumed = exited.consumed;
                         top.index = (<RuleNode>exited.node).rulesetIndex;
-                        top.nextFrame = exited;
+                        if (top.wantOutput) {
+                            this.yieldOutput(exited, top, next);
+                            // the final pass will fail, so we want to make sure our base frame
+                            // contains results from the most recent successful run
+                            next.output = top.output;
+                        }
                         // we got at least one successful continuation - mark our base ruleset as a success
                         next.status = MatchStatus.Pass;
-                        next.nextFrame = exited;
                         continue;
                     } else if (next.status == MatchStatus.Pass) {
                         // we previously successfully recursed, we're passing!
@@ -267,6 +274,36 @@ export class Parser {
                             this.enter(next.node.descriptor);
                         }
                     }
+                    // handle output
+                    if (next.node.type == "capture") {
+                        if (exited.output && exited.items.length == 1) {
+                            // output has descended the stack to our capture - capture it
+                            // but only if it's the only node in this capture
+                            exited.output.captureIndex = next.node.index;
+                            next.captures = [exited.output];
+                        } else {
+                            // create a capture text segment
+                            next.captures = [{
+                                captureIndex: next.node.index,
+                                position: exited.pos,
+                                length: exited.consumed,
+                                segment: this.text.substr(exited.pos, exited.consumed),
+                            }];
+                        }
+                    } else if (exited.output) {
+                            // make the output descend the stack
+                            next.output = exited.output;
+                    } else if (next.node.type != "ruleset" && exited.captures) {
+                        // captures descend the stack until we reach a ruleset, at which point they
+                        // get bundled into an output if within a capture (see below), otherwise discarded
+                        if (next.captures) {
+                            next.captures = next.captures.concat(exited.captures);
+                        } else {
+                            next.captures = exited.captures;
+                        }
+                    } else if (next.node.type == "ruleset" && (next.wantOutput || next.node.name == "return")) {
+                        this.yieldOutput(exited, next, next);
+                    }
                 } else { // exited.matchStatus == MatchStatus.FAIL
                     if (exited.pos == maxPos && exited.node["pattern"]) {
                         if (!this.omitFails && exited.node["pattern"]) {
@@ -298,65 +335,40 @@ export class Parser {
                 }
             }
         } 
-
-        let output = new OutputContext();
-        this.parseCache.visitPassFrames(
-            this.root, 
-            this.rulesets, 
-            (frame:ParseContextFrame) => {
-                if (["group","capture"].includes(frame.node.type)) {
-                    output.enterGroup();
-                }
-                switch (frame.node.type) {
-                    case "ruleset": 
-                        output.enterFrame(frame.node);
-                        break;
-                    case "rule":
-                        output.setRule(frame.node);
-                        break;
-                    case "capture":
-                        output.startCapture(frame.node);
-                        break;
-                    case "string":
-                    case "class":
-                    case "any":
-                        output.addToken(frame.pos, frame.consumed);
-                        break;
-                }
-            }, 
-            (frame:ParseContextFrame) => {
-                if (["group","capture"].includes(frame.node.type)) {
-                    output.exitGroup();
-                }
-                switch (frame.node.type) {
-                    case "ruleset":
-                        output.addTokenObject(output.exitFrame(frame.node));
-                        break;
-                    case "rule":
-                        output.yield(frame.node, frame.pos, frame.consumed);
-                        break;
-                    case "capture":
-                        output.endCapture(frame.node);        
-                        break;
-                }
-            }
-        );
         
-        if (!output.result) {
+        if (!exited.output) {
             parserError(ErrorCode.EmptyOutput);
         }
-        if (output.result.pos != 0) {
+        if (exited.pos != 0) {
             parserError(ErrorCode.InputConsumedBeforeResult);
         }
-        if (output.result.length != this.text.length) {
+        if (exited.output.length != this.text.length) {
             parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
         }
 
-        return output;
+        return exited.output;
 
         function expectedTerminals() {
             return Object.keys(failedPatterns);
         }
+    }
+
+    yieldOutput(exited:ParseFrame, target:ParseFrame, base:ParseFrame) {
+        // our ruleset emerged from a capture - create an output (which will descend the stack)
+        target.output = {
+            position: base.pos,
+            length: base.consumed,
+            rule: <RuleNode>exited.node,
+            captures: exited.captures
+        }
+        // create a capture for $0 backref
+        if (!target.output.captures) target.output.captures = [];
+        target.output.captures.push({
+            captureIndex: 0,
+            position: base.pos,
+            length: base.consumed,
+            segment: this.text.substr(base.pos, base.consumed),
+        });
     }
 
     enter(node:ParseNode) {
@@ -423,6 +435,7 @@ export class Parser {
                     index: 0,
                     pos: pos,
                     consumed: 0,
+                    wantOutput: current.wantOutput,
                     // prevent this frame from attempting to store on top of our base frame
                     cached: true, 
                     leftOffset: leftOffset,        
@@ -437,6 +450,7 @@ export class Parser {
                     index: 0,      // this will get updated at execution
                     pos: pos,
                     consumed: 0,   // this will get updated at execution
+                    wantOutput: current.wantOutput,
                     cached: false, 
                     leftOffset: leftOffset, // this will get updated at execution
                 })
@@ -450,7 +464,13 @@ export class Parser {
                 this.stack.push(frame);
             }
         } else {
-            let newFrame = {
+            let wantOutput = current && current.wantOutput;
+            if (current && current.node.type == "capture") {
+                wantOutput = true;
+            } else if (current && current.node.type == "rule") {
+                wantOutput = false;
+            }
+            let newFrame:ParseFrame = {
                 status: MatchStatus.Continue,
                 node: node,
                 items: items,
@@ -458,6 +478,7 @@ export class Parser {
                 index: 0,
                 pos: pos,
                 consumed: 0,
+                wantOutput: wantOutput,
                 cached: false,
                 leftOffset: leftOffset,
             }
@@ -469,7 +490,7 @@ export class Parser {
         }
     }
 
-    top() : ParseContextFrame|null { 
+    top() : ParseFrame|null { 
         return this.stack[this.stack.length-1] 
     }
 
@@ -484,6 +505,7 @@ export function parserError(code:ErrorCode) {
     let msg = errorMessages[code];
     let e = new Error(`Internal parser error ${code}: ${msg}`);
     e["code"] = code;
+    debugger;
     throw e;
 }
 
