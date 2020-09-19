@@ -22,7 +22,7 @@ import { Node, ReturnNode, RulesetNode, TokenNode } from "./Grammar";
 
 export class ParseCache {
     maxid:number;
-    frameCache:ParseFrame[][] = [];
+    frameCache:(ParseFrame|false)[][] = [];
     cacheRetrieveEnabled:boolean = true;
 
     constructor(maxid: number, cacheLookupEnabled:boolean) {
@@ -35,11 +35,11 @@ export class ParseCache {
         let key = this.key(frame.node.id, frame.leftOffset);
         if (!this.frameCache[pos]) this.frameCache[pos] = [];
         assert(!this.frameCache[pos][key] || !this.cacheRetrieveEnabled);
-        this.frameCache[pos][key] = frame;
+        this.frameCache[pos][key] = frame.status == MatchStatus.Fail ? false : frame;
         frame.cached = true;
     }
 
-    retrieve(pos:number, node:Node, leftOffset:number):ParseFrame|undefined {
+    retrieve(pos:number, node:Node, leftOffset:number):ParseFrame|false|undefined {
         if (this.cacheRetrieveEnabled) {
             return this.get(pos, node.id, leftOffset);
         } else {

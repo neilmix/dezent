@@ -150,7 +150,8 @@ export class Parser {
     stack : ParseFrame[] = [];
     text : string;
     rulesets: {[key:string]:RulesetNode};
-    parseCache : ParseCache 
+    parseCache : ParseCache;
+    frameStore : ParseFrame[] = [];
     options : ParserOptions;
     omitFails : number = 0;
     debugLog : any[][];
@@ -351,6 +352,11 @@ export class Parser {
                         parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
                     }
                 }
+                // failed frames don't get store in the cache, so we can recycle them.
+                // rulesets are stored prior to pass/fail determination, so don't try to recycle them
+                if (exited.status == MatchStatus.Fail && exited.node.type != "ruleset") {
+                    this.frameStore.push(exited);
+                }
             }
         } 
         
@@ -427,10 +433,10 @@ export class Parser {
                 break;
         }
 
-        let frame = this.parseCache.retrieve(pos, node, leftOffset);
-        if (frame) {
-            if (frame.status == MatchStatus.Continue) {
-                assert(frame.node.type == "ruleset");
+        let cachedFrame = this.parseCache.retrieve(pos, node, leftOffset);
+        if (cachedFrame) {
+            if (cachedFrame.status == MatchStatus.Continue) {
+                assert(cachedFrame.node.type == "ruleset");
                 // left recursion detected
                 // build a continuation and set leftOffsets
                 let i = this.stack.length - 1;
@@ -444,42 +450,47 @@ export class Parser {
                 // immediately upon creation (see below). So, we need to update the cached member
                 // of all our continuation frames just in case.
                 this.stack[i].leftContinuation.forEach((f) => { f.cached = false, f.paths = -1 });
-                this.stack.push({
-                    // the first time through we fail so that parsing can attempt subsequent rules that may pass
-                    status: MatchStatus.Fail,
-                    node: node,
-                    items: items,
-                    paths: current.paths + paths,
-                    index: 0,
-                    pos: pos,
-                    consumed: 0,
-                    wantOutput: current.wantOutput,
-                    // prevent this frame from attempting to store on top of our base frame
-                    cached: true, 
-                    leftOffset: leftOffset,        
-                });
-                this.stack[i].leftContinuation.push({
-                    // subsequent continuation executions need to pass at the top to kick off
-                    // downward descent through the stack
-                    status: MatchStatus.Pass,
-                    node: node,
-                    items: items,
-                    paths: -1,
-                    index: 0,      // this will get updated at execution
-                    pos: pos,
-                    consumed: 0,   // this will get updated at execution
-                    wantOutput: current.wantOutput,
-                    cached: false, 
-                    leftOffset: leftOffset, // this will get updated at execution
-                })
+
+                let failFrame = this.frameStore.pop() || <ParseFrame> {};
+                failFrame.status = MatchStatus.Fail;
+                failFrame.node = node;
+                failFrame.items = items;
+                failFrame.paths = current.paths + paths;
+                failFrame.index = 0;
+                failFrame.pos = pos;
+                failFrame.consumed = 0;
+                failFrame.wantOutput = current.wantOutput;
+                // prevent this frame from attempting to store on top of our base frame
+                failFrame.cached = true;
+                failFrame.leftOffset = leftOffset;
+                failFrame.captures = null;
+                failFrame.output = null;
+                this.stack.push(failFrame);
+
+                let contFrame = this.frameStore.pop() || <ParseFrame> {};
+                // subsequent continuation executions need to pass at the top to kick off
+                // downward descent through the stack
+                contFrame.status = MatchStatus.Pass;
+                contFrame.node = node;
+                contFrame.items = items;
+                contFrame.paths = -1;
+                contFrame.index = 0;      // this will get updated at execution
+                contFrame.pos = pos;
+                contFrame.consumed = 0;   // this will get updated at execution
+                contFrame.wantOutput = current.wantOutput;
+                contFrame.cached = false;
+                contFrame.leftOffset = leftOffset; // this will get updated at execution
+                contFrame.captures = null;
+                contFrame.output = null;
+                this.stack[i].leftContinuation.push(contFrame);
             } else {
                 // a repeating token frame will place itself in the cache multiple times,
                 // but its pos will reflect its first entry in the cache. So, we may
                 // want to update the frame pos and consumed here.
-                frame.consumed -= pos - frame.pos;
-                assert(frame.consumed >= 0);
-                frame.pos = pos;
-                this.stack.push(frame);
+                cachedFrame.consumed -= pos - cachedFrame.pos;
+                assert(cachedFrame.consumed >= 0);
+                cachedFrame.pos = pos;
+                this.stack.push(cachedFrame);
             }
         } else {
             let wantOutput = current && current.wantOutput;
@@ -488,18 +499,19 @@ export class Parser {
             } else if (current && current.node.type == "rule") {
                 wantOutput = false;
             }
-            let newFrame:ParseFrame = {
-                status: MatchStatus.Continue,
-                node: node,
-                items: items,
-                paths: current ? current.paths + paths-1 : paths,
-                index: 0,
-                pos: pos,
-                consumed: 0,
-                wantOutput: wantOutput,
-                cached: false,
-                leftOffset: leftOffset,
-            }
+            let newFrame:ParseFrame = this.frameStore.pop() || <ParseFrame>{};
+            newFrame.status = cachedFrame === false ? MatchStatus.Fail : MatchStatus.Continue;
+            newFrame.node = node;
+            newFrame.items = items;
+            newFrame.paths = current ? current.paths + paths-1 : paths;
+            newFrame.index = 0;
+            newFrame.pos = pos;
+            newFrame.consumed = 0;
+            newFrame.wantOutput = wantOutput;
+            newFrame.cached = cachedFrame !== false;
+            newFrame.leftOffset = leftOffset;
+            newFrame.captures = null;
+            newFrame.output = null;
             this.stack.push(newFrame);
             if (newFrame.node.type == "ruleset") {
                 // store rulesets early so we can detect left recursion
