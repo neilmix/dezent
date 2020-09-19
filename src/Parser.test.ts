@@ -251,7 +251,7 @@ test("left recursion", () => {
         num = [0-9]+ -> $0;
         return _ {expr} _ -> $1;
     `;
-    //expectParse(grammar, '5').toEqual('5');
+    expectParse(grammar, '5').toEqual('5');
     expectParse(grammar, '5+4').toEqual(['+','5','4']);
     expectParse(grammar, '5+4+3').toEqual(['+',['+','5','4'],'3']);
     expectParse(grammar, '5+4+3+2').toEqual(['+',['+',['+','5','4'],'3'],'2']);

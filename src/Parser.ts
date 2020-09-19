@@ -19,7 +19,7 @@
 
 import { 
     Grammar, createUncompiledDezentGrammar, RulesetNode, ReturnNode,
-    ParseNode, RuleNode, PatternNode, TokenNode
+    ParseNode, RuleNode, PatternNode, TokenNode, MatcherNode
 } from "./Grammar";
 
 import { ParseCache } from "./ParseCache";
@@ -179,23 +179,46 @@ export class Parser {
 
             if (current.status == MatchStatus.Continue) {
                 switch (current.node.type) {
+                    case "token":
+                        let desc = <MatcherNode>current.node.descriptor;
+                        if (["string","class","any"].includes(desc.type)) {
+                            let pos = current.pos;
+                            let matched, consumed;
+                            do {
+                                let text = this.text.substr(pos);
+                                [matched, consumed] = desc.match(text);
+                                if (current.node.and || current.node.not) {
+                                    if ((current.node.and && matched) || (current.node.not && !matched)) {
+                                        current.status = MatchStatus.Pass
+                                    } else {
+                                        current.status = MatchStatus.Fail;
+                                    }
+                                } else if (matched) {
+                                    current.consumed += consumed;
+                                    current.status = MatchStatus.Pass;
+                                    // cache intermediate positions of tokens to avoid pathological
+                                    // bad grammar performance.
+                                    this.parseCache.store(current, pos);
+                                    pos += consumed;
+                                } else {
+                                    if (current.consumed > 0 || !current.node.required) {
+                                        current.status = MatchStatus.Pass;
+                                    } else {
+                                        current.status = MatchStatus.Fail;
+                                        if (pos == maxPos && !this.omitFails && desc.pattern != '') {
+                                            failedPatterns[desc.pattern] = true;
+                                        }
+                                    }
+                                }        
+                            } while (matched && current.node.repeat);
+                            break;
+                        }
+                        // FALL THROUGH
                     default:
                         this.enter(current.items[current.index]);
                         break;
                     case "ruleref":
                         this.enter(this.rulesets[current.node.name]);
-                        break;
-                    case "string":
-                    case "class":
-                    case "any":
-                        let text = this.text.substr(this.top().pos);
-                        let [matched, consumed] = current.node.match(text);
-                        if (matched) {
-                            current.consumed = consumed;
-                            current.status = MatchStatus.Pass;
-                        } else {
-                            current.status = MatchStatus.Fail;
-                        }
                         break;
                 }
             } else {
@@ -305,11 +328,6 @@ export class Parser {
                         this.yieldOutput(exited, next, next);
                     }
                 } else { // exited.matchStatus == MatchStatus.FAIL
-                    if (exited.pos == maxPos && exited.node["pattern"]) {
-                        if (!this.omitFails && exited.node["pattern"]) {
-                            failedPatterns[exited.node["pattern"]] = true;
-                        }
-                    }
                     if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
                             next.status = MatchStatus.Fail;
