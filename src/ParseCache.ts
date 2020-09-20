@@ -24,6 +24,7 @@ export class ParseCache {
     maxid:number;
     frameCache:(ParseFrame|false)[][] = [];
     cacheRetrieveEnabled:boolean = true;
+    minimumPos = 0;
 
     constructor(maxid: number, cacheLookupEnabled:boolean) {
         this.maxid = maxid;
@@ -32,6 +33,7 @@ export class ParseCache {
 
     store(frame:ParseFrame, pos?:number) {
         pos = pos || frame.pos;
+        assert(pos >= this.minimumPos);
         let key = this.key(frame.node.id, frame.leftOffset);
         if (!this.frameCache[pos]) this.frameCache[pos] = [];
         assert(!this.frameCache[pos][key] || !this.cacheRetrieveEnabled);
@@ -54,5 +56,12 @@ export class ParseCache {
 
     key(id:number, leftOffset:number) {
         return leftOffset*this.maxid + id;
+    }
+
+    discard(newMinimumPos:number) {
+        for (let i = this.minimumPos; i < newMinimumPos; i++) {
+            delete this.frameCache[i];
+        }
+        this.minimumPos = newMinimumPos;
     }
 }

@@ -174,6 +174,10 @@ export class Parser {
         while (this.stack.length) {
             let current = this.top();
 
+            if (current.paths == 1) {
+                this.parseCache.discard(current.pos);
+            }
+            
             if (current.index > current.items.length) {
                 parserError(ErrorCode.ArrayOverrun);
             }
