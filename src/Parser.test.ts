@@ -197,6 +197,13 @@ test('test modifiers', () => {
     expectParseFail(`return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;`, 'abaaa');
 });
 
+test('array collapse', () => {
+    expectParse(`return {'a'} {'b'}? {'a'} -> [$1, $2, $3 ];`, 'aa').toEqual(['a', null, 'a']);
+    expectParse(`return {'a'} {'b'}? {'a'} -> [$1, $2?, $3 ];`, 'aa').toEqual(['a', 'a']);
+    expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2 ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', null, 'b']);
+    expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2? ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', 'b']);
+});
+
 test("variables", () => {
     expectParse(`$foo = 5; return .* -> $foo;`).toEqual(5);
     expectParse(`$foo = ['bar', {baz: true}]; return .* -> $foo;`).toEqual(['bar', {baz: true}]);

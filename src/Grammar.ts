@@ -39,7 +39,6 @@ export interface Node {
 	meta?: Meta
 }
 export interface OutputNode extends Node {
-	collapse?: boolean,
 	access?: {name?: string, value?: ValueNode, meta: Meta}[]
 }
 
@@ -104,8 +103,8 @@ export interface StringTextNode   extends Node         { type: 'text',      valu
 export interface EscapeNode       extends RangeNode    { type: 'escape',    value: string }
 export interface CharNode         extends RangeNode    { type: 'char',      value: string }
 
-export interface BackRefNode      extends OutputNode { type: 'backref',   index: string }
-export interface ConstRefNode     extends OutputNode { type: 'constref',    name: string }
+export interface BackRefNode      extends OutputNode { type: 'backref',   index: string, collapse: boolean }
+export interface ConstRefNode     extends OutputNode { type: 'constref',  name: string }
 export interface MetaRefNode      extends OutputNode { type: 'metaref',   name: string }
 export interface PivotNode        extends OutputNode { type: 'pivot',     value: BackRefNode|ConstRefNode|ObjectNode|ArrayNode|PivotNode }
 export interface SpreadNode       extends OutputNode { type: 'spread',    value: BackRefNode|ConstRefNode|PivotNode|ObjectNode|ArrayNode }
@@ -216,8 +215,9 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('value', `{backref|constref|metaref|pivot|object|array|string|number|boolean|null}`,
 				'$1'),
 
-			ruleset('backref', `'$' {[0-9]+} {access}`,
-				{ type: 'backref', index: '$1', access: '$2', '...$meta': '' }),
+			ruleset('backref', 
+				`'$' {[0-9]+} '?' {access}`, { type: 'backref', index: '$1', collapse: true, access: '$2', '...$meta': '' },
+				`'$' {[0-9]+} {access}`, { type: 'backref', index: '$1', collapse: false, access: '$2', '...$meta': '' }),
 
 			ruleset('constref', `'$' {identifier} {access}`,
 				{ type: 'constref', name: '$1', access: '$2', '...$meta': '' }),
@@ -241,9 +241,8 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('array', `'[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}`,
 				{ type: 'array', elements: ['...$1', '$2?'], access: '$3' }),
 
-			ruleset('element',
-				`{value|spread} '?'`, { '...$1':'', collapse: true },
-				`{value|spread}`, { '...$1':'', collapse: false }),
+			ruleset('element', `{value|spread}`, 
+				'$1'),
 
 			ruleset('string', `'\\'' {escape|stringText}* '\\''`,
 				{ type: 'string', tokens: '$1' }),
@@ -479,7 +478,6 @@ function output(value: any) : ValueNode {
 				let ret = [];
 				for (let elem of value) {
 					let out = output(elem);
-					out.collapse = elem.length > 1 && elem[elem.length-1] == '?';
 					ret.push(out);
 				}
 				return { 
@@ -512,6 +510,7 @@ function output(value: any) : ValueNode {
 				return {
 					type: 'backref',
 					index: RegExp.$1,
+					collapse: value[value.length-1] == '?',
 					access: []
 				}
 			} else if (value.match(/^@([a-zA-Z_]+)/)) {
@@ -523,7 +522,7 @@ function output(value: any) : ValueNode {
 				let ref = function(name:string):BackRefNode|ConstRefNode { 
 					// don't use a regexp here because it will mess up the backrefs just prior to this call
 					return name[0] <= '9'
-						? { type: 'backref', index: name, access: [] } 
+						? { type: 'backref', index: name, collapse: false, access: [] } 
 						: { type: 'constref', name: name, access: [] };
 				}
 				if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {

@@ -340,11 +340,19 @@ export class Parser {
                             next.paths--;
                             assert(next.paths >= 1);
                         }
-
                     } else if (next.node.type == "token") {
                         if (!next.node.required) {
                             // nodes that are not required always pass
                             next.status = MatchStatus.Pass;
+                            if (exited.node.type == "capture" && !next.node.repeat) {
+                                // a failed non-required non-repeating capture should yield null
+                                next.captures = [{
+                                    captureIndex: exited.node.index,
+                                    position: exited.pos,
+                                    length: 0,
+                                    segment: null
+                                }];
+                            }
                         } else if (next.status == MatchStatus.Continue) {
                             // this node's descriptor never passed - it failed
                             next.status = MatchStatus.Fail;

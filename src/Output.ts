@@ -91,7 +91,7 @@ export class ValueBuilder {
                     { position: capture.position, length: capture.length }
                 );
             } else {
-                assert(capture.segment != null);
+                assert(capture.segment !== undefined);
                 value = capture.segment;                
             }
 
@@ -116,7 +116,18 @@ export class ValueBuilder {
         if (captures[node.index] === undefined) {
             parserError(ErrorCode.BackRefNotFound);
         } else {
-            return captures[node.index];
+            let cap = captures[node.index];
+            if (node.collapse && Array.isArray(cap)) {
+                let ret = [];
+                for (let item of cap) {
+                    if (item != null) {
+                        ret.push(item);
+                    }
+                }
+                return ret;
+            } else {
+                return cap;
+            }
         }
     }
 
@@ -193,8 +204,8 @@ export class ValueBuilder {
             if (elem.type == "spread") {
                 ret = ret.concat(this.value(elem, captures, metas));
             } else {
-                let val = this.value(elem, captures, metas);;
-                if (!elem.collapse || val != null) {
+                let val = this.value(elem, captures, metas);
+                if ((elem.type == "backref" && !elem.collapse) || val != null) {
                     ret.push(val);
                 }
             }

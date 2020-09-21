@@ -102,8 +102,9 @@ modifier =
 value = { backref | constref | metaref | pivot | object | array | string | number | boolean | null } 
 	-> $1;
 
-backref = '$' { [0-9]+ } {access}
-	-> { type: 'backref', index: $1, access: $2, ...$meta };
+backref = 
+	'$' { [0-9]+ } '?' {access} -> { type: 'backref', index: $1, collapse: true, access: $2, ...$meta },
+	'$' { [0-9]+ } {access} -> { type: 'backref', index: $1, collapse: false, access: $2, ...$meta };
 
 constref = '$' { identifier } {access}
 	-> { type: 'constref', name: $1, access: $2, ...$meta };
@@ -127,9 +128,8 @@ member =
 array = '[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}
 	-> { type: 'array', elements: [...$1, $2?], access: $3 };
 
-element = 
-	{value|spread} '?' -> { ...$1, collapse: true },
-	{value|spread} -> { ...$1, collapse: false };
+element = {value|spread} 
+	-> $1;
 
 string = '\'' {escape|stringText}* '\''
 	-> { type: 'string', tokens: $1 };
