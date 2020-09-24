@@ -50,7 +50,7 @@ export class ValueBuilder {
     }
 
     value(node?:ValueNode, captures?:any[], metas?:{ position: number, length: number }) {
-        if (!this.output) return null;
+        if (!this.output) return undefined;
 
         if (!node) {
             node = this.output.rule.value;
@@ -113,21 +113,17 @@ export class ValueBuilder {
     }
 
     backref(node:BackRefNode, captures) {
-        if (captures[node.index] === undefined) {
-            parserError(ErrorCode.BackRefNotFound);
-        } else {
-            let cap = captures[node.index];
-            if (node.collapse && Array.isArray(cap)) {
-                let ret = [];
-                for (let item of cap) {
-                    if (item != null) {
-                        ret.push(item);
-                    }
+        let cap = captures[node.index];
+        if (node.collapse && Array.isArray(cap)) {
+            let ret = [];
+            for (let item of cap) {
+                if (item != null) {
+                    ret.push(item);
                 }
-                return ret;
-            } else {
-                return cap;
             }
+            return ret;
+        } else {
+            return cap;
         }
     }
 
@@ -188,7 +184,10 @@ export class ValueBuilder {
                     if (!Array.isArray(tuple) || tuple.length != 2) {
                         grammarError(ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
                     }
-                    ret[tuple[0]] = tuple[1];
+                    // make sure our value isn't void...
+                    if (tuple[1] !== undefined) {
+                        ret[tuple[0]] = tuple[1];
+                    }
                 }
             } else {
                 ret[this.value(member.name, captures, metas)] 
@@ -205,7 +204,10 @@ export class ValueBuilder {
                 ret = ret.concat(this.value(elem, captures, metas));
             } else {
                 let val = this.value(elem, captures, metas);
-                if ((elem.type == "backref" && !elem.collapse) || val != null) {
+                if (
+                    val !== undefined // void
+                    && ((elem.type == "backref" && !elem.collapse) || val !== null)) 
+                {
                     ret.push(val);
                 }
             }
@@ -227,6 +229,10 @@ export class ValueBuilder {
 
     null() {
         return null;
+    }
+
+    void() {
+        return undefined;
     }
 }
 

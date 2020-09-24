@@ -20,7 +20,6 @@
 exports.__esModule = true;
 exports.createUncompiledDezentGrammar = exports.GrammarVersion = void 0;
 exports.GrammarVersion = 1;
-var kNull = { type: 'null' };
 function createUncompiledDezentGrammar() {
     // This is a mini DSL that allows us to build an AST
     // that our parser uses to parse grammar files.
@@ -36,10 +35,10 @@ function createUncompiledDezentGrammar() {
     return {
         ruleset: [
             returndef("_ ( {returndef|ruleset} _ | {constant} _ )*", { ruleset: "$1", vars: { '...$2': '' } }),
-            ruleset('_', "( singleLineComment | multiLineComment | whitespace? )*", null),
-            ruleset('singleLineComment', "'//' ( !'\\n' . )* '\\n'", null),
-            ruleset('multiLineComment', "'/*' ( !'*/' . )* '*/'", null),
-            ruleset('whitespace', "[\\u0020\\t-\\r]+", null),
+            ruleset('_', "( singleLineComment | multiLineComment | whitespace? )*", undefined),
+            ruleset('singleLineComment', "'//' ( !'\\n' . )* '\\n'", undefined),
+            ruleset('multiLineComment', "'/*' ( !'*/' . )* '*/'", undefined),
+            ruleset('whitespace', "[\\u0020\\t-\\r]+", undefined),
             ruleset('returndef', "'return' whitespace _ {rule} _ ';'", { type: 'ruleset', name: 'return', rules: ['$1'], '...$meta': '' }),
             ruleset('ruleset', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
             ruleset('constant', "'$' {identifier} _ '=' _ {value} _ ';'", ['$1', '$2']),
@@ -61,8 +60,8 @@ function createUncompiledDezentGrammar() {
             ruleset('ruleref', "{identifier}", { type: 'ruleref', name: '$1', '...$meta': '' }),
             ruleset('predicate', "'&'", { and: true, not: false }, "'!'", { and: false, not: true }, "''", { and: false, not: false }),
             ruleset('modifier', "'*'", { repeat: true, required: false }, "'+'", { repeat: true, required: true }, "'?'", { repeat: false, required: false }, "''", { repeat: false, required: true }),
-            ruleset('value', "{backref|constref|metaref|pivot|object|array|string|number|boolean|null}", '$1'),
-            ruleset('backref', "'$' {[0-9]+} {access}", { type: 'backref', index: '$1', access: '$2', '...$meta': '' }),
+            ruleset('value', "{backref|constref|metaref|pivot|object|array|string|number|boolean|null|void}", '$1'),
+            ruleset('backref', "'$' {[0-9]+} '?' {access}", { type: 'backref', index: '$1', collapse: true, access: '$2', '...$meta': '' }, "'$' {[0-9]+} {access}", { type: 'backref', index: '$1', collapse: false, access: '$2', '...$meta': '' }),
             ruleset('constref', "'$' {identifier} {access}", { type: 'constref', name: '$1', access: '$2', '...$meta': '' }),
             ruleset('metaref', "'@' {'position'|'length'}", { type: 'metaref', name: '$1' }),
             ruleset('pivot', "'^' {backref|constref|array|pivot}", { type: 'pivot', value: '$1', '...$meta': '' }),
@@ -70,12 +69,13 @@ function createUncompiledDezentGrammar() {
             ruleset('object', "'{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}", { type: 'object', members: ['...$1', '$2?'], access: '$3' }),
             ruleset('member', "{spread}", '$1', "{backref|string|identifierAsStringNode} _ ':' _ {value}", { type: 'member', name: '$1', value: '$2' }),
             ruleset('array', "'[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}", { type: 'array', elements: ['...$1', '$2?'], access: '$3' }),
-            ruleset('element', "{value|spread} '?'", { '...$1': '', collapse: true }, "{value|spread}", { '...$1': '', collapse: false }),
+            ruleset('element', "{value|spread}", '$1'),
             ruleset('string', "'\\'' {escape|stringText}* '\\''", { type: 'string', tokens: '$1' }),
             ruleset('stringText', "( !['\\\\] . )+", { type: 'text', value: '$0' }),
             ruleset('number', "'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }, "'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }),
             ruleset('boolean', "'true'", { type: 'boolean', value: true }, "'false'", { type: 'boolean', value: false }),
             ruleset('null', "'null'", { type: 'null' }),
+            ruleset('void', "'void'", { type: 'void' }),
             ruleset('access', "{dotAccess|bracketAccess}*", '$1'),
             ruleset('dotAccess', "'.' {identifier}", { name: '$1', '...$meta': '' }),
             ruleset('bracketAccess', "'[' _ {backref|constref|metaref|string|index} _ ']'", { value: '$1', '...$meta': '' }),
@@ -287,7 +287,6 @@ function output(value) {
                 for (var _i = 0, value_1 = value; _i < value_1.length; _i++) {
                     var elem = value_1[_i];
                     var out = output(elem);
-                    out.collapse = elem.length > 1 && elem[elem.length - 1] == '?';
                     ret.push(out);
                 }
                 return {
@@ -322,6 +321,7 @@ function output(value) {
                 return {
                     type: 'backref',
                     index: RegExp.$1,
+                    collapse: value[value.length - 1] == '?',
                     access: []
                 };
             }
@@ -335,7 +335,7 @@ function output(value) {
                 var ref = function (name) {
                     // don't use a regexp here because it will mess up the backrefs just prior to this call
                     return name[0] <= '9'
-                        ? { type: 'backref', index: name, access: [] }
+                        ? { type: 'backref', index: name, collapse: false, access: [] }
                         : { type: 'constref', name: name, access: [] };
                 };
                 if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
@@ -364,6 +364,8 @@ function output(value) {
                 type: 'boolean',
                 value: !!value
             };
+        case 'undefined':
+            return { type: 'void' };
         default:
             throw new Error('Unexpected JSON data type: ' + typeof value);
     }

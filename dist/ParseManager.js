@@ -21,6 +21,7 @@ exports.__esModule = true;
 exports.grammarError = exports.ParseManager = void 0;
 var Parser_1 = require("./Parser");
 var Grammar_1 = require("./Grammar");
+var Output_1 = require("./Output");
 var ParseManager = /** @class */ (function () {
     function ParseManager(options) {
         this.debugLog = [];
@@ -158,7 +159,7 @@ var ParseManager = /** @class */ (function () {
             i++;
         } while (i < rule.options.length);
         visitParseNodes("string", rule, null, null, function (node) {
-            var matchString = buildString(node);
+            var matchString = Output_1.buildString(node);
             node.pattern = matchString;
             node.match = function (s) { return s.startsWith(matchString) ? [true, matchString.length] : [false, 0]; };
         });
@@ -239,156 +240,7 @@ var ParseManager = /** @class */ (function () {
         // now parse
         var parser = this.currentParser = new Parser_1.Parser(ret, text, grammar.rulesetLookup, grammar.maxid, this.options, this.debugLog);
         var output = parser.parse();
-        var builders = {
-            backref: function (node, backrefs) {
-                if (backrefs[node.index] === undefined) {
-                    Parser_1.parserError(Parser_1.ErrorCode.BackRefNotFound);
-                }
-                else {
-                    return backrefs[node.index];
-                }
-            },
-            constref: function (node, backrefs, vars, metas) {
-                var resolved = vars[node.name];
-                return buildValue(resolved, backrefs, vars, metas);
-            },
-            metaref: function (node, backrefs, vars, metas) {
-                return metas[node.name];
-            },
-            pivot: function (node, backrefs, vars, metas) {
-                var value = buildValue(node.value, backrefs, vars, metas);
-                if (!Array.isArray(value)) {
-                    grammarError(Parser_1.ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(value));
-                }
-                value.map(function (item) {
-                    if (!Array.isArray(item)) {
-                        grammarError(Parser_1.ErrorCode.InvalidPivot, grammar.text, node.meta, JSON.stringify(item));
-                    }
-                    if (item.length != value[0].length) {
-                        grammarError(Parser_1.ErrorCode.PivotArraySizeMismatch, grammar.text, node.meta);
-                    }
-                });
-                var ret = [];
-                for (var _i = 0, _a = value[0]; _i < _a.length; _i++) {
-                    var item = _a[_i];
-                    ret.push([]);
-                }
-                for (var i = 0; i < value.length; i++) {
-                    for (var j = 0; j < value[0].length; j++) {
-                        ret[j][i] = value[i][j];
-                    }
-                }
-                return ret;
-            },
-            spread: function (node, backrefs, vars, metas) {
-                var value = buildValue(node.value, backrefs, vars, metas);
-                if (!value || (typeof value != 'object' && typeof value != 'string')) {
-                    grammarError(Parser_1.ErrorCode.InvalidSpread, grammar.text, node.meta, JSON.stringify(value));
-                }
-                if (typeof value == "string") {
-                    return value.split('');
-                }
-                else if (Array.isArray(value)) {
-                    return value;
-                }
-                else {
-                    return Object.entries(value);
-                }
-            },
-            object: function (node, backrefs, vars, metas) {
-                var ret = {};
-                for (var _i = 0, _a = node.members; _i < _a.length; _i++) {
-                    var member = _a[_i];
-                    if (member.type == "spread") {
-                        var tuples = buildValue(member, backrefs, vars, metas);
-                        ;
-                        for (var _b = 0, tuples_1 = tuples; _b < tuples_1.length; _b++) {
-                            var tuple = tuples_1[_b];
-                            if (!Array.isArray(tuple) || tuple.length != 2) {
-                                grammarError(Parser_1.ErrorCode.InvalidObjectTuple, grammar.text, member.meta, JSON.stringify(tuple));
-                            }
-                            ret[tuple[0]] = tuple[1];
-                        }
-                    }
-                    else {
-                        ret[buildValue(member.name, backrefs, vars, metas)]
-                            = buildValue(member.value, backrefs, vars, metas);
-                    }
-                }
-                return ret;
-            },
-            array: function (node, backrefs, vars, metas) {
-                var ret = [];
-                for (var _i = 0, _a = node.elements; _i < _a.length; _i++) {
-                    var elem = _a[_i];
-                    if (elem.type == "spread") {
-                        ret = ret.concat(buildValue(elem, backrefs, vars, metas));
-                    }
-                    else {
-                        var val = buildValue(elem, backrefs, vars, metas);
-                        ;
-                        if (!elem.collapse || val != null) {
-                            ret.push(val);
-                        }
-                    }
-                }
-                return ret;
-            },
-            string: function (node) {
-                return buildString(node);
-            },
-            number: function (node) {
-                return Number(node.value);
-            },
-            boolean: function (node) {
-                return node.value;
-            },
-            "null": function () {
-                return null;
-            }
-        };
-        // build our output value    
-        return buildOutput(output.result);
-        function buildOutput(token) {
-            if (Array.isArray(token)) {
-                return token.map(function (v) { return buildOutput(v); });
-            }
-            else if (token == null) {
-                return null;
-            }
-            else if (token.outputs && token.value) {
-                var backrefs = token.outputs.map(function (v) { return buildOutput(v); });
-                return buildValue(token.value, backrefs, grammar.vars, { position: token.pos, length: token.length });
-            }
-            else {
-                return text.substr(token.pos, token.length);
-            }
-        }
-        function buildValue(node, backrefs, vars, metas) {
-            var out = builders[node.type](node, backrefs, vars, metas);
-            if (node.access)
-                for (var _i = 0, _a = node.access; _i < _a.length; _i++) {
-                    var prop = _a[_i];
-                    if (out == null || (typeof out != 'object' && typeof out != 'string')) {
-                        grammarError(Parser_1.ErrorCode.InvalidAccessRoot, grammar.text, prop.meta, JSON.stringify(out));
-                    }
-                    var index = void 0;
-                    if (prop.value) {
-                        index = buildValue(prop.value, backrefs, vars, metas);
-                        if (typeof index != 'string' && typeof index != 'number') {
-                            grammarError(Parser_1.ErrorCode.InvalidAccessIndex, grammar.text, prop.meta, JSON.stringify(index));
-                        }
-                    }
-                    else {
-                        index = prop.name;
-                    }
-                    if (!out.hasOwnProperty(index)) {
-                        grammarError(Parser_1.ErrorCode.InvalidAccessProperty, grammar.text, prop.meta, index);
-                    }
-                    out = out[index];
-                }
-            return out;
-        }
+        return new Output_1.ValueBuilder(grammar, output).value();
     };
     ParseManager.prototype.debug = function () {
         var args = [];
@@ -419,25 +271,6 @@ var ParseManager = /** @class */ (function () {
     return ParseManager;
 }());
 exports.ParseManager = ParseManager;
-function buildString(node) {
-    return node.tokens.map(function (node) {
-        if (node.type == "text") {
-            return node.value;
-        }
-        else if (node.value[0] == 'u') {
-            return String.fromCharCode(Number("0x" + node.value.substr(1)));
-        }
-        else if (node.value.length > 1) {
-            Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
-        }
-        else if ("bfnrt".indexOf(node.value) >= 0) {
-            return ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[node.value];
-        }
-        else {
-            return node.value;
-        }
-    }).join("");
-}
 function visitParseNodes(types, root, data, enter, exit) {
     if (typeof types == "string") {
         types = [types];

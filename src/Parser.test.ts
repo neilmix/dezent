@@ -127,6 +127,12 @@ test("spread", () => {
     `,'abcdef').toEqual([['a','d'],['b','e'],['c','f']]);
 });
 
+test("void", () => {
+    expectParse(`return .* -> void;`).toEqual(undefined);
+    expectParse(`foo = .* -> void; return {foo} -> [1, $1, 2];`).toEqual([1, 2]);
+    expectParse(`foo = .* -> void; return {foo} -> { foo: 'bar', baz: $1 };`).toEqual({ foo: 'bar' });
+})
+
 test("the 'any' terminal", () => {
     expectParse("return {.} -> $1;", "x").toEqual('x');
 });

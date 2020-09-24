@@ -107,6 +107,11 @@ test("spread", function () {
     expectParse("return {'a'}* {'b'}* -> [...$1, ...$2];", 'aaabbb').toEqual(['a', 'a', 'a', 'b', 'b', 'b']);
     expectParse("\n        return {foo} -> [...$1];\n        foo = {.}{.}{.}{.}{.}{.} -> { $1: $4, $2: $5, $3: $6 };\n    ", 'abcdef').toEqual([['a', 'd'], ['b', 'e'], ['c', 'f']]);
 });
+test("void", function () {
+    expectParse("return .* -> void;").toEqual(undefined);
+    expectParse("foo = .* -> void; return {foo} -> [1, $1, 2];").toEqual([1, 2]);
+    expectParse("foo = .* -> void; return {foo} -> { foo: 'bar', baz: $1 };").toEqual({ foo: 'bar' });
+});
 test("the 'any' terminal", function () {
     expectParse("return {.} -> $1;", "x").toEqual('x');
 });
@@ -161,6 +166,12 @@ test('test modifiers', function () {
     expectParse("return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;", 'accc').toEqual('accc');
     expectParseFail("return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;", 'ccc');
     expectParseFail("return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;", 'abaaa');
+});
+test('array collapse', function () {
+    expectParse("return {'a'} {'b'}? {'a'} -> [$1, $2, $3 ];", 'aa').toEqual(['a', null, 'a']);
+    expectParse("return {'a'} {'b'}? {'a'} -> [$1, $2?, $3 ];", 'aa').toEqual(['a', 'a']);
+    expectParse("return ({'a'} {'b'}?)+ -> [ ...$1, ...$2 ];", 'abaab').toEqual(['a', 'a', 'a', 'b', null, 'b']);
+    expectParse("return ({'a'} {'b'}?)+ -> [ ...$1, ...$2? ];", 'abaab').toEqual(['a', 'a', 'a', 'b', 'b']);
 });
 test("variables", function () {
     expectParse("$foo = 5; return .* -> $foo;").toEqual(5);
@@ -271,9 +282,10 @@ test("packrat", function () {
         }
         log.push(["  cached:  ", time(function () { return caching.parse(text); })]);
     }
-    run(100, true);
+    run(250, true);
+    run(500, true);
     run(1000, true);
-    run(2000, true);
+    run(2000, false);
     run(4000, false);
     run(8000, false);
     console.log(log.map(function (i) { return i.join(' '); }).join('\n'));
