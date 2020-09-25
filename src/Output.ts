@@ -18,8 +18,7 @@
  */
 
 import { 
-    assert,
-    ErrorCode, parserError
+    ParseFrame, assert, ErrorCode, parserError
 } from './Parser';
 
 import {
@@ -35,9 +34,7 @@ export type Output = {
     captureIndex?: number,
     position: number,
     length: number,
-    segment?: string,
-    rule?: RuleNode,
-    captures?: Output[],
+    value: any,
 }
 
 export type Functions = {
@@ -49,29 +46,41 @@ export class ValueBuilder {
     output:Output;
     functions:Functions;
 
-    constructor(grammar:Grammar, output:Output, functions?:Functions) {
+    constructor(grammar:Grammar, functions?:Functions) {
         this.grammar = grammar;
-        this.output = output;
         this.functions = functions || {};
     }
 
-    value(node?:ValueNode, captures?:any[], metas?:{ position: number, length: number }) {
-        if (!this.output) return undefined;
-
-        if (!node) {
-            node = this.output.rule.value;
-            captures = this.buildCaptures(this.output);
-            metas = { position: this.output.position, length: this.output.length };
+    buildValue(frame:ParseFrame) {
+        let rule = <RuleNode>frame.node;
+        let captureValues:any = rule.captures.map((b) => b === true ? [] : null); 
+        if (frame.captures) for (let capture of frame.captures) {
+            assert(capture.captureIndex !== undefined);
+            assert(capture.captureIndex < rule.captures.length);
+            if (rule.captures[capture.captureIndex]) {
+                // this indicates the capture is an array
+                if (!captureValues[capture.captureIndex]) {
+                    captureValues[capture.captureIndex] = [];
+                }
+                captureValues[capture.captureIndex].push(capture.value);
+            } else {
+                // this is a solo capture
+                assert(captureValues[capture.captureIndex] === null);
+                captureValues[capture.captureIndex] = capture.value;
+            }
         }
+        return this.value(rule.value, captureValues, { position: frame.pos, length: frame.consumed })
+    }
 
-        let out = this[node.type](<any>node, captures, metas);
+    value(node:ValueNode, captureValues?:any[], metas?:{ position: number, length: number }) {
+        let out = this[node.type](<any>node, captureValues, metas);
         if (node.access) for (let prop of node.access) {
             if (out == null || (typeof out != 'object' && typeof out != 'string')) {
                 grammarError(ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
             }
             let index;
             if (prop.value) {
-                index = this.value(prop.value, captures, metas);
+                index = this.value(prop.value, captureValues, metas);
                 if (typeof index != 'string' && typeof index != 'number') {
                     grammarError(ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
                 }
@@ -84,38 +93,6 @@ export class ValueBuilder {
             out = out[index];
         }
         return out;
-    }
-
-    buildCaptures(output:Output) {
-        let valueCaptures:any = output.rule.captures.map((b) => b === true ? [] : null); 
-        if (output.captures) for (let capture of output.captures) {
-            let value;
-            if (capture.rule) {
-                value = this.value(
-                    capture.rule.value, 
-                    this.buildCaptures(capture), 
-                    { position: capture.position, length: capture.length }
-                );
-            } else {
-                assert(capture.segment !== undefined);
-                value = capture.segment;                
-            }
-
-            assert(capture.captureIndex !== undefined);
-            assert(capture.captureIndex < output.rule.captures.length);
-            if (output.rule.captures[capture.captureIndex]) {
-                // this indicates the capture is an array
-                if (!valueCaptures[capture.captureIndex]) {
-                    valueCaptures[capture.captureIndex] = [];
-                }
-                valueCaptures[capture.captureIndex].push(value);
-            } else {
-                // this is a solo capture
-                assert(valueCaptures[capture.captureIndex] === null);
-                valueCaptures[capture.captureIndex] = value;
-            }
-        }
-        return valueCaptures;
     }
 
     backref(node:BackRefNode, captures) {

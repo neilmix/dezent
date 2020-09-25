@@ -23,8 +23,8 @@ import {
 } from "./Grammar";
 
 import { ParseCache } from "./ParseCache";
-import { ParseManager } from "./ParseManager";
-import { Output, Functions } from "./Output";
+import { ParseManager, grammarError } from "./ParseManager";
+import { Output, Functions, ValueBuilder } from "./Output";
 
 export enum ErrorCode {
     TextParsingError          = 1,
@@ -156,21 +156,35 @@ export class Parser {
     rulesets: {[key:string]:RulesetNode};
     parseCache : ParseCache;
     frameStore : ParseFrame[] = [];
+    valueBuilder : ValueBuilder;
     options : ParserOptions;
     omitFails : number = 0;
     debugLog : any[][];
     
-    constructor(root:ReturnNode, text:string, rulesets:{[key:string]:RulesetNode}, maxid: number, options:ParserOptions, debugLog:string[][]) {
+    constructor(grammar:Grammar, text:string, functions:Functions, options:ParserOptions, debugLog:string[][]) {
+        let root:ReturnNode;
+    
+        for (let ruleset of grammar.ruleset) {
+            if (ruleset.name == 'return') {
+                root = <ReturnNode>ruleset;
+            }
+        }
+    
+        if (!root) {
+            grammarError(ErrorCode.ReturnNotFound, text);
+        }
+
         this.root = root;
         this.text = text;
-        this.rulesets = rulesets;
+        this.rulesets = grammar.rulesetLookup;
         this.options = options || {};
         this.debugLog = debugLog;
-        this.parseCache = new ParseCache(maxid, !options.disableCacheLookup);
+        this.parseCache = new ParseCache(grammar.maxid, !options.disableCacheLookup);
+        this.valueBuilder = new ValueBuilder(grammar, functions);
         this.enter(root);
     }
 
-    parse() : Output {
+    parse() : any {
         let maxPos = 0;
         let failedPatterns = {};
         let exited:ParseFrame;
@@ -319,7 +333,7 @@ export class Parser {
                                 captureIndex: next.node.index,
                                 position: exited.pos,
                                 length: exited.consumed,
-                                segment: this.text.substr(exited.pos, exited.consumed),
+                                value: this.text.substr(exited.pos, exited.consumed),
                             }];
                         }
                     } else if (exited.output) {
@@ -333,7 +347,7 @@ export class Parser {
                         } else {
                             next.captures = exited.captures;
                         }
-                    } else if (next.node.type == "ruleset" && (next.wantOutput || next.node.name == "return")) {
+                    } else if (next.node.type == "ruleset") {
                         this.yieldOutput(exited, next, next);
                     }
                 } else { // exited.matchStatus == MatchStatus.FAIL
@@ -354,7 +368,7 @@ export class Parser {
                                     captureIndex: exited.node.index,
                                     position: exited.pos,
                                     length: 0,
-                                    segment: null
+                                    value: null
                                 }];
                             }
                         } else if (next.status == MatchStatus.Continue) {
@@ -386,7 +400,7 @@ export class Parser {
             parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
         }
 
-        return exited.output;
+        return exited.output.value;
 
         function expectedTerminals() {
             return Object.keys(failedPatterns);
@@ -394,21 +408,28 @@ export class Parser {
     }
 
     yieldOutput(exited:ParseFrame, target:ParseFrame, base:ParseFrame) {
-        // our ruleset emerged from a capture - create an output (which will descend the stack)
-        target.output = {
-            position: base.pos,
-            length: base.consumed,
-            rule: <RuleNode>exited.node,
-            captures: exited.captures
-        }
+        assert(exited.node.type == "rule");
         // create a capture for $0 backref
-        if (!target.output.captures) target.output.captures = [];
-        target.output.captures.push({
+        if (!exited.captures) exited.captures = [];
+        exited.captures.push({
             captureIndex: 0,
             position: base.pos,
             length: base.consumed,
-            segment: this.text.substr(base.pos, base.consumed),
+            value: this.text.substr(base.pos, base.consumed),
         });
+
+        // always build the value so that output callbacks can be called
+        // even if the grammar returns void
+        let value = this.valueBuilder.buildValue(exited);
+
+        if (base.wantOutput || (<RulesetNode>base.node).name == "return") {
+            // our ruleset emerged from a capture - create an output (which will descend the stack)
+            target.output = {
+                position: base.pos,
+                length: base.consumed,
+                value: value
+            }
+        }
     }
 
     enter(node:ParseNode) {

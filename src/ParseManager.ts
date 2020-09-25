@@ -253,22 +253,8 @@ export class ParseManager {
     }
 
     parseTextWithGrammar(grammar:Grammar, text:string) : any {
-        let ret:ReturnNode;
-    
-        for (let ruleset of grammar.ruleset) {
-            if (ruleset.name == 'return') {
-                ret = <ReturnNode>ruleset;
-            }
-        }
-    
-        if (!ret) {
-            grammarError(ErrorCode.ReturnNotFound, text);
-        }
-    
-        // now parse
-        let parser = this.currentParser = new Parser(ret, text, grammar.rulesetLookup, grammar.maxid, this.options, this.debugLog);
-        let output = parser.parse();
-        return new ValueBuilder(grammar, output, this.functions).value();
+        let parser = this.currentParser = new Parser(grammar, text, this.functions, this.options, this.debugLog);
+        return parser.parse();
     }
 
     debug(...args:any[]) {

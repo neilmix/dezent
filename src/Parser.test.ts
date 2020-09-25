@@ -261,6 +261,15 @@ test("function calls", () => {
     expectParse(`return .* -> { foo: [ foo() ] };`, 'anything', { foo: () => 4 })
         .toEqual({foo: [4]});
     expectParse(`return .* -> [1, foo(), 2];`, 'anything', { foo: () => undefined }).toEqual([1,2]);
+
+    let value = 0;
+    parse(`return foo -> void;
+           foo = . bar -> void;
+           bar = .* -> blah();`, 
+        'anything', 
+        { blah: () => value = 5 });
+    expect(value).toEqual(5);
+
     expectGrammarFail(`return .* -> foo();`);
 });
 
