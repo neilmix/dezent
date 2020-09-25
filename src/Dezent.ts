@@ -20,6 +20,7 @@
 import * as parser from './Parser';
 
 import { Grammar } from './Grammar';
+import { Functions } from './Output';
 
 export interface DezentError extends Error {
     code: number
@@ -46,21 +47,23 @@ export interface ParseError extends DezentError {
 
 export default class Dezent {
     debugErrors: boolean;
+    functions:Functions;
     options:parser.ParserOptions;
     error:DezentError|GrammarError|ParseError;
 
     private grammar:Grammar;
 
-    constructor(grammarStr:string, options?:parser.ParserOptions) {
+    constructor(grammarStr:string, functions?:Functions, options?:parser.ParserOptions) {
         this.options = options || {};
         this.debugErrors = !!this.options.debugErrors;
         this.error = null;
-        this.grammar = parser.parseGrammar(grammarStr, this.options);
+        this.grammar = parser.parseGrammar(grammarStr, this.options, functions);
+        this.functions = functions;
     }
 
     parse(text:string) {
         try {
-            return parser.parseText(this.grammar, text, this.options);
+            return parser.parseText(this.grammar, text, this.functions, this.options);
         } catch (e) {
             this.error = e;
             if (this.debugErrors) {

@@ -29,17 +29,19 @@ import {
     MetaRefNode, PivotNode, SpreadNode, StringTextNode, EscapeNode,
 } from './Grammar';
 
-import { buildString, ValueBuilder } from './Output';
+import { Functions, buildString, ValueBuilder } from './Output';
 
 export class ParseManager {
     options:ParserOptions;
     debugLog:any[][] = [];
     currentParser:Parser;
+    functions:Functions;
     rawGrammar:string;
     compiledGrammar:Grammar;
 
-    constructor(options?:ParserOptions) {
+    constructor(options?:ParserOptions, functions?:Functions) {
         this.options = options || {};
+        this.functions = functions || {};
     }
 
     parseText(grammar:string|Grammar, text:string) : any {
@@ -237,6 +239,9 @@ export class ParseManager {
                     grammarError(ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
+            if (node.type == "call" && !this.functions[node.name]) {
+                grammarError(ErrorCode.FunctionNotFound, text, node.meta, node.name);
+            }
          });
     
          for (let i = 1; i < info.backrefs.length; i++) {
@@ -263,7 +268,7 @@ export class ParseManager {
         // now parse
         let parser = this.currentParser = new Parser(ret, text, grammar.rulesetLookup, grammar.maxid, this.options, this.debugLog);
         let output = parser.parse();
-        return new ValueBuilder(grammar, output).value();
+        return new ValueBuilder(grammar, output, this.functions).value();
     }
 
     debug(...args:any[]) {

@@ -99,7 +99,7 @@ modifier =
 	'?' -> { repeat: false, required: false },
 	''  -> { repeat: false, required: true };
 
-value = { backref | constref | metaref | pivot | object | array | string | number | boolean | null | void } 
+value = { backref | constref | metaref | pivot | object | array | call | string | number | boolean | null | void } 
 	-> $1;
 
 backref = 
@@ -130,6 +130,9 @@ array = '[' ( _ {element} _ ',' )* _ {element}? _ ']' {access}
 
 element = {value|spread} 
 	-> $1;
+
+call = {identifier} _ '(' ( _ {value} _ ',' )* _ {value}? _ ')'
+	-> { type: 'call', name: $1, args: [ ...$2, $3? ], ...$meta };
 
 string = '\'' {escape|stringText}* '\''
 	-> { type: 'string', tokens: $1 };

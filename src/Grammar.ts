@@ -54,7 +54,7 @@ export interface RangeNode extends Node {
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = RulesetNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
-export type ValueNode = BackRefNode | ConstRefNode | MetaRefNode | PivotNode | SpreadNode | ObjectNode | ArrayNode | StringNode | NumberNode | BooleanNode | NullNode | VoidNode;
+export type ValueNode = BackRefNode | ConstRefNode | MetaRefNode | PivotNode | SpreadNode | ObjectNode | ArrayNode | CallNode | StringNode | NumberNode | BooleanNode | NullNode | VoidNode;
 
 export interface MetaData {
 }
@@ -110,6 +110,7 @@ export interface PivotNode        extends OutputNode { type: 'pivot',     value:
 export interface SpreadNode       extends OutputNode { type: 'spread',    value: BackRefNode|ConstRefNode|PivotNode|ObjectNode|ArrayNode }
 export interface ObjectNode       extends OutputNode { type: 'object',    members: (MemberNode|SpreadNode)[] }
 export interface ArrayNode        extends OutputNode { type: 'array',     elements: ValueNode[] }
+export interface CallNode         extends OutputNode { type: 'call',      name: string, args: ValueNode[] }
 export interface NumberNode       extends OutputNode { type: 'number',    value: string }
 export interface BooleanNode      extends OutputNode { type: 'boolean',   value: boolean }
 export interface NullNode         extends OutputNode { type: 'null' }
@@ -211,7 +212,7 @@ export function createUncompiledDezentGrammar():Grammar {
 				`'?'`, { repeat: false, required: false },
 				`''`,  { repeat: false, required: true }),
 
-			ruleset('value', `{backref|constref|metaref|pivot|object|array|string|number|boolean|null|void}`,
+			ruleset('value', `{backref|constref|metaref|pivot|object|array|call|string|number|boolean|null|void}`,
 				'$1'),
 
 			ruleset('backref', 
@@ -243,6 +244,9 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('element', `{value|spread}`, 
 				'$1'),
 
+			ruleset('call', `{identifier} _ '(' ( _ {value} _ ',' )* _ {value}? _ ')'`,
+				{ type: 'call', name: '$1', args: [ '...$2', '$3?' ], '...$meta': '' }),
+			
 			ruleset('string', `'\\'' {escape|stringText}* '\\''`,
 				{ type: 'string', tokens: '$1' }),
 

@@ -26,7 +26,7 @@ var Parser_1 = require("./Parser");
 var Grammar_1 = require("./Grammar");
 var fs_1 = require("fs");
 function parse(grammar, text) {
-    var d = new Dezent_1["default"](grammar, { debugErrors: true });
+    var d = new Dezent_1["default"](grammar, null, { debugErrors: true });
     return d.parse(text);
 }
 function parseError(grammar, text) {
@@ -222,7 +222,7 @@ test("dezent grammar documentation", function () {
     // insert metas into the grammar we parse from file.
     var prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
-    var parsedDezent = Parser_1.parseText(hackedGrammar, textDezent, { debugErrors: true });
+    var parsedDezent = Parser_1.parseText(hackedGrammar, textDezent, null, { debugErrors: true });
     hackedGrammar.vars.meta = prevMeta;
     expect(parsedDezent).toEqual(uncompiledDezent);
 });
@@ -264,8 +264,8 @@ test("packrat", function () {
         var text = 'a'.repeat(count) + 'b';
     }
     var grammar = "\n        return {theRule}* -> $1;\n        theRule =\n            {'a'}* {'c'} -> [$1, $2],\n            {'b'} -> $1,\n            {'a'} -> $1;\n    ";
-    var caching = new Dezent_1["default"](grammar, { disableCacheLookup: false });
-    var noncaching = new Dezent_1["default"](grammar, { disableCacheLookup: true });
+    var caching = new Dezent_1["default"](grammar, null, { disableCacheLookup: false });
+    var noncaching = new Dezent_1["default"](grammar, null, { disableCacheLookup: true });
     expect(caching.parse('aaaab')).toEqual(['a', 'a', 'a', 'a', 'b']);
     expect(noncaching.parse('aaaab')).toEqual(['a', 'a', 'a', 'a', 'b']);
     function time(f) {

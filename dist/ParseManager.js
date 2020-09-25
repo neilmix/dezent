@@ -27,12 +27,12 @@ var ParseManager = /** @class */ (function () {
         this.debugLog = [];
         this.options = options || {};
     }
-    ParseManager.prototype.parseText = function (grammar, text) {
+    ParseManager.prototype.parseText = function (grammar, text, functions) {
         if (typeof grammar == "string") {
             grammar = this.parseAndCompileGrammar(grammar);
         }
         this.compiledGrammar = grammar;
-        return this.parseTextWithGrammar(grammar, text);
+        return this.parseTextWithGrammar(grammar, text, functions);
     };
     ParseManager.prototype.parseAndCompileGrammar = function (text) {
         try {
@@ -226,7 +226,7 @@ var ParseManager = /** @class */ (function () {
         }
         return info.captures;
     };
-    ParseManager.prototype.parseTextWithGrammar = function (grammar, text) {
+    ParseManager.prototype.parseTextWithGrammar = function (grammar, text, functions) {
         var ret;
         for (var _i = 0, _a = grammar.ruleset; _i < _a.length; _i++) {
             var ruleset = _a[_i];
@@ -240,7 +240,7 @@ var ParseManager = /** @class */ (function () {
         // now parse
         var parser = this.currentParser = new Parser_1.Parser(ret, text, grammar.rulesetLookup, grammar.maxid, this.options, this.debugLog);
         var output = parser.parse();
-        return new Output_1.ValueBuilder(grammar, output).value();
+        return new Output_1.ValueBuilder(grammar, output, functions).value();
     };
     ParseManager.prototype.debug = function () {
         var args = [];

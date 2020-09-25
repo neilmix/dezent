@@ -24,7 +24,7 @@ import {
 
 import { ParseCache } from "./ParseCache";
 import { ParseManager } from "./ParseManager";
-import { Output } from "./Output";
+import { Output, Functions } from "./Output";
 
 export enum ErrorCode {
     TextParsingError          = 1,
@@ -44,6 +44,7 @@ export enum ErrorCode {
     InvalidAccessRoot         = 1012,
     InvalidAccessIndex        = 1013,
     InvalidAccessProperty     = 1014,
+    FunctionNotFound          = 1015,
 
     ArrayOverrun              = 2001,
     MismatchOutputFrames      = 2002,
@@ -61,6 +62,7 @@ export enum ErrorCode {
 export const errorMessages = {
     1:    "Parse failed: $3\nAt line $1 char $2:\n$4\n$5",
     2:    "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5",
+    
     1001: "Multiple rules defined with the same name: $1",
     1002: "Grammars are only allowed to have one return statement",
     1003: "Grammar does not contain a rule named '$1'",
@@ -75,6 +77,8 @@ export const errorMessages = {
     1012: "Attempted to access property of non-object value: $1",
     1013: "Attempted to access property using a key that was not a string or number: $1",
     1014: "Attempted to access a property that doesn't exist: $1",
+    1015: "Function not found: $1",
+
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -119,8 +123,8 @@ export interface ParserOptions {
     disableCacheLookup?: boolean,
 }
 
-export function parseText(grammar:string|Grammar, text:string, options?:ParserOptions) : any {
-    let mgr = new ParseManager(options);
+export function parseText(grammar:string|Grammar, text:string, functions?:Functions, options?:ParserOptions) : any {
+    let mgr = new ParseManager(options, functions);
     try {
         return mgr.parseText(grammar, text);
     } catch(e) {
@@ -129,8 +133,8 @@ export function parseText(grammar:string|Grammar, text:string, options?:ParserOp
     }
 }
 
-export function parseGrammar(grammar:string, options?:ParserOptions) : Grammar {
-    let mgr = new ParseManager(options);
+export function parseGrammar(grammar:string, options?:ParserOptions, functions?:Functions) : Grammar {
+    let mgr = new ParseManager(options, functions);
     try {
         return mgr.parseAndCompileGrammar(grammar);
     } catch(e) {

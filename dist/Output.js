@@ -22,9 +22,10 @@ exports.buildString = exports.ValueBuilder = void 0;
 var Parser_1 = require("./Parser");
 var ParseManager_1 = require("./ParseManager");
 var ValueBuilder = /** @class */ (function () {
-    function ValueBuilder(grammar, output) {
+    function ValueBuilder(grammar, output, functions) {
         this.grammar = grammar;
         this.output = output;
+        this.functions = functions || {};
     }
     ValueBuilder.prototype.value = function (node, captures, metas) {
         if (!this.output)
@@ -192,6 +193,19 @@ var ValueBuilder = /** @class */ (function () {
             }
         }
         return ret;
+    };
+    ValueBuilder.prototype.call = function (node, captures, metas) {
+        var argVals = [];
+        for (var _i = 0, _a = node.args; _i < _a.length; _i++) {
+            var arg = _a[_i];
+            argVals.push(this.value(arg, captures, metas));
+        }
+        if (!this.functions[node.name]) {
+            ParseManager_1.grammarError(Parser_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
+        }
+        else {
+            return this.functions[node.name].apply(null, argVals);
+        }
     };
     ValueBuilder.prototype.string = function (node) {
         return buildString(node);

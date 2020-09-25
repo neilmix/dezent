@@ -24,10 +24,11 @@ import "./Parser";
 import Dezent from "./Dezent";
 import { parseText, findDezentGrammar, parseGrammar } from "./Parser";
 import { createUncompiledDezentGrammar } from "./Grammar";
+import { Functions } from "./Output";
 import { readFileSync } from "fs";
 
-function parse(grammar:string, text:string) {
-    let d = new Dezent(grammar, {debugErrors: true});
+function parse(grammar:string, text:string, functions?:Functions) {
+    let d = new Dezent(grammar, functions, {debugErrors: true});
     return d.parse(text);
 }
 
@@ -40,8 +41,8 @@ function parseError(grammar:string, text:string) {
     }
 }
 
-function expectParse(grammar:string, text?:string) {
-    return expect(parse(grammar, text||'Did you forget the second argument?'));
+function expectParse(grammar:string, text?:string, functions?:Functions) {
+    return expect(parse(grammar, text||'Did you forget the second argument?', functions));
 }
 
 function expectGrammarFail(grammar:string) {
@@ -55,9 +56,9 @@ function expectParseFail(grammar:string, text?:string) {
     expect(d.parse(text||'Did you forget the second argument?')).toBe(undefined);
 }
 
-function parseGrammarError(grammar:string) {
+function parseGrammarError(grammar:string, functions?:Functions) {
     try {
-        parseGrammar(grammar);
+        parseGrammar(grammar, functions);
         fail();
     } catch(e) {
         return e;
@@ -252,6 +253,17 @@ test("access", () => {
     expectParse(`$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;`).toEqual(2);
 });
 
+test("function calls", () => {
+    expectParse(`return .* -> foo();`, 'anything', { foo: () => 4 }).toEqual(4);
+    expectParse(`return .* -> foo(1, 'a', true, [1,2,3], { foo: 'bar' });`, 'anything', 
+        { foo: function() { return [].slice.call(arguments) } })
+        .toEqual([1, 'a', true, [1,2,3], { foo: 'bar' }]);
+    expectParse(`return .* -> { foo: [ foo() ] };`, 'anything', { foo: () => 4 })
+        .toEqual({foo: [4]});
+    expectParse(`return .* -> [1, foo(), 2];`, 'anything', { foo: () => undefined }).toEqual([1,2]);
+    expectGrammarFail(`return .* -> foo();`);
+});
+
 test("left recursion", () => {
     let grammar = `
         _ = [ \\n]* -> null;
@@ -298,7 +310,7 @@ test("dezent grammar documentation", () => {
     // insert metas into the grammar we parse from file.
     let prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
-    let parsedDezent = parseText(hackedGrammar, textDezent, {debugErrors: true});
+    let parsedDezent = parseText(hackedGrammar, textDezent, null, {debugErrors: true});
     hackedGrammar.vars.meta = prevMeta;
 
     expect(parsedDezent).toEqual(uncompiledDezent);
@@ -361,8 +373,8 @@ test("packrat", () => {
             {'a'} -> $1;
     `;
 
-    let caching = new Dezent(grammar, {disableCacheLookup: false});
-    let noncaching = new Dezent(grammar, {disableCacheLookup: true});
+    let caching = new Dezent(grammar, null, {disableCacheLookup: false});
+    let noncaching = new Dezent(grammar, null, {disableCacheLookup: true});
 
     expect(caching.parse('aaaab')).toEqual(['a','a','a','a','b']);
     expect(noncaching.parse('aaaab')).toEqual(['a','a','a','a','b']);

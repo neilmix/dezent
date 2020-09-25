@@ -27,7 +27,7 @@ import {
 } from './ParseManager';
 
 import { 
-    Grammar, RuleNode, ValueNode, ObjectNode, ArrayNode, BooleanNode, StringNode, StringTextNode, EscapeNode,
+    Grammar, RuleNode, ValueNode, ObjectNode, ArrayNode, CallNode, BooleanNode, StringNode, StringTextNode, EscapeNode,
     NumberNode, BackRefNode, ConstRefNode, MetaRefNode, PivotNode, SpreadNode
 } from './Grammar';
 
@@ -40,13 +40,19 @@ export type Output = {
     captures?: Output[],
 }
 
+export type Functions = {
+    [key:string]: Function
+}
+
 export class ValueBuilder {
     grammar:Grammar;
     output:Output;
+    functions:Functions;
 
-    constructor(grammar:Grammar, output:Output) {
+    constructor(grammar:Grammar, output:Output, functions?:Functions) {
         this.grammar = grammar;
         this.output = output;
+        this.functions = functions || {};
     }
 
     value(node?:ValueNode, captures?:any[], metas?:{ position: number, length: number }) {
@@ -213,6 +219,18 @@ export class ValueBuilder {
             }
         }
         return ret;
+    }
+
+    call (node:CallNode, captures, metas) {
+        let argVals = [];
+        for (let arg of node.args) {
+            argVals.push(this.value(arg, captures, metas));
+        }
+        if (!this.functions[node.name]) {
+            grammarError(ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
+        } else {
+            return this.functions[node.name].apply(null, argVals);
+        }
     }
 
     string(node:StringNode) {

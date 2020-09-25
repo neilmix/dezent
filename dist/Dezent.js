@@ -20,15 +20,16 @@
 exports.__esModule = true;
 var parser = require("./Parser");
 var Dezent = /** @class */ (function () {
-    function Dezent(grammarStr, options) {
+    function Dezent(grammarStr, functions, options) {
         this.options = options || {};
         this.debugErrors = !!this.options.debugErrors;
         this.error = null;
         this.grammar = parser.parseGrammar(grammarStr, this.options);
+        this.functions = functions;
     }
     Dezent.prototype.parse = function (text) {
         try {
-            return parser.parseText(this.grammar, text, this.options);
+            return parser.parseText(this.grammar, text, this.functions, this.options);
         }
         catch (e) {
             this.error = e;
