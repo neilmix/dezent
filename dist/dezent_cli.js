@@ -40,7 +40,7 @@ if (typeof process.argv[2] != 'string' || typeof process.argv[3] != 'string') {
 if (process.argv[2] == '-' && process.argv[3] == '-') {
     usage();
 }
-var d = new Dezent_1["default"](read(process.argv[2]).toString());
+var d = new Dezent_1.Dezent(read(process.argv[2]).toString());
 var output = d.parse(read(process.argv[3]).toString());
 if (!output) {
     throw d.error;

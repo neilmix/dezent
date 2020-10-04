@@ -18,13 +18,14 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 exports.__esModule = true;
+exports.Dezent = void 0;
 var parser = require("./Parser");
 var Dezent = /** @class */ (function () {
     function Dezent(grammarStr, functions, options) {
         this.options = options || {};
         this.debugErrors = !!this.options.debugErrors;
         this.error = null;
-        this.grammar = parser.parseGrammar(grammarStr, this.options);
+        this.grammar = parser.parseGrammar(grammarStr, this.options, functions);
         this.functions = functions;
     }
     Dezent.prototype.parse = function (text) {
@@ -41,4 +42,4 @@ var Dezent = /** @class */ (function () {
     };
     return Dezent;
 }());
-exports["default"] = Dezent;
+exports.Dezent = Dezent;

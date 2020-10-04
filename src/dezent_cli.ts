@@ -19,7 +19,7 @@
  */
 
 import { readFileSync } from 'fs';
-import Dezent from './Dezent';
+import { Dezent } from './Dezent';
 import { exit } from 'process';
 
 function usage() {

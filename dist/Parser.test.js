@@ -25,8 +25,8 @@ var Dezent_1 = require("./Dezent");
 var Parser_1 = require("./Parser");
 var Grammar_1 = require("./Grammar");
 var fs_1 = require("fs");
-function parse(grammar, text) {
-    var d = new Dezent_1["default"](grammar, null, { debugErrors: true });
+function parse(grammar, text, functions) {
+    var d = new Dezent_1.Dezent(grammar, functions, { debugErrors: true });
     return d.parse(text);
 }
 function parseError(grammar, text) {
@@ -38,21 +38,21 @@ function parseError(grammar, text) {
         return e;
     }
 }
-function expectParse(grammar, text) {
-    return expect(parse(grammar, text || 'Did you forget the second argument?'));
+function expectParse(grammar, text, functions) {
+    return expect(parse(grammar, text || 'Did you forget the second argument?', functions));
 }
 function expectGrammarFail(grammar) {
     expect(function () {
-        new Dezent_1["default"](grammar);
+        new Dezent_1.Dezent(grammar);
     }).toThrow();
 }
 function expectParseFail(grammar, text) {
-    var d = new Dezent_1["default"](grammar);
+    var d = new Dezent_1.Dezent(grammar);
     expect(d.parse(text || 'Did you forget the second argument?')).toBe(undefined);
 }
-function parseGrammarError(grammar) {
+function parseGrammarError(grammar, functions) {
     try {
-        Parser_1.parseGrammar(grammar);
+        Parser_1.parseGrammar(grammar, functions);
         fail();
     }
     catch (e) {
@@ -198,6 +198,18 @@ test("access", function () {
     expectParse("foo = .* -> {a: 1}; return {foo} -> $1['a'];").toEqual(1);
     expectParse("$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;").toEqual(2);
 });
+test("function calls", function () {
+    expectParse("return .* -> foo();", 'anything', { foo: function () { return 4; } }).toEqual(4);
+    expectParse("return .* -> foo(1, 'a', true, [1,2,3], { foo: 'bar' });", 'anything', { foo: function () { return [].slice.call(arguments); } })
+        .toEqual([1, 'a', true, [1, 2, 3], { foo: 'bar' }]);
+    expectParse("return .* -> { foo: [ foo() ] };", 'anything', { foo: function () { return 4; } })
+        .toEqual({ foo: [4] });
+    expectParse("return .* -> [1, foo(), 2];", 'anything', { foo: function () { return undefined; } }).toEqual([1, 2]);
+    var value = 0;
+    parse("return foo -> void;\n           foo = . bar -> void;\n           bar = .* -> blah();", 'anything', { blah: function () { return value = 5; } });
+    expect(value).toEqual(5);
+    expectGrammarFail("return .* -> foo();");
+});
 test("left recursion", function () {
     var grammar = "\n        _ = [ \\n]* -> null;\n        expr =\n            {expr} _ '+' _ {mult} -> ['+',$1,$2],\n            {mult} -> $1;\n        mult =\n            {mult} _ '*' _ {num} -> ['*',$1,$2],\n            num -> $0;\n        num = [0-9]+ -> $0;\n        return _ {expr} _ -> $1;\n    ";
     expectParse(grammar, '5').toEqual('5');
@@ -264,8 +276,8 @@ test("packrat", function () {
         var text = 'a'.repeat(count) + 'b';
     }
     var grammar = "\n        return {theRule}* -> $1;\n        theRule =\n            {'a'}* {'c'} -> [$1, $2],\n            {'b'} -> $1,\n            {'a'} -> $1;\n    ";
-    var caching = new Dezent_1["default"](grammar, null, { disableCacheLookup: false });
-    var noncaching = new Dezent_1["default"](grammar, null, { disableCacheLookup: true });
+    var caching = new Dezent_1.Dezent(grammar, null, { disableCacheLookup: false });
+    var noncaching = new Dezent_1.Dezent(grammar, null, { disableCacheLookup: true });
     expect(caching.parse('aaaab')).toEqual(['a', 'a', 'a', 'a', 'b']);
     expect(noncaching.parse('aaaab')).toEqual(['a', 'a', 'a', 'a', 'b']);
     function time(f) {

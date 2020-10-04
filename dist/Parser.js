@@ -22,6 +22,7 @@ exports.findLineAndChar = exports.parsingError = exports.assert = exports.parser
 var Grammar_1 = require("./Grammar");
 var ParseCache_1 = require("./ParseCache");
 var ParseManager_1 = require("./ParseManager");
+var Output_1 = require("./Output");
 var ErrorCode;
 (function (ErrorCode) {
     ErrorCode[ErrorCode["TextParsingError"] = 1] = "TextParsingError";
@@ -93,9 +94,9 @@ function findDezentGrammar(options) {
 }
 exports.findDezentGrammar = findDezentGrammar;
 function parseText(grammar, text, functions, options) {
-    var mgr = new ParseManager_1.ParseManager(options);
+    var mgr = new ParseManager_1.ParseManager(options, functions);
     try {
-        return mgr.parseText(grammar, text, functions);
+        return mgr.parseText(grammar, text);
     }
     catch (e) {
         if (options && options.debugErrors)
@@ -104,8 +105,8 @@ function parseText(grammar, text, functions, options) {
     }
 }
 exports.parseText = parseText;
-function parseGrammar(grammar, options) {
-    var mgr = new ParseManager_1.ParseManager(options);
+function parseGrammar(grammar, options, functions) {
+    var mgr = new ParseManager_1.ParseManager(options, functions);
     try {
         return mgr.parseAndCompileGrammar(grammar);
     }
@@ -123,16 +124,27 @@ var MatchStatus;
     MatchStatus[MatchStatus["Fail"] = 2] = "Fail";
 })(MatchStatus = exports.MatchStatus || (exports.MatchStatus = {}));
 var Parser = /** @class */ (function () {
-    function Parser(root, text, rulesets, maxid, options, debugLog) {
+    function Parser(grammar, text, functions, options, debugLog) {
         this.stack = [];
         this.frameStore = [];
         this.omitFails = 0;
+        var root;
+        for (var _i = 0, _a = grammar.ruleset; _i < _a.length; _i++) {
+            var ruleset = _a[_i];
+            if (ruleset.name == 'return') {
+                root = ruleset;
+            }
+        }
+        if (!root) {
+            ParseManager_1.grammarError(ErrorCode.ReturnNotFound, text);
+        }
         this.root = root;
         this.text = text;
-        this.rulesets = rulesets;
+        this.rulesets = grammar.rulesetLookup;
         this.options = options || {};
         this.debugLog = debugLog;
-        this.parseCache = new ParseCache_1.ParseCache(maxid, !options.disableCacheLookup);
+        this.parseCache = new ParseCache_1.ParseCache(grammar.maxid, !options.disableCacheLookup);
+        this.valueBuilder = new Output_1.ValueBuilder(grammar, functions);
         this.enter(root);
     }
     Parser.prototype.parse = function () {
@@ -288,7 +300,7 @@ var Parser = /** @class */ (function () {
                                     captureIndex: next.node.index,
                                     position: exited.pos,
                                     length: exited.consumed,
-                                    segment: this.text.substr(exited.pos, exited.consumed)
+                                    value: this.text.substr(exited.pos, exited.consumed)
                                 }];
                         }
                     }
@@ -306,7 +318,7 @@ var Parser = /** @class */ (function () {
                             next.captures = exited.captures;
                         }
                     }
-                    else if (next.node.type == "ruleset" && (next.wantOutput || next.node.name == "return")) {
+                    else if (next.node.type == "ruleset") {
                         this.yieldOutput(exited, next, next);
                     }
                 }
@@ -330,7 +342,7 @@ var Parser = /** @class */ (function () {
                                         captureIndex: exited.node.index,
                                         position: exited.pos,
                                         length: 0,
-                                        segment: null
+                                        value: null
                                     }];
                             }
                         }
@@ -362,28 +374,33 @@ var Parser = /** @class */ (function () {
         if (exited.output.length != this.text.length) {
             parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
         }
-        return exited.output;
+        return exited.output.value;
         function expectedTerminals() {
             return Object.keys(failedPatterns);
         }
     };
     Parser.prototype.yieldOutput = function (exited, target, base) {
-        // our ruleset emerged from a capture - create an output (which will descend the stack)
-        target.output = {
-            position: base.pos,
-            length: base.consumed,
-            rule: exited.node,
-            captures: exited.captures
-        };
+        assert(exited.node.type == "rule");
         // create a capture for $0 backref
-        if (!target.output.captures)
-            target.output.captures = [];
-        target.output.captures.push({
+        if (!exited.captures)
+            exited.captures = [];
+        exited.captures.push({
             captureIndex: 0,
             position: base.pos,
             length: base.consumed,
-            segment: this.text.substr(base.pos, base.consumed)
+            value: this.text.substr(base.pos, base.consumed)
         });
+        // always build the value so that output callbacks can be called
+        // even if the grammar returns void
+        var value = this.valueBuilder.buildValue(exited);
+        if (base.wantOutput || base.node.name == "return") {
+            // our ruleset emerged from a capture - create an output (which will descend the stack)
+            target.output = {
+                position: base.pos,
+                length: base.consumed,
+                value: value
+            };
+        }
     };
     Parser.prototype.enter = function (node) {
         var current = this.top();

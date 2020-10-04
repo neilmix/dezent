@@ -18,59 +18,19 @@
  */
 
 import { 
-    ParserOptions, Parser, findDezentGrammar, ErrorCode, 
-    parserError, parsingError, errorMessages, findLineAndChar
+    ErrorCode, errorMessages, findLineAndChar
 } from './Parser';
 
 import { 
-    Grammar, GrammarVersion, Node, SelectorNode, Meta, RulesetNode, ReturnNode, RuleNode, TokenNode, PatternNode, 
-    RuleRefNode, ClassNode, AnyNode,
-    ValueNode, ObjectNode, MemberNode, ArrayNode, BooleanNode, StringNode, NumberNode, BackRefNode, ConstRefNode, 
-    MetaRefNode, PivotNode, SpreadNode, StringTextNode, EscapeNode,
+    Grammar, GrammarVersion, Node, SelectorNode, Meta, RulesetNode, RuleNode, TokenNode, PatternNode, 
+    RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode,
 } from './Grammar';
 
-import { Functions, buildString, ValueBuilder } from './Output';
+import { Functions, buildString } from './Output';
 
-export class ParseManager {
-    options:ParserOptions;
-    debugLog:any[][] = [];
-    currentParser:Parser;
-    functions:Functions;
-    rawGrammar:string;
-    compiledGrammar:Grammar;
+export class GrammarCompiler {
 
-    constructor(options?:ParserOptions, functions?:Functions) {
-        this.options = options || {};
-        this.functions = functions || {};
-    }
-
-    parseText(grammar:string|Grammar, text:string) : any {
-        if (typeof grammar == "string") {
-            grammar = this.parseAndCompileGrammar(grammar);
-        }
-    
-        this.compiledGrammar = grammar;
-        return this.parseTextWithGrammar(grammar, text);
-    }
-
-    parseAndCompileGrammar(text:string) : Grammar {
-        try {
-            let grammar = this.parseTextWithGrammar(findDezentGrammar(this.options), text);
-            if (this.options.debugErrors) {
-                this.rawGrammar = JSON.stringify(grammar);
-            }
-            this.compileGrammar(grammar, text);
-            return grammar;
-        } catch(e) {
-            if (e["code"] == ErrorCode.TextParsingError) {
-                parsingError(ErrorCode.GrammarParsingError, text, e["pos"], e["expected"]);
-            } else {
-                throw e;
-            }
-        }
-    }
-
-    compileGrammar(grammar:Grammar, text?:string) {
+    static compileGrammar(grammar:Grammar, text?:string, functions?:Functions) {
         // compile and validate
         // - count the number of backrefs in each rule
         // - validate that all options contain that many backrefs
@@ -100,7 +60,7 @@ export class ParseManager {
             for (let i = 0; i < rules.length; i++) {
                 rules[i].rulesetName = ruleset["name"] || "return";
                 rules[i].rulesetIndex = i;
-                rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
+                rules[i].captures = this.compileRule(rules[i], grammar.vars, text, functions);
             }
 
             // assign an id to every node
@@ -151,7 +111,7 @@ export class ParseManager {
         return grammar;
     }
 
-    compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}, text:string) : boolean[] {
+    static compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}, text?:string, functions?:Functions) : boolean[] {
         // put an empty placeholder in captures so that the indices
         // align with backrefs (which begin at 1)
         let info = { captures: [null], repeats: 0, backrefs: [null] };
@@ -239,7 +199,7 @@ export class ParseManager {
                     grammarError(ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
-            if (node.type == "call" && !this.functions[node.name]) {
+            if (node.type == "call" && !functions[node.name]) {
                 grammarError(ErrorCode.FunctionNotFound, text, node.meta, node.name);
             }
          });
@@ -250,34 +210,6 @@ export class ParseManager {
              }
          }
         return info.captures;
-    }
-
-    parseTextWithGrammar(grammar:Grammar, text:string) : any {
-        let parser = this.currentParser = new Parser(grammar, text, this.functions, this.options, this.debugLog);
-        return parser.parse();
-    }
-
-    debug(...args:any[]) {
-        if (this.options.debugErrors) {
-            this.debugLog.push(args);
-        }
-    }
-
-    dumpDebug() {
-        let lines = [];
-        for (let msg of this.debugLog) {
-            lines.push(msg.join('\t').replace(/\n/g, '\\n'));
-        }
-        console.error("Debug log:\n", lines.join("\n"));
-        // if (this.rawGrammar) {
-        //     console.error("Raw grammar:\n", this.rawGrammar);
-        // }
-        // if (this.compiledGrammar) {
-        //     console.error("Compiled grammar:\n", JSON.stringify(this.compiledGrammar));
-        // }
-        if (this.currentParser) {
-            console.error("Parser stack:\n", this.currentParser.stack);
-        }
     }
 }
 

@@ -23,7 +23,7 @@ import {
 } from "./Grammar";
 
 import { ParseCache } from "./ParseCache";
-import { ParseManager, grammarError } from "./ParseManager";
+import { GrammarCompiler, grammarError } from "./GrammarCompiler";
 import { Output, Functions, ValueBuilder } from "./Output";
 
 export enum ErrorCode {
@@ -110,10 +110,10 @@ export type ParseFrame = {
 
 let dezentGrammar:Grammar;
 
-export function findDezentGrammar(options?:ParserOptions) : Grammar{
+export function findDezentGrammar() : Grammar{
     if (!dezentGrammar) {
         dezentGrammar = createUncompiledDezentGrammar();
-        new ParseManager(options).compileGrammar(dezentGrammar);
+        GrammarCompiler.compileGrammar(dezentGrammar);
     }
     return dezentGrammar;
 }
@@ -124,23 +124,44 @@ export interface ParserOptions {
 }
 
 export function parseText(grammar:string|Grammar, text:string, functions?:Functions, options?:ParserOptions) : any {
-    let mgr = new ParseManager(options, functions);
+    if (typeof grammar == "string") {
+        grammar = parseGrammar(grammar, options, functions);
+    }
+    return parseTextWithGrammar(grammar, text, options, functions);
+}
+
+export function parseGrammar(text:string, options?:ParserOptions, functions?:Functions) : Grammar {
     try {
-        return mgr.parseText(grammar, text);
+        let grammar = parseTextWithGrammar(findDezentGrammar(), text, options, functions);
+        GrammarCompiler.compileGrammar(grammar, text, functions);
+        return grammar;
     } catch(e) {
-        if (options && options.debugErrors) mgr.dumpDebug();
-        throw e;
+        if (e["code"] == ErrorCode.TextParsingError) {
+            parsingError(ErrorCode.GrammarParsingError, text, e["pos"], e["expected"]);
+        } else {
+            throw e;
+        }
     }
 }
 
-export function parseGrammar(grammar:string, options?:ParserOptions, functions?:Functions) : Grammar {
-    let mgr = new ParseManager(options, functions);
+function parseTextWithGrammar(grammar:Grammar, text:string, options?:ParserOptions, functions?:Functions) : any {
+    let parser = new Parser(grammar, text, functions, options);
     try {
-        return mgr.parseAndCompileGrammar(grammar);
+        return parser.parse();
     } catch(e) {
-        if (options && options.debugErrors) mgr.dumpDebug();
+        if (options && options.debugErrors) {
+            let lines = [];
+            for (let msg of parser.debugLog) {
+                lines.push(msg.join('\t').replace(/\n/g, '\\n'));
+            }
+            console.error("Debug log:\n", lines.join("\n"));
+            if (parser) {
+                console.error("Parser stack:\n", parser.stack);
+            }
+                    
+        }
         throw e;
-    }    
+    }
 }
 
 export enum MatchStatus {
@@ -159,9 +180,9 @@ export class Parser {
     valueBuilder : ValueBuilder;
     options : ParserOptions;
     omitFails : number = 0;
-    debugLog : any[][];
+    debugLog : any[][] = [];
     
-    constructor(grammar:Grammar, text:string, functions:Functions, options:ParserOptions, debugLog:string[][]) {
+    constructor(grammar:Grammar, text:string, functions:Functions, options:ParserOptions) {
         let root:ReturnNode;
     
         for (let ruleset of grammar.ruleset) {
@@ -178,8 +199,7 @@ export class Parser {
         this.text = text;
         this.rulesets = grammar.rulesetLookup;
         this.options = options || {};
-        this.debugLog = debugLog;
-        this.parseCache = new ParseCache(grammar.maxid, !options.disableCacheLookup);
+        this.parseCache = new ParseCache(grammar.maxid, !this.options.disableCacheLookup);
         this.valueBuilder = new ValueBuilder(grammar, functions);
         this.enter(root);
     }
@@ -260,7 +280,13 @@ export class Parser {
                     }
                 }
                 if (exited.node["pattern"] || exited.node.type == "ruleref") {
-                    this.debug(exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', this.text.substr(exited.pos, 20), exited.node["pattern"] || exited.node["name"]);
+                    if (this.options.debugErrors) {
+                        this.debugLog.push([
+                            exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', 
+                            this.text.substr(exited.pos, 20), 
+                            exited.node["pattern"] || exited.node["name"]
+                        ]);
+                    }
                 }
                 // special handling is required for left recursion
                 if (next.leftContinuation) {
@@ -559,12 +585,6 @@ export class Parser {
 
     top() : ParseFrame|null { 
         return this.stack[this.stack.length-1] 
-    }
-
-    debug(...args:any[]) {
-        if (this.options.debugErrors) {
-            this.debugLog.push(args);
-        }
     }
 }
 

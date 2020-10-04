@@ -21,7 +21,7 @@ import "jest";
 import { execSync } from "child_process";
 
 import "./Parser";
-import Dezent from "./Dezent";
+import { Dezent } from "./Dezent";
 import { parseText, findDezentGrammar, parseGrammar } from "./Parser";
 import { createUncompiledDezentGrammar } from "./Grammar";
 import { Functions } from "./Output";

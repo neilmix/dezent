@@ -22,20 +22,35 @@ exports.buildString = exports.ValueBuilder = void 0;
 var Parser_1 = require("./Parser");
 var ParseManager_1 = require("./ParseManager");
 var ValueBuilder = /** @class */ (function () {
-    function ValueBuilder(grammar, output, functions) {
+    function ValueBuilder(grammar, functions) {
         this.grammar = grammar;
-        this.output = output;
         this.functions = functions || {};
     }
-    ValueBuilder.prototype.value = function (node, captures, metas) {
-        if (!this.output)
-            return undefined;
-        if (!node) {
-            node = this.output.rule.value;
-            captures = this.buildCaptures(this.output);
-            metas = { position: this.output.position, length: this.output.length };
-        }
-        var out = this[node.type](node, captures, metas);
+    ValueBuilder.prototype.buildValue = function (frame) {
+        var rule = frame.node;
+        var captureValues = rule.captures.map(function (b) { return b === true ? [] : null; });
+        if (frame.captures)
+            for (var _i = 0, _a = frame.captures; _i < _a.length; _i++) {
+                var capture = _a[_i];
+                Parser_1.assert(capture.captureIndex !== undefined);
+                Parser_1.assert(capture.captureIndex < rule.captures.length);
+                if (rule.captures[capture.captureIndex]) {
+                    // this indicates the capture is an array
+                    if (!captureValues[capture.captureIndex]) {
+                        captureValues[capture.captureIndex] = [];
+                    }
+                    captureValues[capture.captureIndex].push(capture.value);
+                }
+                else {
+                    // this is a solo capture
+                    Parser_1.assert(captureValues[capture.captureIndex] === null);
+                    captureValues[capture.captureIndex] = capture.value;
+                }
+            }
+        return this.value(rule.value, captureValues, { position: frame.pos, length: frame.consumed });
+    };
+    ValueBuilder.prototype.value = function (node, captureValues, metas) {
+        var out = this[node.type](node, captureValues, metas);
         if (node.access)
             for (var _i = 0, _a = node.access; _i < _a.length; _i++) {
                 var prop = _a[_i];
@@ -44,7 +59,7 @@ var ValueBuilder = /** @class */ (function () {
                 }
                 var index = void 0;
                 if (prop.value) {
-                    index = this.value(prop.value, captures, metas);
+                    index = this.value(prop.value, captureValues, metas);
                     if (typeof index != 'string' && typeof index != 'number') {
                         ParseManager_1.grammarError(Parser_1.ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
                     }
@@ -58,36 +73,6 @@ var ValueBuilder = /** @class */ (function () {
                 out = out[index];
             }
         return out;
-    };
-    ValueBuilder.prototype.buildCaptures = function (output) {
-        var valueCaptures = output.rule.captures.map(function (b) { return b === true ? [] : null; });
-        if (output.captures)
-            for (var _i = 0, _a = output.captures; _i < _a.length; _i++) {
-                var capture = _a[_i];
-                var value = void 0;
-                if (capture.rule) {
-                    value = this.value(capture.rule.value, this.buildCaptures(capture), { position: capture.position, length: capture.length });
-                }
-                else {
-                    Parser_1.assert(capture.segment !== undefined);
-                    value = capture.segment;
-                }
-                Parser_1.assert(capture.captureIndex !== undefined);
-                Parser_1.assert(capture.captureIndex < output.rule.captures.length);
-                if (output.rule.captures[capture.captureIndex]) {
-                    // this indicates the capture is an array
-                    if (!valueCaptures[capture.captureIndex]) {
-                        valueCaptures[capture.captureIndex] = [];
-                    }
-                    valueCaptures[capture.captureIndex].push(value);
-                }
-                else {
-                    // this is a solo capture
-                    Parser_1.assert(valueCaptures[capture.captureIndex] === null);
-                    valueCaptures[capture.captureIndex] = value;
-                }
-            }
-        return valueCaptures;
     };
     ValueBuilder.prototype.backref = function (node, captures) {
         var cap = captures[node.index];

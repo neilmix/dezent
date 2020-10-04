@@ -45,25 +45,22 @@ export interface ParseError extends DezentError {
     expected: string[]
 }
 
-export default class Dezent {
-    debugErrors: boolean;
-    functions:Functions;
-    options:parser.ParserOptions;
+export class Dezent {
+    private stream:DezentStream;
+    private debugErrors: boolean;
+
     error:DezentError|GrammarError|ParseError;
 
-    private grammar:Grammar;
-
     constructor(grammarStr:string, functions?:Functions, options?:parser.ParserOptions) {
-        this.options = options || {};
-        this.debugErrors = !!this.options.debugErrors;
+        this.stream = new DezentStream(grammarStr, functions, options);
+        this.debugErrors = options ? !!options.debugErrors : false;
         this.error = null;
-        this.grammar = parser.parseGrammar(grammarStr, this.options, functions);
-        this.functions = functions;
     }
 
-    parse(text:string) {
+    parse(text:string) : any {
         try {
-            return parser.parseText(this.grammar, text, this.functions, this.options);
+            this.stream.write(text);
+            return this.stream.close();
         } catch (e) {
             this.error = e;
             if (this.debugErrors) {
@@ -71,5 +68,26 @@ export default class Dezent {
             }
             return undefined;
         }
+    }
+}
+
+export class DezentStream {
+    private functions:Functions;
+    private options:parser.ParserOptions;
+    private grammar:Grammar;
+    private result:any;
+
+    constructor(grammarStr:string, functions?:Functions, options?:parser.ParserOptions) {
+        this.options = options || {};
+        this.grammar = parser.parseGrammar(grammarStr, this.options, functions);
+        this.functions = functions;
+    }
+
+    write(text:string) {
+        this.result = parser.parseText(this.grammar, text, this.functions, this.options);
+    }
+
+    close() : any {
+        return this.result;
     }
 }

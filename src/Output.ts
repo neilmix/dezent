@@ -23,7 +23,7 @@ import {
 
 import {
     grammarError
-} from './ParseManager';
+} from './GrammarCompiler';
 
 import { 
     Grammar, RuleNode, ValueNode, ObjectNode, ArrayNode, CallNode, BooleanNode, StringNode, StringTextNode, EscapeNode,

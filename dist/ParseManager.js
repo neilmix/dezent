@@ -23,16 +23,17 @@ var Parser_1 = require("./Parser");
 var Grammar_1 = require("./Grammar");
 var Output_1 = require("./Output");
 var ParseManager = /** @class */ (function () {
-    function ParseManager(options) {
+    function ParseManager(options, functions) {
         this.debugLog = [];
         this.options = options || {};
+        this.functions = functions || {};
     }
-    ParseManager.prototype.parseText = function (grammar, text, functions) {
+    ParseManager.prototype.parseText = function (grammar, text) {
         if (typeof grammar == "string") {
             grammar = this.parseAndCompileGrammar(grammar);
         }
         this.compiledGrammar = grammar;
-        return this.parseTextWithGrammar(grammar, text, functions);
+        return this.parseTextWithGrammar(grammar, text);
     };
     ParseManager.prototype.parseAndCompileGrammar = function (text) {
         try {
@@ -134,6 +135,7 @@ var ParseManager = /** @class */ (function () {
         return grammar;
     };
     ParseManager.prototype.compileRule = function (rule, vars, text) {
+        var _this = this;
         // put an empty placeholder in captures so that the indices
         // align with backrefs (which begin at 1)
         var info = { captures: [null], repeats: 0, backrefs: [null] };
@@ -218,6 +220,9 @@ var ParseManager = /** @class */ (function () {
                     grammarError(Parser_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
+            if (node.type == "call" && !_this.functions[node.name]) {
+                grammarError(Parser_1.ErrorCode.FunctionNotFound, text, node.meta, node.name);
+            }
         });
         for (var i_1 = 1; i_1 < info.backrefs.length; i_1++) {
             if (info.backrefs[i_1].index >= info.captures.length) {
@@ -226,21 +231,9 @@ var ParseManager = /** @class */ (function () {
         }
         return info.captures;
     };
-    ParseManager.prototype.parseTextWithGrammar = function (grammar, text, functions) {
-        var ret;
-        for (var _i = 0, _a = grammar.ruleset; _i < _a.length; _i++) {
-            var ruleset = _a[_i];
-            if (ruleset.name == 'return') {
-                ret = ruleset;
-            }
-        }
-        if (!ret) {
-            grammarError(Parser_1.ErrorCode.ReturnNotFound, text);
-        }
-        // now parse
-        var parser = this.currentParser = new Parser_1.Parser(ret, text, grammar.rulesetLookup, grammar.maxid, this.options, this.debugLog);
-        var output = parser.parse();
-        return new Output_1.ValueBuilder(grammar, output, functions).value();
+    ParseManager.prototype.parseTextWithGrammar = function (grammar, text) {
+        var parser = this.currentParser = new Parser_1.Parser(grammar, text, this.functions, this.options, this.debugLog);
+        return parser.parse();
     };
     ParseManager.prototype.debug = function () {
         var args = [];
