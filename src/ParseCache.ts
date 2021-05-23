@@ -82,6 +82,10 @@ export class ParseCache {
     frameComplete(frame:ParseFrame) {
         if (this.scope == ParseCacheScope.Rulesets && frame.node.type == "ruleset" && this.frameCache[frame.pos]) {
             delete this.frameCache[frame.pos][this.key(frame.node.id, frame.leftOffset)];
+            if (this.frameCache[frame.pos].filter(x => x !== undefined).length == 0) {
+                // discard empty positions to prevent unbounded memory growth
+                delete this.frameCache[frame.pos];
+            }
         }
     }
 }
