@@ -178,7 +178,6 @@ export class Parser {
     buffer : ParseBuffer;
     rulesets: {[key:string]:RulesetNode};
     parseCache : ParseCache;
-    frameStore : ParseFrame[] = [];
     valueBuilder : ValueBuilder;
     options : ParserOptions;
     omitFails : number = 0;
@@ -410,15 +409,8 @@ export class Parser {
                         parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
                     }
                 }
-                if (this.options.enableCache) {
-                    // failed frames don't get stored in the cache, so we can recycle them.
-                    // rulesets are stored prior to pass/fail determination, so don't try to recycle them
-                    if (exited.status == MatchStatus.Fail && exited.node.type != "ruleset") {
-                        this.frameStore.push(exited);
-                    }
-                } else {
+                if (!this.options.enableCache) {
                     this.parseCache.frameComplete(exited);
-                    this.frameStore.push(exited);
                 }
             }
         } 
@@ -524,7 +516,7 @@ export class Parser {
                 // of all our continuation frames just in case.
                 this.stack[i].leftContinuation.forEach((f) => { f.cached = false, f.paths = -1 });
 
-                let failFrame = this.frameStore.pop() || <ParseFrame> {};
+                let failFrame = <ParseFrame> {};
                 failFrame.status = MatchStatus.Fail;
                 failFrame.node = node;
                 failFrame.items = items;
@@ -540,7 +532,7 @@ export class Parser {
                 failFrame.output = null;
                 this.stack.push(failFrame);
 
-                let contFrame = this.frameStore.pop() || <ParseFrame> {};
+                let contFrame = <ParseFrame> {};
                 // subsequent continuation executions need to pass at the top to kick off
                 // downward descent through the stack
                 contFrame.status = MatchStatus.Pass;
@@ -572,7 +564,7 @@ export class Parser {
             } else if (current && current.node.type == "rule") {
                 wantOutput = false;
             }
-            let newFrame:ParseFrame = this.frameStore.pop() || <ParseFrame>{};
+            let newFrame:ParseFrame = <ParseFrame>{};
             newFrame.status = cachedFrame === false ? MatchStatus.Fail : MatchStatus.Continue;
             newFrame.node = node;
             newFrame.items = items;
