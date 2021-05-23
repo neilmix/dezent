@@ -382,8 +382,8 @@ test("packrat", () => {
             {'a'} -> $1;
     `;
 
-    let caching = new Dezent(grammar, null, {disableCacheLookup: false});
-    let noncaching = new Dezent(grammar, null, {disableCacheLookup: true});
+    let caching = new Dezent(grammar, null, {enableCache: true});
+    let noncaching = new Dezent(grammar, null, {enableCache: false});
 
     expect(caching.parse('aaaab')).toEqual(['a','a','a','a','b']);
     expect(noncaching.parse('aaaab')).toEqual(['a','a','a','a','b']);

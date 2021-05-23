@@ -17,6 +17,8 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>. 
  */
 
+import { ParseBuffer } from "./ParseBuffer";
+
 export const GrammarVersion = 1;
 
 export type Grammar = { 
@@ -45,7 +47,7 @@ export interface OutputNode extends Node {
 export interface SelectorNode extends Node { options: PatternNode[], canFail?: boolean }
 export interface MatcherNode extends Node { 
 	pattern?: string; // for debug purposes
-	match?(s : string) : [boolean, number]; 
+	match?(buf:ParseBuffer, idx:number) : [boolean, number]; 
 }
 export interface RangeNode extends Node {
 	value: string,

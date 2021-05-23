@@ -20,33 +20,47 @@
 import { ParseFrame, MatchStatus, assert } from "./Parser";
 import { Node, ReturnNode, RulesetNode, TokenNode } from "./Grammar";
 
+export enum ParseCacheScope {
+    All = 1,
+    Rulesets = 2,
+}
+
 export class ParseCache {
+    scope:ParseCacheScope;
     maxid:number;
     frameCache:(ParseFrame|false)[][] = [];
-    cacheRetrieveEnabled:boolean = true;
     minimumPos = 0;
 
-    constructor(maxid: number, cacheLookupEnabled:boolean) {
+    constructor(scope:ParseCacheScope, maxid: number) {
+        this.scope = scope;
         this.maxid = maxid;
-        this.cacheRetrieveEnabled = cacheLookupEnabled;
     }
 
     store(frame:ParseFrame, pos?:number) {
+        if (frame.node.type == "ruleset" && frame.status != MatchStatus.Continue) {
+            // rulesets are cached early so as to enable left recursion detection,
+            // so we don't need to cache them at pass/fail
+            return;
+        }
+        if (frame.node.type != "ruleset" && (this.scope == ParseCacheScope.Rulesets || frame.status == MatchStatus.Continue)) {
+            return;
+        }
+        if (frame.cached && typeof pos == "undefined") {
+            // no need to cache if already cached, except when pos is supplied,
+            // which implies intentional re-caching at a new location (i.e. repeating token)
+            return;
+        }
         pos = pos || frame.pos;
         assert(pos >= this.minimumPos);
         let key = this.key(frame.node.id, frame.leftOffset);
         if (!this.frameCache[pos]) this.frameCache[pos] = [];
-        assert(!this.frameCache[pos][key] || !this.cacheRetrieveEnabled);
+        assert(!this.frameCache[pos][key]);
         this.frameCache[pos][key] = frame.status == MatchStatus.Fail ? false : frame;
         frame.cached = true;
     }
 
     retrieve(pos:number, node:Node, leftOffset:number):ParseFrame|false|undefined {
-        if (this.cacheRetrieveEnabled) {
-            return this.get(pos, node.id, leftOffset);
-        } else {
-            return undefined;
-        }
+        return this.get(pos, node.id, leftOffset);
     }
     
     get(pos:number, id:number, leftOffset:number) {
@@ -58,10 +72,16 @@ export class ParseCache {
         return leftOffset*this.maxid + id;
     }
 
-    discard(newMinimumPos:number) {
+    discardPos(newMinimumPos:number) {
         for (let i = this.minimumPos; i < newMinimumPos; i++) {
             delete this.frameCache[i];
         }
         this.minimumPos = newMinimumPos;
+    }
+
+    frameComplete(frame:ParseFrame) {
+        if (this.scope == ParseCacheScope.Rulesets && frame.node.type == "ruleset" && this.frameCache[frame.pos]) {
+            delete this.frameCache[frame.pos][this.key(frame.node.id, frame.leftOffset)];
+        }
     }
 }

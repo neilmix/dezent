@@ -18,8 +18,12 @@
  */
 
 import { 
-    ErrorCode, errorMessages, findLineAndChar
+    ErrorCode, errorMessages
 } from './Parser';
+
+import {
+    ParseBuffer
+} from './ParseBuffer';
 
 import { 
     Grammar, GrammarVersion, Node, SelectorNode, Meta, RulesetNode, RuleNode, TokenNode, PatternNode, 
@@ -144,7 +148,7 @@ export class GrammarCompiler {
          visitParseNodes("string", rule, null, null, (node:StringNode) => {
             let matchString = buildString(node);
             node.pattern = matchString;
-            node.match = (s) => s.startsWith(matchString) ? [true, matchString.length] : [false, 0];
+            node.match = (buf,idx) => buf.containsAt(matchString,idx) ? [true, matchString.length] : [false, 0];
          });
 
          visitParseNodes("class", rule, null, null, (node:ClassNode) => {
@@ -175,9 +179,10 @@ export class GrammarCompiler {
                 }
                 return ret;
             }).join(' ');
-            node.match = (s) => {
+            node.match = (buf, idx) => {
                 for (let range of node.ranges) {
-                    if (s[0] >= range[0].match && s[0] <= range[1].match) {
+                    let c = buf.charAt(idx);
+                    if (c >= range[0].match && c <= range[1].match) {
                         return [true, 1];
                     }
                 }
@@ -186,8 +191,8 @@ export class GrammarCompiler {
          });
 
          visitParseNodes("any", rule, null, null, (node:AnyNode) => {
-            node.match = (s) => {
-                return s.length ? [true, 1] : [false, 0];
+            node.match = (buf, idx) => {
+                return buf.charAt(idx) ? [true, 1] : [false, 0];
             }
             node.pattern = '';
          });
@@ -267,7 +272,7 @@ export function grammarError(code:ErrorCode, text?:string, meta?:Meta, ...args:s
     let msg = `Grammar error ${code}: ${reason}`;
     let info;
     if (text && meta) {
-        info = findLineAndChar(text, meta.pos);
+        info = new ParseBuffer(text).findLineAndChar(meta.pos);
         msg = `${msg}\nAt line ${info.line} char ${info.char}:\n${info.lineText}\n${info.pointerText}\n`;
     }
     let e = new Error(msg);
@@ -276,7 +281,8 @@ export function grammarError(code:ErrorCode, text?:string, meta?:Meta, ...args:s
         e["pos"] = meta.pos;
         e["line"] = info.line;
         e["char"] = info.char;
-        e["lineText"] = info.pointerText;
+        e["lineText"] = info.lineText;
+        e["pointerText"] = info.pointerText;
         e["reason"] = reason;
     }
     throw e;

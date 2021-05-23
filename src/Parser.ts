@@ -22,7 +22,8 @@ import {
     ParseNode, RuleNode, PatternNode, TokenNode, MatcherNode
 } from "./Grammar";
 
-import { ParseCache } from "./ParseCache";
+import { ParseBuffer } from "./ParseBuffer";
+import { ParseCache, ParseCacheScope } from "./ParseCache";
 import { GrammarCompiler, grammarError } from "./GrammarCompiler";
 import { Output, Functions, ValueBuilder } from "./Output";
 
@@ -120,7 +121,7 @@ export function findDezentGrammar() : Grammar{
 
 export interface ParserOptions {
     debugErrors?: boolean,
-    disableCacheLookup?: boolean,
+    enableCache?: boolean,
 }
 
 export function parseText(grammar:string|Grammar, text:string, functions?:Functions, options?:ParserOptions) : any {
@@ -131,20 +132,21 @@ export function parseText(grammar:string|Grammar, text:string, functions?:Functi
 }
 
 export function parseGrammar(text:string, options?:ParserOptions, functions?:Functions) : Grammar {
+    let buf = new ParseBuffer(text);
     try {
-        let grammar = parseTextWithGrammar(findDezentGrammar(), text, options, functions);
+        let grammar = parseTextWithGrammar(findDezentGrammar(), buf, options, functions);
         GrammarCompiler.compileGrammar(grammar, text, functions);
         return grammar;
     } catch(e) {
         if (e["code"] == ErrorCode.TextParsingError) {
-            parsingError(ErrorCode.GrammarParsingError, text, e["pos"], e["expected"]);
+            parsingError(ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
         } else {
             throw e;
         }
     }
 }
 
-function parseTextWithGrammar(grammar:Grammar, text:string, options?:ParserOptions, functions?:Functions) : any {
+function parseTextWithGrammar(grammar:Grammar, text:string|ParseBuffer, options?:ParserOptions, functions?:Functions) : any {
     let parser = new Parser(grammar, text, functions, options);
     try {
         return parser.parse();
@@ -173,7 +175,7 @@ export enum MatchStatus {
 export class Parser {
     root : ReturnNode;
     stack : ParseFrame[] = [];
-    text : string;
+    buffer : ParseBuffer;
     rulesets: {[key:string]:RulesetNode};
     parseCache : ParseCache;
     frameStore : ParseFrame[] = [];
@@ -182,7 +184,7 @@ export class Parser {
     omitFails : number = 0;
     debugLog : any[][] = [];
     
-    constructor(grammar:Grammar, text:string, functions:Functions, options:ParserOptions) {
+    constructor(grammar:Grammar, text:string|ParseBuffer, functions:Functions, options:ParserOptions) {
         let root:ReturnNode;
     
         for (let ruleset of grammar.ruleset) {
@@ -192,14 +194,19 @@ export class Parser {
         }
     
         if (!root) {
-            grammarError(ErrorCode.ReturnNotFound, text);
+            grammarError(ErrorCode.ReturnNotFound, grammar.text);
         }
 
         this.root = root;
-        this.text = text;
+        if (typeof text == "string") {
+            this.buffer = new ParseBuffer(text);
+        } else {
+            this.buffer = text;
+        }
         this.rulesets = grammar.rulesetLookup;
         this.options = options || {};
-        this.parseCache = new ParseCache(grammar.maxid, !this.options.disableCacheLookup);
+        if (typeof this.options.enableCache == "undefined") this.options.enableCache = true;
+        this.parseCache = new ParseCache(this.options.enableCache ? ParseCacheScope.All : ParseCacheScope.Rulesets, grammar.maxid);
         this.valueBuilder = new ValueBuilder(grammar, functions);
         this.enter(root);
     }
@@ -213,7 +220,7 @@ export class Parser {
             let current = this.top();
 
             if (current.paths == 1) {
-                this.parseCache.discard(current.pos);
+                this.parseCache.discardPos(current.pos);
             }
             
             if (current.index > current.items.length) {
@@ -228,8 +235,7 @@ export class Parser {
                             let pos = current.pos;
                             let matched, consumed;
                             do {
-                                let text = this.text.substr(pos);
-                                [matched, consumed] = desc.match(text);
+                                [matched, consumed] = desc.match(this.buffer, pos);
                                 if (current.node.and || current.node.not) {
                                     if ((current.node.and && matched) || (current.node.not && !matched)) {
                                         current.status = MatchStatus.Pass
@@ -239,8 +245,6 @@ export class Parser {
                                 } else if (matched) {
                                     current.consumed += consumed;
                                     current.status = MatchStatus.Pass;
-                                    // cache intermediate positions of tokens to avoid pathological
-                                    // bad grammar performance.
                                     this.parseCache.store(current, pos);
                                     pos += consumed;
                                 } else {
@@ -266,9 +270,7 @@ export class Parser {
                 }
             } else {
                 exited = this.stack.pop();
-                if (!exited.cached) {
-                    this.parseCache.store(exited);
-                }
+                this.parseCache.store(exited);
                 let next = this.top();
                 if (!next) {
                     // our parsing is complete!
@@ -283,7 +285,7 @@ export class Parser {
                     if (this.options.debugErrors) {
                         this.debugLog.push([
                             exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', 
-                            this.text.substr(exited.pos, 20), 
+                            this.buffer.substr(exited.pos, 20), 
                             exited.node["pattern"] || exited.node["name"]
                         ]);
                     }
@@ -359,7 +361,7 @@ export class Parser {
                                 captureIndex: next.node.index,
                                 position: exited.pos,
                                 length: exited.consumed,
-                                value: this.text.substr(exited.pos, exited.consumed),
+                                value: this.buffer.substr(exited.pos, exited.consumed),
                             }];
                         }
                     } else if (exited.output) {
@@ -405,12 +407,17 @@ export class Parser {
                         next.status = MatchStatus.Fail;
                     }
                     if (next.node.type == "ruleset" && next.node.name == 'return') {
-                        parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
+                        parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
                     }
                 }
-                // failed frames don't get store in the cache, so we can recycle them.
-                // rulesets are stored prior to pass/fail determination, so don't try to recycle them
-                if (exited.status == MatchStatus.Fail && exited.node.type != "ruleset") {
+                if (this.options.enableCache) {
+                    // failed frames don't get stored in the cache, so we can recycle them.
+                    // rulesets are stored prior to pass/fail determination, so don't try to recycle them
+                    if (exited.status == MatchStatus.Fail && exited.node.type != "ruleset") {
+                        this.frameStore.push(exited);
+                    }
+                } else {
+                    this.parseCache.frameComplete(exited);
                     this.frameStore.push(exited);
                 }
             }
@@ -422,8 +429,8 @@ export class Parser {
         if (exited.pos != 0) {
             parserError(ErrorCode.InputConsumedBeforeResult);
         }
-        if (exited.output.length != this.text.length) {
-            parsingError(ErrorCode.TextParsingError, this.text, maxPos, expectedTerminals());
+        if (exited.output.length != this.buffer.length) {
+            parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
         }
 
         return exited.output.value;
@@ -441,7 +448,7 @@ export class Parser {
             captureIndex: 0,
             position: base.pos,
             length: base.consumed,
-            value: this.text.substr(base.pos, base.consumed),
+            value: this.buffer.substr(base.pos, base.consumed),
         });
 
         // always build the value so that output callbacks can be called
@@ -496,6 +503,9 @@ export class Parser {
                 break;
         }
 
+        // even though caching may be disabled, we still need to retrieve
+        // from the cache because rulesets and left recursion still use
+        // the cache (if only momentarily)
         let cachedFrame = this.parseCache.retrieve(pos, node, leftOffset);
         if (cachedFrame) {
             if (cachedFrame.status == MatchStatus.Continue) {
@@ -571,15 +581,12 @@ export class Parser {
             newFrame.pos = pos;
             newFrame.consumed = 0;
             newFrame.wantOutput = wantOutput;
-            newFrame.cached = cachedFrame !== false;
+            newFrame.cached = false;
             newFrame.leftOffset = leftOffset;
             newFrame.captures = null;
             newFrame.output = null;
             this.stack.push(newFrame);
-            if (newFrame.node.type == "ruleset") {
-                // store rulesets early so we can detect left recursion
-                this.parseCache.store(newFrame);
-            }
+            this.parseCache.store(newFrame);
         }
     }
 
@@ -603,12 +610,12 @@ export function assert(condition:boolean) {
     }
 }
 
-export function parsingError(code:ErrorCode, text:string, pos:number, expected:string[]) {
+export function parsingError(code:ErrorCode, buf:ParseBuffer, pos:number, expected:string[]) {
     expected = expected.map((i) => i.replace(/\n/g, '\\n'));
     let list = [].join.call(expected, '\n\t');
     let reason = expected.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;        
 
-    let info = findLineAndChar(text, pos);
+    let info = buf.findLineAndChar(pos);
     let backrefs = [null, info.line, info.char, reason, info.lineText, info.pointerText];
     let msg = errorMessages[code].replace(/\$([0-9])/g, (match, index) => String(backrefs[index]));
     let e = new Error(msg);
@@ -621,26 +628,4 @@ export function parsingError(code:ErrorCode, text:string, pos:number, expected:s
     e["reason"] = reason;
     e["expected"] = expected;
     throw e;
-}
-
-export function findLineAndChar(text:string, pos:number) : { line: number, char: number, lineText: string, pointerText: string } {
-    let lines = text.split('\n');
-    let consumed = 0, linenum = 0, charnum = 0, lineText = '';
-    for (let line of lines) {
-        linenum++;
-        if (consumed + line.length >= pos) {
-            lineText = line;
-            charnum = pos - consumed + 1;
-            break;
-        }
-        consumed += line.length + 1;
-    }
-    let detabbed = lineText.replace(/\t/g, '    ');
-    let leading = charnum - 1 + (detabbed.length - lineText.length);
-    return {
-        line: linenum,
-        char: charnum,
-        lineText: lineText,
-        pointerText: ' '.repeat(leading) + '^'
-    }
 }
