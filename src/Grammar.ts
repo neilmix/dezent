@@ -27,6 +27,7 @@ export type Grammar = {
 	maxid?: number,
 	ruleset: RulesetNode[], 
 	vars: { [key:string]: ValueNode }, 
+	pragmas: { [key:string]: boolean },
 	rulesetLookup?: { [key:string]: RulesetNode } 
 };
 
@@ -136,8 +137,8 @@ export function createUncompiledDezentGrammar():Grammar {
 
 	return {
 		ruleset: [
-			returndef(`_ ( {returndef|ruleset} _ | {constant} _ )*`, 
-				{ ruleset: "$1", vars: { '...$2': '' } }),
+			returndef(`_ ( {returndef|ruleset} _ | {constant} _ | {pragma} _ )*`, 
+				{ ruleset: "$1", vars: { '...$2': '' }, pragmas: { '...$3': '' } }),
 
 			ruleset('_', `( singleLineComment | multiLineComment | whitespace? )*`, undefined),
 
@@ -153,7 +154,11 @@ export function createUncompiledDezentGrammar():Grammar {
 
 			ruleset('constant', `'$' {identifier} _ '=' _ {value} _ ';'`,
 				['$1', '$2']),
-			
+
+			ruleset('pragma', 
+				`'#' {'enableCache'} _ 'true' '\\n'`, ['$1', true],
+				`'#' {'enableCache'} _ 'false' '\\n'`, ['$1', false]),
+
 			ruleset('rule', `{options} _ '->' _ {value}`,
 				{ type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
 			
@@ -298,6 +303,9 @@ export function createUncompiledDezentGrammar():Grammar {
 		],
 		vars: {
 			meta: output({ meta: { pos: "@position", length: "@length" } })
+		},
+		pragmas: {
+			enableCache: false
 		}
 	};
 }

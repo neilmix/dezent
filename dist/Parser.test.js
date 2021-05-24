@@ -17,21 +17,38 @@
  *  You should have received a copy of the GNU Affero General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
 require("jest");
 var child_process_1 = require("child_process");
 require("./Parser");
 var Dezent_1 = require("./Dezent");
-var Parser_1 = require("./Parser");
+var parser = require("./Parser");
 var Grammar_1 = require("./Grammar");
 var fs_1 = require("fs");
+var enableCaching = true;
+var cachingTime = 0;
+var noncachingTime = 0;
+function scheduleTest(description, func) {
+    test(description + " - caching", function () {
+        enableCaching = true;
+        var t = new Date().getTime();
+        func();
+        cachingTime += new Date().getTime() - t;
+    });
+    test(description + " - noncaching", function () {
+        enableCaching = false;
+        var t = new Date().getTime();
+        func();
+        noncachingTime += new Date().getTime() - t;
+    });
+}
 function parse(grammar, text, functions) {
-    var d = new Dezent_1.Dezent(grammar, functions, { debugErrors: true });
+    var d = new Dezent_1.Dezent(grammar, functions, { debugErrors: true, enableCache: enableCaching });
     return d.parse(text);
 }
 function parseError(grammar, text) {
     try {
-        Parser_1.parseText(grammar, text);
+        parser.parseText(grammar, text);
         fail();
     }
     catch (e) {
@@ -43,28 +60,28 @@ function expectParse(grammar, text, functions) {
 }
 function expectGrammarFail(grammar) {
     expect(function () {
-        new Dezent_1.Dezent(grammar);
+        new Dezent_1.Dezent(grammar, null, { enableCache: enableCaching });
     }).toThrow();
 }
 function expectParseFail(grammar, text) {
-    var d = new Dezent_1.Dezent(grammar);
+    var d = new Dezent_1.Dezent(grammar, null, { enableCache: enableCaching });
     expect(d.parse(text || 'Did you forget the second argument?')).toBe(undefined);
 }
 function parseGrammarError(grammar, functions) {
     try {
-        Parser_1.parseGrammar(grammar, functions);
+        parser.parseGrammar(grammar, functions);
         fail();
     }
     catch (e) {
         return e;
     }
 }
-test("boolean / null outputs", function () {
+scheduleTest("boolean / null outputs", function () {
     expectParse("return .* -> true;").toBe(true);
     expectParse("return .* -> false;").toBe(false);
     expectParse("return .* -> null;").toBe(null);
 });
-test("numeric outputs", function () {
+scheduleTest("numeric outputs", function () {
     expectParse("return .* -> 4;").toBe(4);
     expectParse("return .* -> -4;").toBe(-4);
     expectParse("return .* -> .543;").toBe(.543);
@@ -73,12 +90,12 @@ test("numeric outputs", function () {
     expectParse("return .* -> 5E+43;").toBe(5e43);
     expectParse("return .* -> -5e-43;").toBe(-5e-43);
 });
-test("string outputs", function () {
+scheduleTest("string outputs", function () {
     expectParse("return .* -> 'abcd';").toBe('abcd');
     expectParse("return .* -> '\\n\\r\\t\\b\\f\\\\\\a';").toBe('\n\r\t\b\f\\a');
     expectParse("return .* -> 'foo\u0061bar\u0062baz';").toBe('fooabarbbaz');
 });
-test("object outputs", function () {
+scheduleTest("object outputs", function () {
     expectParse("return .* -> { foo: 1, baz: 2, bee: 3 };").toEqual({ foo: 1, baz: 2, bee: 3 });
     expectParse("return .* -> { '\\n\\t': 1 };").toEqual({ '\n\t': 1 });
     expectParse("return .* -> [ 1, 2, 3 ];").toEqual([1, 2, 3]);
@@ -87,18 +104,18 @@ test("object outputs", function () {
     expectParse("return .* -> [1,2,];").toEqual([1, 2]);
     expectParse("return .* -> { a: 1, b: 2, };").toEqual({ a: 1, b: 2 });
 });
-test("backref outputs", function () {
+scheduleTest("backref outputs", function () {
     expectParse("return {.} {.} -> [$1, $2];", 'ab').toEqual(['a', 'b']);
     expectParse("\n        return {foo} {bar} -> [$1, $2];\n        foo = {.}{.} -> { $1: $2 };\n        bar = {.}{.} -> { $1: $2 };\n    ", 'abcd').toEqual([{ a: 'b' }, { c: 'd' }]);
     expectParse("return ... -> $0;", 'aaa').toEqual('aaa');
 });
-test("pivot", function () {
+scheduleTest("pivot", function () {
     expectParse("return .* -> ^[[1,2,3],[4,5,6]];").toEqual([[1, 4], [2, 5], [3, 6]]);
     expectParse("return .* -> ^^[[1,2,3],[4,5,6]];").toEqual([[1, 2, 3], [4, 5, 6]]);
     expectParseFail("return .* -> ^[1,2,3];");
     expectParseFail("return .* -> ^[[1,2],[1,2,3]];");
 });
-test("spread", function () {
+scheduleTest("spread", function () {
     expectParse("return .* -> [ 'a', ...[1,2,3], ...[4,5,6], 'b'];").toEqual(['a', 1, 2, 3, 4, 5, 6, 'b']);
     expectParse("return .* -> [ 'x', ...{a: 1, b:2}, 'y' ];").toEqual(['x', ['a', 1], ['b', 2], 'y']);
     expectParse("return .* -> { a: 1, ...[['b',2], ['c',3]], d: 4 };").toEqual({ a: 1, b: 2, c: 3, d: 4 });
@@ -107,21 +124,21 @@ test("spread", function () {
     expectParse("return {'a'}* {'b'}* -> [...$1, ...$2];", 'aaabbb').toEqual(['a', 'a', 'a', 'b', 'b', 'b']);
     expectParse("\n        return {foo} -> [...$1];\n        foo = {.}{.}{.}{.}{.}{.} -> { $1: $4, $2: $5, $3: $6 };\n    ", 'abcdef').toEqual([['a', 'd'], ['b', 'e'], ['c', 'f']]);
 });
-test("void", function () {
+scheduleTest("void", function () {
     expectParse("return .* -> void;").toEqual(undefined);
     expectParse("foo = .* -> void; return {foo} -> [1, $1, 2];").toEqual([1, 2]);
     expectParse("foo = .* -> void; return {foo} -> { foo: 'bar', baz: $1 };").toEqual({ foo: 'bar' });
 });
-test("the 'any' terminal", function () {
+scheduleTest("the 'any' terminal", function () {
     expectParse("return {.} -> $1;", "x").toEqual('x');
 });
-test("strings", function () {
+scheduleTest("strings", function () {
     expectParse("return 'x' -> $0;", "x").toEqual('x');
     expectParse("return '\\n' -> $0;", "\n").toEqual('\n');
     expectParse("return 'foo\\n\\nbar' -> $0;", "foo\n\nbar").toEqual('foo\n\nbar');
     expectParse("return '\\n\\r\\t\\b\\f\\\\\\a' -> $0;", "\n\r\t\b\f\\a").toEqual("\n\r\t\b\f\\a");
 });
-test("character classes", function () {
+scheduleTest("character classes", function () {
     expectParse("return {[x]} -> $1;", "x").toEqual('x');
     expectParse("return {[a-z]} -> $1;", "x").toEqual('x');
     expectParse("return {[0-9a-zA-Z]} -> $1;", "x").toEqual('x');
@@ -131,15 +148,15 @@ test("character classes", function () {
     expectParse("return [\\ua1b2] -> $0;", "\ua1b2").toEqual('\ua1b2');
     expectParse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2").toEqual("\n\r\t\f\b\ua2a2");
 });
-test('whitespace', function () {
+scheduleTest('whitespace', function () {
     expectParse("\n        return // single line comment\n            {.} /* multi\n                   line\n                   comment\n                */ {.} -> [$1, $2];\n    ", 'ab').toEqual(['a', 'b']);
 });
-test('identifiers', function () {
+scheduleTest('identifiers', function () {
     expectParse("return .* -> { _foo: 1 };").toEqual({ _foo: 1 });
     expectGrammarFail("return .* -> { $foo: 1 }");
     expectGrammarFail('return .* -> null; foo$ = . -> null;');
 });
-test('capture and groups', function () {
+scheduleTest('capture and groups', function () {
     expectParse("return {.} {'x'}? {[b]}* {[a]}+ -> [$1, $2, $3, $4];", 'aaaa')
         .toEqual(['a', null, [], ['a', 'a', 'a']]);
     expectParse("return ('a'+ ({'b'})+ )+ -> $1;", 'abaabbabbbabb')
@@ -150,30 +167,30 @@ test('capture and groups', function () {
     expectGrammarFail("return {{.}} -> null;");
     expectGrammarFail("return {({.})} -> null;");
 });
-test('predicates', function () {
+scheduleTest('predicates', function () {
     expectParse("return !'a' .* -> $0;", 'bbb').toEqual('bbb');
     expectParseFail("return !'a' .* -> $0;", 'abbb');
     expectParse("return &'a' ... -> $0;", 'abb').toEqual('abb');
     expectParseFail("return &'a' ... -> $0;", 'baa');
 });
-test('input consumption', function () {
+scheduleTest('input consumption', function () {
     expectParseFail("return .. -> $0;", 'a');
     expectParseFail("return . -> $0;", 'aa');
     expectParse("return .. -> $0;", 'aa').toEqual('aa');
 });
-test('test modifiers', function () {
+scheduleTest('test modifiers', function () {
     expectParse("return 'a' 'b'? 'a'? 'a'* 'b'+ -> $0;", 'aaaaabbb').toEqual('aaaaabbb');
     expectParse("return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;", 'accc').toEqual('accc');
     expectParseFail("return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;", 'ccc');
     expectParseFail("return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;", 'abaaa');
 });
-test('array collapse', function () {
+scheduleTest('array collapse', function () {
     expectParse("return {'a'} {'b'}? {'a'} -> [$1, $2, $3 ];", 'aa').toEqual(['a', null, 'a']);
     expectParse("return {'a'} {'b'}? {'a'} -> [$1, $2?, $3 ];", 'aa').toEqual(['a', 'a']);
     expectParse("return ({'a'} {'b'}?)+ -> [ ...$1, ...$2 ];", 'abaab').toEqual(['a', 'a', 'a', 'b', null, 'b']);
     expectParse("return ({'a'} {'b'}?)+ -> [ ...$1, ...$2? ];", 'abaab').toEqual(['a', 'a', 'a', 'b', 'b']);
 });
-test("variables", function () {
+scheduleTest("variables", function () {
     expectParse("$foo = 5; return .* -> $foo;").toEqual(5);
     expectParse("$foo = ['bar', {baz: true}]; return .* -> $foo;").toEqual(['bar', { baz: true }]);
     expectParse("$foo = $1; return {.*} -> $foo;", 'blah').toEqual('blah');
@@ -181,12 +198,12 @@ test("variables", function () {
         .toEqual({ baz: 'c', foo: 'a', bar: 'b', bee: [['foo', 'a'], ['bar', 'b']] });
     expectGrammarFail("return .* -> $foo;");
 });
-test("metas", function () {
+scheduleTest("metas", function () {
     expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> { pos: @position, length: @length };\n    ", '123456').toEqual({ pos: 1, length: 3 });
     expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> $meta;\n        $meta = { pos: @position, length: @length };\n    ", '123456').toEqual({ pos: 1, length: 3 });
     expectParse("\n        return .{rule}.. -> $1;\n        rule = ... -> { foo: 'bar', ...$meta };\n        $meta = { pos: @position, length: @length };\n    ", '123456').toEqual({ foo: 'bar', pos: 1, length: 3 });
 });
-test("access", function () {
+scheduleTest("access", function () {
     expectParse("return .* -> {a:1}.a;").toEqual(1);
     expectParse("return .* -> {a:1}['a'];").toEqual(1);
     expectParse("return .* -> [1][0];").toEqual(1);
@@ -198,7 +215,7 @@ test("access", function () {
     expectParse("foo = .* -> {a: 1}; return {foo} -> $1['a'];").toEqual(1);
     expectParse("$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;").toEqual(2);
 });
-test("function calls", function () {
+scheduleTest("function calls", function () {
     expectParse("return .* -> foo();", 'anything', { foo: function () { return 4; } }).toEqual(4);
     expectParse("return .* -> foo(1, 'a', true, [1,2,3], { foo: 'bar' });", 'anything', { foo: function () { return [].slice.call(arguments); } })
         .toEqual([1, 'a', true, [1, 2, 3], { foo: 'bar' }]);
@@ -210,7 +227,7 @@ test("function calls", function () {
     expect(value).toEqual(5);
     expectGrammarFail("return .* -> foo();");
 });
-test("left recursion", function () {
+scheduleTest("left recursion", function () {
     var grammar = "\n        _ = [ \\n]* -> null;\n        expr =\n            {expr} _ '+' _ {mult} -> ['+',$1,$2],\n            {mult} -> $1;\n        mult =\n            {mult} _ '*' _ {num} -> ['*',$1,$2],\n            num -> $0;\n        num = [0-9]+ -> $0;\n        return _ {expr} _ -> $1;\n    ";
     expectParse(grammar, '5').toEqual('5');
     expectParse(grammar, '5+4').toEqual(['+', '5', '4']);
@@ -223,10 +240,10 @@ test("left recursion", function () {
     grammar = "\n        rule1 = rule2 -> $0, 'a' -> $0;\n        rule2 = rule1 'b' -> $0;\n        return rule1 -> $0;\n    ";
     expectParse(grammar, 'ab').toEqual('ab');
 });
-test("dezent grammar documentation", function () {
+scheduleTest("dezent grammar documentation", function () {
     var uncompiledDezent = Grammar_1.createUncompiledDezentGrammar();
     var textDezent = fs_1.readFileSync("./src/grammar.dezent").toString();
-    var hackedGrammar = Parser_1.findDezentGrammar();
+    var hackedGrammar = parser.findDezentGrammar();
     // Our bootstrap grammar does not contain any metas because it's created
     // somewhat manually, not parsed from source. But it does contain rules
     // that do insert metas into our documented grammar. To mitigate this,
@@ -234,7 +251,7 @@ test("dezent grammar documentation", function () {
     // insert metas into the grammar we parse from file.
     var prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
-    var parsedDezent = Parser_1.parseText(hackedGrammar, textDezent, null, { debugErrors: true });
+    var parsedDezent = parser.parseText(hackedGrammar, textDezent, null, { debugErrors: true });
     hackedGrammar.vars.meta = prevMeta;
     expect(parsedDezent).toEqual(uncompiledDezent);
 });
@@ -247,12 +264,12 @@ test("command line util", function () {
     expect(json).not.toBe(null);
     expect(typeof json).toBe('object');
 });
-test("expected grammar terminals", function () {
+scheduleTest("expected grammar terminals", function () {
     expect(parseGrammarError('return . -> {}').expected.sort()).toEqual([';']);
     expect(parseGrammarError('return {.}').expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
     expect(parseGrammarError("return ( . ([ab] {'f'} 'foo)) -> $1;").expected.sort()).toEqual(["'", "\\"]);
 });
-test("grammar errors", function () {
+scheduleTest("grammar errors", function () {
     /* 1001 */ expect(parseGrammarError("return foo -> null; foo = . -> null; foo = .. -> 1;").char).toEqual(38);
     /* 1002 */ expect(parseGrammarError("return . -> 1; return . -> 2;").char).toEqual(16);
     /* 1003 */ expect(parseGrammarError("return foo -> true;").char).toEqual(8);
@@ -266,18 +283,28 @@ test("grammar errors", function () {
     /* 1011 */ expect(parseError("return . -> { ...[1] };", 'a').char).toEqual(15);
     /* 1012 */ expect(parseError("$foo = 234; return .* -> $foo[1];", 'a').char).toEqual(30);
     /* 1013 */ expect(parseError("$foo = {}; return .* -> [1][$foo];", 'a').char).toEqual(28);
-    /* 1013 */ expect(parseError("return .* -> {}.foo;", 'a').char).toEqual(16);
+    /* 1014 */ expect(parseError("return .* -> {}.foo;", 'a').char).toEqual(16);
+    /* 1015 */ expect(parseGrammarError("return .* -> foo();").char).toEqual(14);
+    /* 1016 */ expect(parseGrammarError("#zzz false\nreturn .* -> true;").char).toEqual(2);
 });
-test("comments", function () {
+scheduleTest("comments", function () {
     expectParse("\n        // return .* -> 1;\n        /*\n           return .* -> 2;\n        */\n        return .* -> 3;\n    ").toEqual(3);
+});
+test("pragmas", function () {
+    new Dezent_1.Dezent("return .* -> true;").parse("foo");
+    expect(!!parser.lastParser.options.enableCache).toBe(false);
+    new Dezent_1.Dezent("#enableCache true\nreturn .* -> true;").parse("foo");
+    expect(parser.lastParser.options.enableCache).toBe(true);
+    new Dezent_1.Dezent("#enableCache true\nreturn .* -> true;", null, { enableCache: false }).parse("foo");
+    expect(!!parser.lastParser.options.enableCache).toBe(false);
 });
 test("packrat", function () {
     function buildText(count) {
         var text = 'a'.repeat(count) + 'b';
     }
     var grammar = "\n        return {theRule}* -> $1;\n        theRule =\n            {'a'}* {'c'} -> [$1, $2],\n            {'b'} -> $1,\n            {'a'} -> $1;\n    ";
-    var caching = new Dezent_1.Dezent(grammar, null, { disableCacheLookup: false });
-    var noncaching = new Dezent_1.Dezent(grammar, null, { disableCacheLookup: true });
+    var caching = new Dezent_1.Dezent(grammar, null, { enableCache: true });
+    var noncaching = new Dezent_1.Dezent(grammar, null, { enableCache: false });
     expect(caching.parse('aaaab')).toEqual(['a', 'a', 'a', 'a', 'b']);
     expect(noncaching.parse('aaaab')).toEqual(['a', 'a', 'a', 'a', 'b']);
     function time(f) {
@@ -285,6 +312,7 @@ test("packrat", function () {
         f();
         return new Date().getTime() - t;
     }
+    console.log("Performance of previous tests caching / noncaching: " + cachingTime + " / " + noncachingTime + "\n");
     var log = [['packrat cache performance results']];
     function run(size, runUncached) {
         var text = 'a'.repeat(size) + 'b';

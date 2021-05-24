@@ -46,6 +46,7 @@ export enum ErrorCode {
     InvalidAccessIndex        = 1013,
     InvalidAccessProperty     = 1014,
     FunctionNotFound          = 1015,
+    UnknownPragma             = 2016,
 
     ArrayOverrun              = 2001,
     MismatchOutputFrames      = 2002,
@@ -79,6 +80,7 @@ export const errorMessages = {
     1013: "Attempted to access property using a key that was not a string or number: $1",
     1014: "Attempted to access a property that doesn't exist: $1",
     1015: "Function not found: $1",
+    1016: "Unknown pragma: $1",
 
     2001: "Array overrun",
     2002: "Mismatched output frames",
@@ -172,6 +174,8 @@ export enum MatchStatus {
     Fail
 }
 
+export var lastParser:Parser = null; // for testing purposes
+
 export class Parser {
     root : ReturnNode;
     stack : ParseFrame[] = [];
@@ -184,6 +188,7 @@ export class Parser {
     debugLog : any[][] = [];
     
     constructor(grammar:Grammar, text:string|ParseBuffer, functions:Functions, options:ParserOptions) {
+        lastParser = this;
         let root:ReturnNode;
     
         for (let ruleset of grammar.ruleset) {
@@ -203,8 +208,16 @@ export class Parser {
             this.buffer = text;
         }
         this.rulesets = grammar.rulesetLookup;
-        this.options = options || {};
-        if (typeof this.options.enableCache == "undefined") this.options.enableCache = true;
+        this.options = {};
+        for (let pragma in grammar.pragmas) {
+            if (pragma != 'enableCache') {
+                grammarError(ErrorCode.UnknownPragma, pragma);
+            }
+            this.options[pragma] = grammar.pragmas[pragma];
+        }
+        for (let option in options) {
+            this.options[option] = options[option];
+        }
         this.parseCache = new ParseCache(this.options.enableCache ? ParseCacheScope.All : ParseCacheScope.Rulesets, grammar.maxid);
         this.valueBuilder = new ValueBuilder(grammar, functions);
         this.enter(root);

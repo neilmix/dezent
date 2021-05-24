@@ -17,7 +17,18 @@
  *  You should have received a copy of the GNU Affero General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-exports.__esModule = true;
+var __values = (this && this.__values) || function(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+};
+Object.defineProperty(exports, "__esModule", { value: true });
 exports.createUncompiledDezentGrammar = exports.GrammarVersion = void 0;
 exports.GrammarVersion = 1;
 function createUncompiledDezentGrammar() {
@@ -34,7 +45,7 @@ function createUncompiledDezentGrammar() {
     // - spread operator can only be used with backref or constref
     return {
         ruleset: [
-            returndef("_ ( {returndef|ruleset} _ | {constant} _ )*", { ruleset: "$1", vars: { '...$2': '' } }),
+            returndef("_ ( {returndef|ruleset} _ | {constant} _ | {pragma} _ )*", { ruleset: "$1", vars: { '...$2': '' }, pragmas: { '...$3': '' } }),
             ruleset('_', "( singleLineComment | multiLineComment | whitespace? )*", undefined),
             ruleset('singleLineComment', "'//' ( !'\\n' . )* '\\n'", undefined),
             ruleset('multiLineComment', "'/*' ( !'*/' . )* '*/'", undefined),
@@ -42,6 +53,7 @@ function createUncompiledDezentGrammar() {
             ruleset('returndef', "'return' whitespace _ {rule} _ ';'", { type: 'ruleset', name: 'return', rules: ['$1'], '...$meta': '' }),
             ruleset('ruleset', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
             ruleset('constant', "'$' {identifier} _ '=' _ {value} _ ';'", ['$1', '$2']),
+            ruleset('pragma', "'#' {'enableCache'} _ 'true' '\\n'", ['$1', true], "'#' {'enableCache'} _ 'false' '\\n'", ['$1', false]),
             ruleset('rule', "{options} _ '->' _ {value}", { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
             ruleset('options', "{pattern} _ ( '|' _ {pattern} _ )*", { options: ['$1', '...$2'] }),
             ruleset('pattern', "( {token} _ )+", { type: 'pattern', tokens: '$1' }),
@@ -89,6 +101,9 @@ function createUncompiledDezentGrammar() {
         ],
         vars: {
             meta: output({ meta: { pos: "@position", length: "@length" } })
+        },
+        pragmas: {
+            enableCache: false
         }
     };
 }
@@ -97,7 +112,7 @@ function returndef(options, output) {
     return {
         type: 'ruleset',
         name: 'return',
-        rules: [rule(options, output)]
+        rules: [rule(options, output)],
     };
 }
 function ruleset(name) {
@@ -207,7 +222,7 @@ function capture(token) {
     var options = token.substr(1, token.length - 1).split('|');
     return {
         type: 'capture',
-        options: options.map(function (t) { return pattern([t]); })
+        options: options.map(function (t) { return pattern([t]); }),
     };
 }
 function charClass(token) {
@@ -278,6 +293,7 @@ function ruleref(token) {
     };
 }
 function output(value) {
+    var e_1, _a;
     switch (typeof value) {
         case 'object':
             if (value === null) {
@@ -285,10 +301,19 @@ function output(value) {
             }
             else if (Array.isArray(value)) {
                 var ret = [];
-                for (var _i = 0, value_1 = value; _i < value_1.length; _i++) {
-                    var elem = value_1[_i];
-                    var out = output(elem);
-                    ret.push(out);
+                try {
+                    for (var value_1 = __values(value), value_1_1 = value_1.next(); !value_1_1.done; value_1_1 = value_1.next()) {
+                        var elem = value_1_1.value;
+                        var out = output(elem);
+                        ret.push(out);
+                    }
+                }
+                catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                finally {
+                    try {
+                        if (value_1_1 && !value_1_1.done && (_a = value_1.return)) _a.call(value_1);
+                    }
+                    finally { if (e_1) throw e_1.error; }
                 }
                 return {
                     type: 'array',

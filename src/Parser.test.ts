@@ -22,7 +22,7 @@ import { execSync } from "child_process";
 
 import "./Parser";
 import { Dezent } from "./Dezent";
-import { parseText, findDezentGrammar, parseGrammar } from "./Parser";
+import * as parser from "./Parser";
 import { createUncompiledDezentGrammar } from "./Grammar";
 import { Functions } from "./Output";
 import { readFileSync } from "fs";
@@ -53,7 +53,7 @@ function parse(grammar:string, text:string, functions?:Functions) {
 
 function parseError(grammar:string, text:string) {
     try {
-        parseText(grammar, text);
+        parser.parseText(grammar, text);
         fail();
     } catch(e) {
         return e;
@@ -77,7 +77,7 @@ function expectParseFail(grammar:string, text?:string) {
 
 function parseGrammarError(grammar:string, functions?:Functions) {
     try {
-        parseGrammar(grammar, functions);
+        parser.parseGrammar(grammar, functions);
         fail();
     } catch(e) {
         return e;
@@ -329,7 +329,7 @@ scheduleTest("left recursion", () => {
 scheduleTest("dezent grammar documentation", () => {
     let uncompiledDezent = createUncompiledDezentGrammar();
     let textDezent = readFileSync("./src/grammar.dezent").toString();
-    let hackedGrammar = findDezentGrammar();
+    let hackedGrammar = parser.findDezentGrammar();
 
     // Our bootstrap grammar does not contain any metas because it's created
     // somewhat manually, not parsed from source. But it does contain rules
@@ -338,13 +338,13 @@ scheduleTest("dezent grammar documentation", () => {
     // insert metas into the grammar we parse from file.
     let prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
-    let parsedDezent = parseText(hackedGrammar, textDezent, null, {debugErrors: true});
+    let parsedDezent = parser.parseText(hackedGrammar, textDezent, null, {debugErrors: true});
     hackedGrammar.vars.meta = prevMeta;
 
     expect(parsedDezent).toEqual(uncompiledDezent);
 });
 
-scheduleTest("command line util", () => {
+test("command line util", () => {
     let stdout = execSync("dezent src/grammar.dezent src/grammar.dezent");
     let json = JSON.parse(stdout.toString());
     expect(json).not.toBe(null);
@@ -375,7 +375,9 @@ scheduleTest("grammar errors", () => {
     /* 1011 */ expect(parseError(`return . -> { ...[1] };`, 'a').char).toEqual(15);
     /* 1012 */ expect(parseError(`$foo = 234; return .* -> $foo[1];`, 'a').char).toEqual(30);
     /* 1013 */ expect(parseError(`$foo = {}; return .* -> [1][$foo];`, 'a').char).toEqual(28);
-    /* 1013 */ expect(parseError(`return .* -> {}.foo;`, 'a').char).toEqual(16);
+    /* 1014 */ expect(parseError(`return .* -> {}.foo;`, 'a').char).toEqual(16);
+    /* 1015 */ expect(parseGrammarError(`return .* -> foo();`).char).toEqual(14);
+    /* 1016 */ expect(parseGrammarError(`#zzz false\nreturn .* -> true;`).char).toEqual(2);
 });
 
 scheduleTest("comments", () => {
@@ -386,6 +388,15 @@ scheduleTest("comments", () => {
         */
         return .* -> 3;
     `).toEqual(3);
+});
+
+test("pragmas", () => {
+    new Dezent(`return .* -> true;`).parse("foo");
+    expect(!!parser.lastParser.options.enableCache).toBe(false);
+    new Dezent(`#enableCache true\nreturn .* -> true;`).parse("foo");
+    expect(parser.lastParser.options.enableCache).toBe(true);
+    new Dezent(`#enableCache true\nreturn .* -> true;`, null, { enableCache: false }).parse("foo");
+    expect(!!parser.lastParser.options.enableCache).toBe(false);
 });
 
 test("packrat", () => {

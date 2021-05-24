@@ -25,6 +25,7 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
   * [`&` predicate - match](#-predicate---match)
   * [`!` predicate - does not match](#-predicate---does-not-match)
   * [`=` constant](#-constant)
+  * [`#` enableCache pragma](#-enableCache-pragma)
 * [Reference - grammar - output](#Reference---grammar---output)
   * [JSON-like](#JSON-like)
   * [`$0` back reference](#0-back-reference)
@@ -508,6 +509,22 @@ Declares constants within your grammar. Constants cannot be used within rules, o
     return .* -> $myconst;
 `).parse('anything');
 { foo: 'bar' }
+```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
+---
+## `#` enableCache pragma
+---
+```
+'#' enableCache _ 'true'|'false' '\n'
+```
+Enables or disables intermediate parse result caching, aka "packrat" parsing. This is an
+optimization that can result in significant parse time reduction for some grammars, at
+the expense of increased memory usage. Most grammars do not benefit greatly from this
+optimization, so it is disabled by default.
+
+```
+#enableCache true
 ```
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 

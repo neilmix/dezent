@@ -204,7 +204,7 @@ export class GrammarCompiler {
                     grammarError(ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
-            if (node.type == "call" && !functions[node.name]) {
+            if (node.type == "call" && (!functions || !functions[node.name])) {
                 grammarError(ErrorCode.FunctionNotFound, text, node.meta, node.name);
             }
          });

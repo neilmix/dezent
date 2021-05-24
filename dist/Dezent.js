@@ -17,20 +17,19 @@
  *  You should have received a copy of the GNU Affero General Public License
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-exports.__esModule = true;
-exports.Dezent = void 0;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.DezentStream = exports.Dezent = void 0;
 var parser = require("./Parser");
 var Dezent = /** @class */ (function () {
     function Dezent(grammarStr, functions, options) {
-        this.options = options || {};
-        this.debugErrors = !!this.options.debugErrors;
+        this.stream = new DezentStream(grammarStr, functions, options);
+        this.debugErrors = options ? !!options.debugErrors : false;
         this.error = null;
-        this.grammar = parser.parseGrammar(grammarStr, this.options, functions);
-        this.functions = functions;
     }
     Dezent.prototype.parse = function (text) {
         try {
-            return parser.parseText(this.grammar, text, this.functions, this.options);
+            this.stream.write(text);
+            return this.stream.close();
         }
         catch (e) {
             this.error = e;
@@ -43,3 +42,18 @@ var Dezent = /** @class */ (function () {
     return Dezent;
 }());
 exports.Dezent = Dezent;
+var DezentStream = /** @class */ (function () {
+    function DezentStream(grammarStr, functions, options) {
+        this.options = options || {};
+        this.grammar = parser.parseGrammar(grammarStr, this.options, functions);
+        this.functions = functions;
+    }
+    DezentStream.prototype.write = function (text) {
+        this.result = parser.parseText(this.grammar, text, this.functions, this.options);
+    };
+    DezentStream.prototype.close = function () {
+        return this.result;
+    };
+    return DezentStream;
+}());
+exports.DezentStream = DezentStream;
