@@ -26,6 +26,7 @@ import * as parser from "./Parser";
 import { createUncompiledDezentGrammar } from "./Grammar";
 import { Functions } from "./Output";
 import { readFileSync } from "fs";
+import { ParseBuffer } from "./ParseBuffer";
 
 let enableCaching:boolean = true;
 let cachingTime = 0;
@@ -53,7 +54,7 @@ function parse(grammar:string, text:string, functions?:Functions) {
 
 function parseError(grammar:string, text:string) {
     try {
-        parser.parseText(grammar, text);
+        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer(text), null, null).parse();
         fail();
     } catch(e) {
         return e;
@@ -289,7 +290,7 @@ scheduleTest("function calls", () => {
         { blah: () => value = 5 });
     expect(value).toEqual(5);
 
-    expectGrammarFail(`return .* -> foo();`);
+    expectParseFail(`return .* -> foo();`);
 });
 
 scheduleTest("left recursion", () => {
@@ -338,7 +339,8 @@ scheduleTest("dezent grammar documentation", () => {
     // insert metas into the grammar we parse from file.
     let prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
-    let parsedDezent = parser.parseText(hackedGrammar, textDezent, null, {debugErrors: true});
+    let buf = new ParseBuffer(textDezent);
+    let parsedDezent = new parser.Parser(hackedGrammar, buf, null, {debugErrors: true}).parse();
     hackedGrammar.vars.meta = prevMeta;
 
     expect(parsedDezent).toEqual(uncompiledDezent);
@@ -361,7 +363,7 @@ scheduleTest("expected grammar terminals", () => {
     expect(parseGrammarError(`return ( . ([ab] {'f'} 'foo)) -> $1;`).expected.sort()).toEqual(["'", "\\"]);
 });
 
-scheduleTest("grammar errors", () => {
+scheduleTest("errors", () => {
     /* 1001 */ expect(parseGrammarError(`return foo -> null; foo = . -> null; foo = .. -> 1;`).char).toEqual(38);
     /* 1002 */ expect(parseGrammarError(`return . -> 1; return . -> 2;`).char).toEqual(16);
     /* 1003 */ expect(parseGrammarError(`return foo -> true;`).char).toEqual(8);
@@ -376,7 +378,7 @@ scheduleTest("grammar errors", () => {
     /* 1012 */ expect(parseError(`$foo = 234; return .* -> $foo[1];`, 'a').char).toEqual(30);
     /* 1013 */ expect(parseError(`$foo = {}; return .* -> [1][$foo];`, 'a').char).toEqual(28);
     /* 1014 */ expect(parseError(`return .* -> {}.foo;`, 'a').char).toEqual(16);
-    /* 1015 */ expect(parseGrammarError(`return .* -> foo();`).char).toEqual(14);
+    /* 1015 */ expect(parseError(`return .* -> foo();`, 'a').char).toEqual(14);
     /* 1016 */ expect(parseGrammarError(`#zzz false\nreturn .* -> true;`).char).toEqual(2);
 });
 

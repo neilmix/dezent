@@ -72,21 +72,31 @@ var __values = (this && this.__values) || function(o) {
     throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ParseBuffer = void 0;
+exports.ParseBuffer = exports.ParseBufferExhaustedError = void 0;
 var Parser_1 = require("./Parser");
+exports.ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
 var ParseBuffer = /** @class */ (function () {
     function ParseBuffer(text) {
         this.chunks = [];
         this.indices = [];
         this.chunkIndex = 0;
         this._length = 0;
+        this._closed = false;
         if (text) {
             this.addChunk(text);
+            this.close();
         }
     }
     Object.defineProperty(ParseBuffer.prototype, "length", {
         get: function () {
             return this._length;
+        },
+        enumerable: false,
+        configurable: true
+    });
+    Object.defineProperty(ParseBuffer.prototype, "closed", {
+        get: function () {
+            return this._closed;
         },
         enumerable: false,
         configurable: true
@@ -112,13 +122,22 @@ var ParseBuffer = /** @class */ (function () {
         }
         return text;
     };
+    ParseBuffer.prototype.substrExact = function (startIdx, length) {
+        var s = this.substr(startIdx, length);
+        if (s.length != length) {
+            throw exports.ParseBufferExhaustedError;
+        }
+        else {
+            return s;
+        }
+    };
     ParseBuffer.prototype.containsAt = function (text, idx) {
-        return text == this.substr(idx, text.length);
+        return text == this.substrExact(idx, text.length);
     };
     ParseBuffer.prototype.charAt = function (idx) {
         var _a = __read(this.chunkIndexFor(idx), 2), chunkIdx = _a[0], charIdx = _a[1];
         if (chunkIdx < 0) {
-            return '';
+            throw exports.ParseBufferExhaustedError;
         }
         else {
             return this.chunks[chunkIdx].charAt(charIdx);
@@ -216,6 +235,9 @@ var ParseBuffer = /** @class */ (function () {
             lineText: lineData.lineText,
             pointerText: ' '.repeat(lineData.length) + '^'
         };
+    };
+    ParseBuffer.prototype.close = function () {
+        this._closed = true;
     };
     return ParseBuffer;
 }());

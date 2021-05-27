@@ -37,7 +37,7 @@ var Output_1 = require("./Output");
 var GrammarCompiler = /** @class */ (function () {
     function GrammarCompiler() {
     }
-    GrammarCompiler.compileGrammar = function (grammar, text, functions) {
+    GrammarCompiler.compileGrammar = function (grammar, text) {
         // compile and validate
         // - count the number of backrefs in each rule
         // - validate that all options contain that many backrefs
@@ -78,7 +78,7 @@ var GrammarCompiler = /** @class */ (function () {
                 for (var i = 0; i < rules.length; i++) {
                     rules[i].rulesetName = ruleset["name"] || "return";
                     rules[i].rulesetIndex = i;
-                    rules[i].captures = this.compileRule(rules[i], grammar.vars, text, functions);
+                    rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
                 }
                 // assign an id to every node
                 visitParseNodes(null, ruleset, null, function (node) {
@@ -166,7 +166,7 @@ var GrammarCompiler = /** @class */ (function () {
         grammar.maxid = nodeSequence;
         return grammar;
     };
-    GrammarCompiler.compileRule = function (rule, vars, text, functions) {
+    GrammarCompiler.compileRule = function (rule, vars, text) {
         // put an empty placeholder in captures so that the indices
         // align with backrefs (which begin at 1)
         var info = { captures: [null], repeats: 0, backrefs: [null] };
@@ -271,9 +271,6 @@ var GrammarCompiler = /** @class */ (function () {
                 if (!vars[node.name]) {
                     grammarError(Parser_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
-            }
-            if (node.type == "call" && (!functions || !functions[node.name])) {
-                grammarError(Parser_1.ErrorCode.FunctionNotFound, text, node.meta, node.name);
             }
         });
         for (var i_1 = 1; i_1 < info.backrefs.length; i_1++) {

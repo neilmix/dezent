@@ -19,17 +19,21 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DezentStream = exports.Dezent = void 0;
-var parser = require("./Parser");
+var Parser_1 = require("./Parser");
+var ParseBuffer_1 = require("./ParseBuffer");
 var Dezent = /** @class */ (function () {
     function Dezent(grammarStr, functions, options) {
-        this.stream = new DezentStream(grammarStr, functions, options);
+        this.grammar = Parser_1.parseGrammar(grammarStr);
+        this.functions = functions;
+        this.options = options;
         this.debugErrors = options ? !!options.debugErrors : false;
         this.error = null;
     }
     Dezent.prototype.parse = function (text) {
         try {
-            this.stream.write(text);
-            return this.stream.close();
+            var stream = new DezentStream(this.grammar, this.functions, this.options);
+            stream.write(text);
+            return stream.close();
         }
         catch (e) {
             this.error = e;
@@ -43,15 +47,30 @@ var Dezent = /** @class */ (function () {
 }());
 exports.Dezent = Dezent;
 var DezentStream = /** @class */ (function () {
-    function DezentStream(grammarStr, functions, options) {
+    function DezentStream(grammar, functions, options) {
+        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, this.options) : grammar;
         this.options = options || {};
-        this.grammar = parser.parseGrammar(grammarStr, this.options, functions);
         this.functions = functions;
+        this.buffer = new ParseBuffer_1.ParseBuffer();
+        this.parser = new Parser_1.Parser(grammar, this.buffer, this.functions, this.options);
     }
     DezentStream.prototype.write = function (text) {
-        this.result = parser.parseText(this.grammar, text, this.functions, this.options);
+        this.buffer.addChunk(text);
+        try {
+            this.parser.parse();
+        }
+        catch (err) {
+            if (err != ParseBuffer_1.ParseBufferExhaustedError) {
+                throw err;
+            }
+        }
     };
     DezentStream.prototype.close = function () {
+        if (this.parser.error) {
+            throw this.parser.error;
+        }
+        this.buffer.close();
+        this.result = this.parser.parse();
         return this.result;
     };
     return DezentStream;

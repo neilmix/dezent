@@ -17,10 +17,11 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>. 
  */
 
-import * as parser from './Parser';
+import { parseGrammar, Parser, ParserOptions } from './Parser';
 
 import { Grammar } from './Grammar';
 import { Functions } from './Output';
+import { ParseBuffer, ParseBufferExhaustedError } from './ParseBuffer';
 
 export interface DezentError extends Error {
     code: number
@@ -46,21 +47,26 @@ export interface ParseError extends DezentError {
 }
 
 export class Dezent {
-    private stream:DezentStream;
+    private grammar:Grammar;
+    private functions:Functions;
+    private options:ParserOptions;
     private debugErrors: boolean;
 
     error:DezentError|GrammarError|ParseError;
 
-    constructor(grammarStr:string, functions?:Functions, options?:parser.ParserOptions) {
-        this.stream = new DezentStream(grammarStr, functions, options);
+    constructor(grammarStr:string, functions?:Functions, options?:ParserOptions) {
+        this.grammar = parseGrammar(grammarStr);
+        this.functions = functions;
+        this.options = options;
         this.debugErrors = options ? !!options.debugErrors : false;
         this.error = null;
     }
 
     parse(text:string) : any {
         try {
-            this.stream.write(text);
-            return this.stream.close();
+            let stream = new DezentStream(this.grammar, this.functions, this.options);
+            stream.write(text);
+            return stream.close();
         } catch (e) {
             this.error = e;
             if (this.debugErrors) {
@@ -73,21 +79,36 @@ export class Dezent {
 
 export class DezentStream {
     private functions:Functions;
-    private options:parser.ParserOptions;
-    private grammar:Grammar;
+    private options:ParserOptions;
+    private buffer:ParseBuffer;
+    private parser:Parser;
     private result:any;
 
-    constructor(grammarStr:string, functions?:Functions, options?:parser.ParserOptions) {
+    constructor(grammar:string|Grammar, functions?:Functions, options?:ParserOptions) {
+        grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
         this.options = options || {};
-        this.grammar = parser.parseGrammar(grammarStr, this.options, functions);
         this.functions = functions;
+        this.buffer = new ParseBuffer();
+        this.parser = new Parser(grammar, this.buffer, this.functions, this.options);
     }
 
     write(text:string) {
-        this.result = parser.parseText(this.grammar, text, this.functions, this.options);
+        this.buffer.addChunk(text);
+        try {
+            this.parser.parse();
+        } catch (err) {
+            if (err != ParseBufferExhaustedError) {
+                throw err;
+            }
+        }
     }
 
     close() : any {
+        if (this.parser.error) {
+            throw this.parser.error;
+        }
+        this.buffer.close();
+        this.result = this.parser.parse();
         return this.result;
     }
 }

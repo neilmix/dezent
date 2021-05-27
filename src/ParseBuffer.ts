@@ -19,19 +19,27 @@
 
  import { parserError, ErrorCode } from "./Parser";
 
+ export const ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
+
  export class ParseBuffer {
     private chunks : string[] = [];
     private indices : number[] = [];
     private chunkIndex : number = 0;
     private _length : number = 0;
+    private _closed : boolean = false;
 
     get length(): number {
         return this._length;
     }
 
+    get closed() : boolean {
+        return this._closed;
+    }
+
     constructor(text?:string) {
         if (text) {
             this.addChunk(text);
+            this.close();
         }
     }
 
@@ -59,14 +67,23 @@
         return text;
     }
 
+    substrExact(startIdx:number, length:number) : string {
+        let s = this.substr(startIdx, length);
+        if (s.length != length) {
+            throw ParseBufferExhaustedError;
+        } else {
+            return s;
+        }
+    }
+
     containsAt(text:string, idx:number) : boolean {
-        return text == this.substr(idx, text.length);
+        return text == this.substrExact(idx, text.length);
     }
 
     charAt(idx:number) : string {
         let [chunkIdx, charIdx] = this.chunkIndexFor(idx);
         if (chunkIdx < 0) {
-            return '';
+            throw ParseBufferExhaustedError;
         } else {
             return this.chunks[chunkIdx].charAt(charIdx);
         }
@@ -132,5 +149,9 @@
             lineText: lineData.lineText,
             pointerText: ' '.repeat(lineData.length) + '^'
         }
+    }
+
+    close() {
+        this._closed = true;
     }
  }

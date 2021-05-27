@@ -25,6 +25,7 @@ var Dezent_1 = require("./Dezent");
 var parser = require("./Parser");
 var Grammar_1 = require("./Grammar");
 var fs_1 = require("fs");
+var ParseBuffer_1 = require("./ParseBuffer");
 var enableCaching = true;
 var cachingTime = 0;
 var noncachingTime = 0;
@@ -48,7 +49,7 @@ function parse(grammar, text, functions) {
 }
 function parseError(grammar, text) {
     try {
-        parser.parseText(grammar, text);
+        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer_1.ParseBuffer(text), null, null).parse();
         fail();
     }
     catch (e) {
@@ -225,7 +226,7 @@ scheduleTest("function calls", function () {
     var value = 0;
     parse("return foo -> void;\n           foo = . bar -> void;\n           bar = .* -> blah();", 'anything', { blah: function () { return value = 5; } });
     expect(value).toEqual(5);
-    expectGrammarFail("return .* -> foo();");
+    expectParseFail("return .* -> foo();");
 });
 scheduleTest("left recursion", function () {
     var grammar = "\n        _ = [ \\n]* -> null;\n        expr =\n            {expr} _ '+' _ {mult} -> ['+',$1,$2],\n            {mult} -> $1;\n        mult =\n            {mult} _ '*' _ {num} -> ['*',$1,$2],\n            num -> $0;\n        num = [0-9]+ -> $0;\n        return _ {expr} _ -> $1;\n    ";
@@ -251,7 +252,8 @@ scheduleTest("dezent grammar documentation", function () {
     // insert metas into the grammar we parse from file.
     var prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
-    var parsedDezent = parser.parseText(hackedGrammar, textDezent, null, { debugErrors: true });
+    var buf = new ParseBuffer_1.ParseBuffer(textDezent);
+    var parsedDezent = new parser.Parser(hackedGrammar, buf, null, { debugErrors: true }).parse();
     hackedGrammar.vars.meta = prevMeta;
     expect(parsedDezent).toEqual(uncompiledDezent);
 });
@@ -269,7 +271,7 @@ scheduleTest("expected grammar terminals", function () {
     expect(parseGrammarError('return {.}').expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
     expect(parseGrammarError("return ( . ([ab] {'f'} 'foo)) -> $1;").expected.sort()).toEqual(["'", "\\"]);
 });
-scheduleTest("grammar errors", function () {
+scheduleTest("errors", function () {
     /* 1001 */ expect(parseGrammarError("return foo -> null; foo = . -> null; foo = .. -> 1;").char).toEqual(38);
     /* 1002 */ expect(parseGrammarError("return . -> 1; return . -> 2;").char).toEqual(16);
     /* 1003 */ expect(parseGrammarError("return foo -> true;").char).toEqual(8);
@@ -284,7 +286,7 @@ scheduleTest("grammar errors", function () {
     /* 1012 */ expect(parseError("$foo = 234; return .* -> $foo[1];", 'a').char).toEqual(30);
     /* 1013 */ expect(parseError("$foo = {}; return .* -> [1][$foo];", 'a').char).toEqual(28);
     /* 1014 */ expect(parseError("return .* -> {}.foo;", 'a').char).toEqual(16);
-    /* 1015 */ expect(parseGrammarError("return .* -> foo();").char).toEqual(14);
+    /* 1015 */ expect(parseError("return .* -> foo();", 'a').char).toEqual(14);
     /* 1016 */ expect(parseGrammarError("#zzz false\nreturn .* -> true;").char).toEqual(2);
 });
 scheduleTest("comments", function () {

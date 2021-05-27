@@ -30,11 +30,11 @@ import {
     RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode,
 } from './Grammar';
 
-import { Functions, buildString } from './Output';
+import { buildString } from './Output';
 
 export class GrammarCompiler {
 
-    static compileGrammar(grammar:Grammar, text?:string, functions?:Functions) {
+    static compileGrammar(grammar:Grammar, text?:string) {
         // compile and validate
         // - count the number of backrefs in each rule
         // - validate that all options contain that many backrefs
@@ -64,7 +64,7 @@ export class GrammarCompiler {
             for (let i = 0; i < rules.length; i++) {
                 rules[i].rulesetName = ruleset["name"] || "return";
                 rules[i].rulesetIndex = i;
-                rules[i].captures = this.compileRule(rules[i], grammar.vars, text, functions);
+                rules[i].captures = this.compileRule(rules[i], grammar.vars, text);
             }
 
             // assign an id to every node
@@ -115,7 +115,7 @@ export class GrammarCompiler {
         return grammar;
     }
 
-    static compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}, text?:string, functions?:Functions) : boolean[] {
+    static compileRule(rule:RuleNode, vars:{[key:string]:ValueNode}, text?:string) : boolean[] {
         // put an empty placeholder in captures so that the indices
         // align with backrefs (which begin at 1)
         let info = { captures: [null], repeats: 0, backrefs: [null] };
@@ -203,9 +203,6 @@ export class GrammarCompiler {
                 if (!vars[node.name]) {
                     grammarError(ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
-            }
-            if (node.type == "call" && (!functions || !functions[node.name])) {
-                grammarError(ErrorCode.FunctionNotFound, text, node.meta, node.name);
             }
          });
     
