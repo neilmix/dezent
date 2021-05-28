@@ -485,7 +485,7 @@ export class Parser {
         });
 
         // always build the value so that output callbacks can be called
-        // even if the grammar returns void
+        // even if the grammar returns null
         let value = this.valueBuilder.buildValue(exited);
 
         if (base.wantOutput || (<RulesetNode>base.node).name == "return") {

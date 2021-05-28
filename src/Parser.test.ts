@@ -148,12 +148,6 @@ scheduleTest("spread", () => {
     `,'abcdef').toEqual([['a','d'],['b','e'],['c','f']]);
 });
 
-scheduleTest("void", () => {
-    expectParse(`return .* -> void;`).toEqual(undefined);
-    expectParse(`foo = .* -> void; return {foo} -> [1, $1, 2];`).toEqual([1, 2]);
-    expectParse(`foo = .* -> void; return {foo} -> { foo: 'bar', baz: $1 };`).toEqual({ foo: 'bar' });
-})
-
 scheduleTest("the 'any' terminal", () => {
     expectParse("return {.} -> $1;", "x").toEqual('x');
 });
@@ -229,6 +223,7 @@ scheduleTest('array collapse', () => {
     expectParse(`return {'a'} {'b'}? {'a'} -> [$1, $2?, $3 ];`, 'aa').toEqual(['a', 'a']);
     expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2 ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', null, 'b']);
     expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2? ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', 'b']);
+    expectParse(`letter = {[a-d]|[f-i]} -> $1, 'e' -> null; return {letter}* -> $1?;`, 'abcdefghi').toEqual(['a','b','c','d','f','g','h','i']);
 });
 
 scheduleTest("variables", () => {
@@ -280,11 +275,10 @@ scheduleTest("function calls", () => {
         .toEqual([1, 'a', true, [1,2,3], { foo: 'bar' }]);
     expectParse(`return .* -> { foo: [ foo() ] };`, 'anything', { foo: () => 4 })
         .toEqual({foo: [4]});
-    expectParse(`return .* -> [1, foo(), 2];`, 'anything', { foo: () => undefined }).toEqual([1,2]);
 
     let value = 0;
-    parse(`return foo -> void;
-           foo = . bar -> void;
+    parse(`return foo -> null;
+           foo = . bar -> null;
            bar = .* -> blah();`, 
         'anything', 
         { blah: () => value = 5 });

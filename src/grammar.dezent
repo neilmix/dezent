@@ -26,11 +26,11 @@
 return _ ( {returndef|ruleset} _ | {constant} _ | {pragma} _ )* 
 	-> { ruleset: $1, vars: { ...$2 }, pragmas: { ...$3 } };
 
-_ = ( singleLineComment | multiLineComment | whitespace? )* -> void;
+_ = ( singleLineComment | multiLineComment | whitespace? )* -> null;
 
-singleLineComment = '//' ( !'\n' . )* '\n' -> void;
-multiLineComment  = '/*' ( !'*/' . )* '*/' -> void;
-whitespace        = [\u0020\t-\r]+ -> void;
+singleLineComment = '//' ( !'\n' . )* '\n' -> null;
+multiLineComment  = '/*' ( !'*/' . )* '*/' -> null;
+whitespace        = [\u0020\t-\r]+ -> null;
 
 returndef = 'return' whitespace _ {rule} _ ';' 
 	-> { type: 'ruleset', name: 'return', rules: [$1], ...$meta };
@@ -105,7 +105,7 @@ modifier =
 	'?' -> { repeat: false, required: false },
 	''  -> { repeat: false, required: true };
 
-value = { backref | constref | metaref | pivot | object | array | call | string | number | boolean | null | void } 
+value = { backref | constref | metaref | pivot | object | array | call | string | number | boolean | null } 
 	-> $1;
 
 backref = 
@@ -156,9 +156,6 @@ boolean =
 
 null = 'null' 
 	-> { type: 'null' };
-
-void = 'void'
-	-> { type: 'void' };
 
 access = {dotAccess|bracketAccess}* 
 	-> $1;

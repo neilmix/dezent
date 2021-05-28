@@ -167,10 +167,7 @@ export class ValueBuilder {
                     if (!Array.isArray(tuple) || tuple.length != 2) {
                         grammarError(ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
                     }
-                    // make sure our value isn't void...
-                    if (tuple[1] !== undefined) {
-                        ret[tuple[0]] = tuple[1];
-                    }
+                    ret[tuple[0]] = tuple[1];
                 }
             } else {
                 ret[this.value(member.name, captures, metas)] 
@@ -187,10 +184,7 @@ export class ValueBuilder {
                 ret = ret.concat(this.value(elem, captures, metas));
             } else {
                 let val = this.value(elem, captures, metas);
-                if (
-                    val !== undefined // void
-                    && ((elem.type == "backref" && !elem.collapse) || val !== null)) 
-                {
+                if ((elem.type == "backref" && !elem.collapse) || val !== null) {
                     ret.push(val);
                 }
             }
@@ -224,10 +218,6 @@ export class ValueBuilder {
 
     null() {
         return null;
-    }
-
-    void() {
-        return undefined;
     }
 }
 

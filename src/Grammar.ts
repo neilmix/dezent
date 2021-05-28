@@ -57,7 +57,7 @@ export interface RangeNode extends Node {
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = RulesetNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
-export type ValueNode = BackRefNode | ConstRefNode | MetaRefNode | PivotNode | SpreadNode | ObjectNode | ArrayNode | CallNode | StringNode | NumberNode | BooleanNode | NullNode | VoidNode;
+export type ValueNode = BackRefNode | ConstRefNode | MetaRefNode | PivotNode | SpreadNode | ObjectNode | ArrayNode | CallNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 export interface MetaData {
 }
@@ -117,7 +117,6 @@ export interface CallNode         extends OutputNode { type: 'call',      name: 
 export interface NumberNode       extends OutputNode { type: 'number',    value: string }
 export interface BooleanNode      extends OutputNode { type: 'boolean',   value: boolean }
 export interface NullNode         extends OutputNode { type: 'null' }
-export interface VoidNode         extends OutputNode { type: 'void' }
 
 export interface MemberNode { type: 'member', name: BackRefNode|StringNode, value: ValueNode }
 
@@ -140,11 +139,11 @@ export function createUncompiledDezentGrammar():Grammar {
 			returndef(`_ ( {returndef|ruleset} _ | {constant} _ | {pragma} _ )*`, 
 				{ ruleset: "$1", vars: { '...$2': '' }, pragmas: { '...$3': '' } }),
 
-			ruleset('_', `( singleLineComment | multiLineComment | whitespace? )*`, undefined),
+			ruleset('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
 
-			ruleset('singleLineComment', `'//' ( !'\\n' . )* '\\n'`, undefined),
-			ruleset('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, undefined),
-			ruleset('whitespace',        `[\\u0020\\t-\\r]+`, undefined),
+			ruleset('singleLineComment', `'//' ( !'\\n' . )* '\\n'`, null),
+			ruleset('multiLineComment',  `'/*' ( !'*/' . )* '*/'`, null),
+			ruleset('whitespace',        `[\\u0020\\t-\\r]+`, null),
 
 			ruleset('returndef', `'return' whitespace _ {rule} _ ';'`,
 				{ type: 'ruleset', name: 'return', rules: ['$1'], '...$meta': '' }),
@@ -219,7 +218,7 @@ export function createUncompiledDezentGrammar():Grammar {
 				`'?'`, { repeat: false, required: false },
 				`''`,  { repeat: false, required: true }),
 
-			ruleset('value', `{backref|constref|metaref|pivot|object|array|call|string|number|boolean|null|void}`,
+			ruleset('value', `{backref|constref|metaref|pivot|object|array|call|string|number|boolean|null}`,
 				'$1'),
 
 			ruleset('backref', 
@@ -270,9 +269,6 @@ export function createUncompiledDezentGrammar():Grammar {
 
 			ruleset('null', `'null'`,
 				{ type: 'null' }),
-
-			ruleset('void', `'void'`,
-				{ type: 'void'}),
 
 			ruleset('access', `{dotAccess|bracketAccess}*`,
 				'$1'),
@@ -565,8 +561,6 @@ function output(value: any) : ValueNode {
 				type: 'boolean',
 				value: !!value
 			}
-		case 'undefined':
-			return { type: 'void' };
 		default:
 			throw new Error('Unexpected JSON data type: ' + typeof value)
 	}

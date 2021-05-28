@@ -35,6 +35,8 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
   * [`...` spread](#-spread)
   * [`^` pivot](#-pivot)
   * [`.` or `[]` property access](#-or--property-access)
+  * [`?` collapse](-collapse)
+  * [void](#-void)
 
 
 # Introduction
@@ -734,4 +736,26 @@ You can access object and array properties much like you would in javascript:
 `).parse('anything');
 [ 1, 4 ]
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
+---
+## ? collapse
+---
+
+You can cause null or empty backrefs to be collapsed in an array context.
+
+```javascript
+> new Dezent(`
+    return {.} {'b'}? {.} -> [ $1, $2?, $3 ];
+`).parse('aa');
+[ 'a', 'a' ]
+> new Dezent(`
+    letter = 
+        { [a-d] | [f-i] } -> $1,
+        'e' -> null;
+    return {letter}* -> $1?;
+`).parse('abcdefghi');
+[ 'a', 'b', 'c', 'd', 'f', 'g', 'h', 'i' ]
+```
+
 <div align="right"><a href="#table-of-contents">table of contents</a></div>

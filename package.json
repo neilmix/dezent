@@ -2,10 +2,16 @@
   "name": "dezent",
   "version": "0.8.0",
   "description": "Powerful pattern matching and parsing that's readable, recursive, and structured.",
-  "keywords": ["parse", "parsing", "parser", "patterns", "pattern matching"],
+  "keywords": [
+    "parse",
+    "parsing",
+    "parser",
+    "patterns",
+    "pattern matching"
+  ],
   "homepage": "https://github.com/neilmix/dezent",
   "repository": "github:neilmix/dezent",
-  "bugs": { 
+  "bugs": {
     "url": "https://github.com/neilmix/dezent/issues",
     "email": "neilmix@gmail.com"
   },
@@ -21,7 +27,7 @@
     "test-debug": "npm run compile-debug && node ./node_modules/.bin/jest ./test/Parser.test.js --runInBand",
     "clean": "rm -f *.js && rm -fr test && rm -fr dist",
     "prepublishOnly": "npm run clean && npm run dist && git remote update && echo 'Verifying local repo is same as remote...' && git diff --no-ext-diff --quiet --exit-code",
-    "postpublish" : "git tag v`./getversion` && git push --tags"
+    "postpublish": "git tag v`./getversion` && git push --tags"
   },
   "author": "Neil Mix <neilmix@gmail.com>",
   "license": "SEE LICENSE IN License.txt",
@@ -30,7 +36,7 @@
     "jest": "^23.6.0"
   },
   "dependencies": {
-    "@types/node": "^9.6.31"
+    "@types/node": "^9.6.61"
   },
   "jest": {
     "testEnvironment": "node"
