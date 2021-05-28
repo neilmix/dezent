@@ -36,7 +36,7 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
   * [`^` pivot](#-pivot)
   * [`.` or `[]` property access](#-or--property-access)
   * [`?` collapse](-collapse)
-  * [void](#-void)
+  * [callbacks](#-callbacks)
 
 
 # Introduction
@@ -756,6 +756,22 @@ You can cause null or empty backrefs to be collapsed in an array context.
     return {letter}* -> $1?;
 `).parse('abcdefghi');
 [ 'a', 'b', 'c', 'd', 'f', 'g', 'h', 'i' ]
+```
+
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
+---
+## callbacks
+---
+
+Provide your own custom callback functions to produce special output, or even SAX-style parsing.
+
+```javascript
+> new Dezent(
+    `return {.*} -> translate($1);`,
+    { translate: (txt) => txt.replace("foo", "bar") }
+).parse('all foo all the time');
+'all bar all the time'
 ```
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
