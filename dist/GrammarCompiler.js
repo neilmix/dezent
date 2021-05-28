@@ -239,10 +239,10 @@ var GrammarCompiler = /** @class */ (function () {
             }).join(' ');
             node.match = function (buf, idx) {
                 var e_7, _a;
+                var c = buf.charAt(idx);
                 try {
                     for (var _b = __values(node.ranges), _c = _b.next(); !_c.done; _c = _b.next()) {
                         var range = _c.value;
-                        var c = buf.charAt(idx);
                         if (c >= range[0].match && c <= range[1].match) {
                             return [true, 1];
                         }

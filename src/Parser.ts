@@ -111,6 +111,8 @@ export type ParseFrame = {
     output?: Output,
 }
 
+export const BufferEmpty = { toString: () => "BufferEmpty" };
+
 let dezentGrammar:Grammar;
 
 export function findDezentGrammar() : Grammar{
@@ -159,7 +161,7 @@ export class Parser {
     options : ParserOptions;
     omitFails : number = 0;
     debugLog : any[][] = [];
-    run : Function;
+    generator : IterableIterator<any>;
     error : Error;
 
     constructor(grammar:Grammar, buffer:ParseBuffer, functions:Functions, options:ParserOptions) {
@@ -194,257 +196,279 @@ export class Parser {
         this.valueBuilder = new ValueBuilder(grammar, functions);
         this.enter(root);
 
-        (() => {
-            let maxPos = 0;
-            let failedPatterns = {};
-            let exited:ParseFrame;
+        this.generator = this.run();
+    }
 
-            this.run = () => {
-                while (this.stack.length) {
-                    let current = this.top();
-        
-                    if (current.paths == 1) {
-                        this.parseCache.discardPos(current.pos);
-                    }
-                    
-                    if (current.index > current.items.length) {
-                        parserError(ErrorCode.ArrayOverrun);
-                    }
-        
-                    if (current.status == MatchStatus.Continue) {
-                        switch (current.node.type) {
-                            case "token":
-                                let desc = <MatcherNode>current.node.descriptor;
-                                if (["string","class","any"].includes(desc.type)) {
-                                    let pos = current.pos;
-                                    let matched, consumed;
-                                    do {
-                                        try {
-                                            [matched, consumed] = desc.match(this.buffer, pos);
-                                        } catch(e) {
-                                            if (this.buffer.closed && e == ParseBufferExhaustedError) {
-                                                [matched, consumed] = [false, 0];
-                                            } else {
-                                                throw e;
-                                            }
-                                        }
-                                        if (current.node.and || current.node.not) {
-                                            if ((current.node.and && matched) || (current.node.not && !matched)) {
-                                                current.status = MatchStatus.Pass
-                                            } else {
-                                                current.status = MatchStatus.Fail;
-                                            }
-                                        } else if (matched) {
-                                            current.consumed += consumed;
-                                            current.status = MatchStatus.Pass;
-                                            this.parseCache.store(current, pos);
-                                            pos += consumed;
+    *run() {
+        let maxPos = 0;
+        let failedPatterns = {};
+        let exited:ParseFrame;
+
+        while (this.stack.length) {
+            let current = this.top();
+
+            if (current.paths == 1) {
+                this.parseCache.discardPos(current.pos);
+            }
+            
+            if (current.index > current.items.length) {
+                parserError(ErrorCode.ArrayOverrun);
+            }
+
+            if (current.status == MatchStatus.Continue) {
+                switch (current.node.type) {
+                    case "token":
+                        let desc = <MatcherNode>current.node.descriptor;
+                        if (["string","class","any"].includes(desc.type)) {
+                            let pos = current.pos;
+                            let matched, consumed;
+                            do {
+                                while (true) {
+                                    try {
+                                        [matched, consumed] = desc.match(this.buffer, pos);
+                                        break;
+                                    } catch(e) {
+                                        if (this.buffer.closed && e == ParseBufferExhaustedError) {
+                                            [matched, consumed] = [false, 0];
+                                            break;
+                                        } else if (e == ParseBufferExhaustedError) {
+                                            yield BufferEmpty;
                                         } else {
-                                            if (current.consumed > 0 || !current.node.required) {
-                                                current.status = MatchStatus.Pass;
-                                            } else {
-                                                current.status = MatchStatus.Fail;
-                                                if (pos == maxPos && !this.omitFails && desc.pattern != '') {
-                                                    failedPatterns[desc.pattern] = true;
-                                                }
-                                            }
-                                        }        
-                                    } while (matched && current.node.repeat);
-                                    break;
+                                            throw e;
+                                        }
+                                    }
                                 }
-                                // FALL THROUGH
-                            default:
-                                this.enter(current.items[current.index]);
-                                break;
-                            case "ruleref":
-                                this.enter(this.rulesets[current.node.name]);
-                                break;
-                        }
-                    } else {
-                        exited = this.stack.pop();
-                        this.parseCache.store(exited);
-                        let next = this.top();
-                        if (!next) {
-                            // our parsing is complete!
+                                if (current.node.and || current.node.not) {
+                                    if ((current.node.and && matched) || (current.node.not && !matched)) {
+                                        current.status = MatchStatus.Pass
+                                    } else {
+                                        current.status = MatchStatus.Fail;
+                                    }
+                                } else if (matched) {
+                                    current.consumed += consumed;
+                                    current.status = MatchStatus.Pass;
+                                    this.parseCache.store(current, pos);
+                                    pos += consumed;
+                                } else {
+                                    if (current.consumed > 0 || !current.node.required) {
+                                        current.status = MatchStatus.Pass;
+                                    } else {
+                                        current.status = MatchStatus.Fail;
+                                        if (pos == maxPos && !this.omitFails && desc.pattern != '') {
+                                            failedPatterns[desc.pattern] = true;
+                                        }
+                                    }
+                                }        
+                            } while (matched && current.node.repeat);
                             break;
                         }
-                        if (["ruleset", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
-                            if (!exited.node["canFail"]) {
-                                this.omitFails--;
-                            }
+                        // FALL THROUGH
+                    default:
+                        this.enter(current.items[current.index]);
+                        break;
+                    case "ruleref":
+                        this.enter(this.rulesets[current.node.name]);
+                        break;
+                }
+            } else {
+                exited = this.stack.pop();
+                this.parseCache.store(exited);
+                let next = this.top();
+                if (!next) {
+                    // our parsing is complete!
+                    break;
+                }
+                if (["ruleset", "rule", "pattern", "capture", "group"].includes(exited.node.type)) {
+                    if (!exited.node["canFail"]) {
+                        this.omitFails--;
+                    }
+                }
+                if (exited.node["pattern"] || exited.node.type == "ruleref") {
+                    if (this.options.debugErrors) {
+                        this.debugLog.push([
+                            exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', 
+                            this.buffer.substr(exited.pos, 20), 
+                            exited.node["pattern"] || exited.node["name"]
+                        ]);
+                    }
+                }
+                // special handling is required for left recursion
+                if (next.leftContinuation) {
+                    if (exited.status == MatchStatus.Pass && exited.consumed > next.consumed) {
+                        assert(exited.node.type == "rule");
+                        // try again using a copy of our continuation, but update our leftOffsets 
+                        // to reflect further consumption
+                        next.consumed = exited.consumed;
+                        let continuation = next.leftContinuation.map((frame) => Object.assign({}, frame));
+                        continuation.forEach((frame) => frame.leftOffset += exited.consumed);
+                        this.stack = this.stack.concat(continuation);
+                        // update the state of the ruleset at the top of our stack
+                        let top = this.stack[this.stack.length-1];
+                        assert(top.node.type == "ruleset");
+                        top.consumed = exited.consumed;
+                        top.index = (<RuleNode>exited.node).rulesetIndex;
+                        if (top.wantOutput) {
+                            this.yieldOutput(exited, top, next);
+                            // the final pass will fail, so we want to make sure our base frame
+                            // contains results from the most recent successful run
+                            next.output = top.output;
                         }
-                        if (exited.node["pattern"] || exited.node.type == "ruleref") {
-                            if (this.options.debugErrors) {
-                                this.debugLog.push([
-                                    exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', 
-                                    this.buffer.substr(exited.pos, 20), 
-                                    exited.node["pattern"] || exited.node["name"]
-                                ]);
-                            }
-                        }
-                        // special handling is required for left recursion
-                        if (next.leftContinuation) {
-                            if (exited.status == MatchStatus.Pass && exited.consumed > next.consumed) {
-                                assert(exited.node.type == "rule");
-                                // try again using a copy of our continuation, but update our leftOffsets 
-                                // to reflect further consumption
-                                next.consumed = exited.consumed;
-                                let continuation = next.leftContinuation.map((frame) => Object.assign({}, frame));
-                                continuation.forEach((frame) => frame.leftOffset += exited.consumed);
-                                this.stack = this.stack.concat(continuation);
-                                // update the state of the ruleset at the top of our stack
-                                let top = this.stack[this.stack.length-1];
-                                assert(top.node.type == "ruleset");
-                                top.consumed = exited.consumed;
-                                top.index = (<RuleNode>exited.node).rulesetIndex;
-                                if (top.wantOutput) {
-                                    this.yieldOutput(exited, top, next);
-                                    // the final pass will fail, so we want to make sure our base frame
-                                    // contains results from the most recent successful run
-                                    next.output = top.output;
-                                }
-                                // we got at least one successful continuation - mark our base ruleset as a success
-                                next.status = MatchStatus.Pass;
-                                continue;
-                            } else if (next.status == MatchStatus.Pass) {
-                                // we previously successfully recursed, we're passing!
-                                // don't fall through or we'll get marked as a fail.
-                                continue;
-                            }
-                            // FALL THROUGH
-                        }
-                        if ((next.node.type == "token" && next.node.not && exited.status == MatchStatus.Fail) || 
-                            ((next.node.type != "token" || !next.node.not) && exited.status == MatchStatus.Pass)) 
-                        {
-                            if (exited.pos + exited.consumed > maxPos) {
-                                maxPos = exited.pos + exited.consumed;
-                                failedPatterns = {};
-                            }
-                            // consume, but only if there's not a predicate
-                            if (exited.node.type != "token" || !(exited.node.and || exited.node.not)) {
-                                next.consumed += exited.consumed;
-                            }
-                            if (next.node.type == "pattern") {
-                                if (++next.index >= next.items.length) {
-                                    next.status = MatchStatus.Pass;
-                                } // otherwise stay at Continue
-                            } else {
-                                next.status = MatchStatus.Pass;
-                            }
-                            if (next.node.type == "token") {
-                                // when repeating, make sure we consumed to avoid infinite loops
-                                if (next.node.repeat && exited.consumed > 0) {
-                                    // cache intermediate positions of tokens to avoid pathological
-                                    // bad grammar performance.
-                                    this.parseCache.store(next, exited.pos);
-                                    this.enter(next.node.descriptor);
-                                }
-                            }
-                            // handle output
-                            if (next.node.type == "capture") {
-                                if (exited.output && exited.items.length == 1) {
-                                    // output has descended the stack to our capture - capture it
-                                    // but only if it's the only node in this capture
-                                    exited.output.captureIndex = next.node.index;
-                                    next.captures = [exited.output];
-                                } else {
-                                    // create a capture text segment
-                                    next.captures = [{
-                                        captureIndex: next.node.index,
-                                        position: exited.pos,
-                                        length: exited.consumed,
-                                        value: this.buffer.substr(exited.pos, exited.consumed),
-                                    }];
-                                }
-                            } else if (exited.output) {
-                                    // make the output descend the stack
-                                    next.output = exited.output;
-                            } else if (next.node.type != "ruleset" && exited.captures) {
-                                // captures descend the stack until we reach a ruleset, at which point they
-                                // get bundled into an output if within a capture (see below), otherwise discarded
-                                if (next.captures) {
-                                    next.captures = next.captures.concat(exited.captures);
-                                } else {
-                                    next.captures = exited.captures;
-                                }
-                            } else if (next.node.type == "ruleset") {
-                                this.yieldOutput(exited, next, next);
-                            }
-                        } else { // exited.matchStatus == MatchStatus.FAIL
-                            if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
-                                if (++next.index >= next.items.length) {
-                                    next.status = MatchStatus.Fail;
-                                } else if (next.paths > 0) {
-                                    next.paths--;
-                                    assert(next.paths >= 1);
-                                }
-                            } else if (next.node.type == "token") {
-                                if (!next.node.required) {
-                                    // nodes that are not required always pass
-                                    next.status = MatchStatus.Pass;
-                                    if (exited.node.type == "capture" && !next.node.repeat) {
-                                        // a failed non-required non-repeating capture should yield null
-                                        next.captures = [{
-                                            captureIndex: exited.node.index,
-                                            position: exited.pos,
-                                            length: 0,
-                                            value: null
-                                        }];
-                                    }
-                                } else if (next.status == MatchStatus.Continue) {
-                                    // this node's descriptor never passed - it failed
-                                    next.status = MatchStatus.Fail;
-                                } // it is already marked as Pass
-                            } else {
-                                next.status = MatchStatus.Fail;
-                            }
-                            if (next.node.type == "ruleset" && next.node.name == 'return') {
-                                parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
-                            }
-                        }
-                        if (!this.options.enableCache) {
-                            this.parseCache.frameComplete(exited);
+                        // we got at least one successful continuation - mark our base ruleset as a success
+                        next.status = MatchStatus.Pass;
+                        continue;
+                    } else if (next.status == MatchStatus.Pass) {
+                        // we previously successfully recursed, we're passing!
+                        // don't fall through or we'll get marked as a fail.
+                        continue;
+                    }
+                    // FALL THROUGH
+                }
+                if ((next.node.type == "token" && next.node.not && exited.status == MatchStatus.Fail) || 
+                    ((next.node.type != "token" || !next.node.not) && exited.status == MatchStatus.Pass)) 
+                {
+                    if (exited.pos + exited.consumed > maxPos) {
+                        maxPos = exited.pos + exited.consumed;
+                        failedPatterns = {};
+                    }
+                    // consume, but only if there's not a predicate
+                    if (exited.node.type != "token" || !(exited.node.and || exited.node.not)) {
+                        next.consumed += exited.consumed;
+                    }
+                    if (next.node.type == "pattern") {
+                        if (++next.index >= next.items.length) {
+                            next.status = MatchStatus.Pass;
+                        } // otherwise stay at Continue
+                    } else {
+                        next.status = MatchStatus.Pass;
+                    }
+                    if (next.node.type == "token") {
+                        // when repeating, make sure we consumed to avoid infinite loops
+                        if (next.node.repeat && exited.consumed > 0) {
+                            // cache intermediate positions of tokens to avoid pathological
+                            // bad grammar performance.
+                            this.parseCache.store(next, exited.pos);
+                            this.enter(next.node.descriptor);
                         }
                     }
-                } 
-                
-                if (!exited.output) {
-                    parserError(ErrorCode.EmptyOutput);
+                    // handle output
+                    if (next.node.type == "capture") {
+                        if (exited.output && exited.items.length == 1) {
+                            // output has descended the stack to our capture - capture it
+                            // but only if it's the only node in this capture
+                            exited.output.captureIndex = next.node.index;
+                            next.captures = [exited.output];
+                        } else {
+                            // create a capture text segment
+                            next.captures = [{
+                                captureIndex: next.node.index,
+                                position: exited.pos,
+                                length: exited.consumed,
+                                value: this.buffer.substr(exited.pos, exited.consumed),
+                            }];
+                        }
+                    } else if (exited.output) {
+                            // make the output descend the stack
+                            next.output = exited.output;
+                    } else if (next.node.type != "ruleset" && exited.captures) {
+                        // captures descend the stack until we reach a ruleset, at which point they
+                        // get bundled into an output if within a capture (see below), otherwise discarded
+                        if (next.captures) {
+                            next.captures = next.captures.concat(exited.captures);
+                        } else {
+                            next.captures = exited.captures;
+                        }
+                    } else if (next.node.type == "ruleset") {
+                        this.yieldOutput(exited, next, next);
+                    }
+                } else { // exited.matchStatus == MatchStatus.FAIL
+                    if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
+                        if (++next.index >= next.items.length) {
+                            next.status = MatchStatus.Fail;
+                        } else if (next.paths > 0) {
+                            next.paths--;
+                            assert(next.paths >= 1);
+                        }
+                    } else if (next.node.type == "token") {
+                        if (!next.node.required) {
+                            // nodes that are not required always pass
+                            next.status = MatchStatus.Pass;
+                            if (exited.node.type == "capture" && !next.node.repeat) {
+                                // a failed non-required non-repeating capture should yield null
+                                next.captures = [{
+                                    captureIndex: exited.node.index,
+                                    position: exited.pos,
+                                    length: 0,
+                                    value: null
+                                }];
+                            }
+                        } else if (next.status == MatchStatus.Continue) {
+                            // this node's descriptor never passed - it failed
+                            next.status = MatchStatus.Fail;
+                        } // it is already marked as Pass
+                    } else {
+                        next.status = MatchStatus.Fail;
+                    }
+                    if (next.node.type == "ruleset" && next.node.name == 'return') {
+                        parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
+                    }
                 }
-                if (exited.pos != 0) {
-                    parserError(ErrorCode.InputConsumedBeforeResult);
-                }
-                if (exited.output.length != this.buffer.length) {
-                    parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
-                }
-        
-                return exited.output.value;
-        
-                function expectedTerminals() {
-                    return Object.keys(failedPatterns);
+                if (!this.options.enableCache) {
+                    this.parseCache.frameComplete(exited);
                 }
             }
-        })();
+        } 
+        
+        if (!exited.output) {
+            parserError(ErrorCode.EmptyOutput);
+        }
+        if (exited.pos != 0) {
+            parserError(ErrorCode.InputConsumedBeforeResult);
+        }
+        if (exited.output.length < this.buffer.length) {
+            parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
+        }
+
+        while (!this.buffer.closed) {
+            yield BufferEmpty;
+            if (exited.output.length > this.buffer.length) {
+                parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, ["<EOF>"]);
+            }
+        }
+
+        return exited.output.value;
+
+        function expectedTerminals() {
+            return Object.keys(failedPatterns);
+        }
     }
 
     parse() : any {
         if (this.error) {
             throw this.error;
         }
+        if (!this.generator) {
+            parserError(ErrorCode.Unreachable);
+        }
         try {
-            return this.run();
-        } catch(e) {
-            if (e != ParseBufferExhaustedError) {
-                if (this.options.debugErrors) {
-                    let lines = [];
-                    for (let msg of this.debugLog) {
-                        lines.push(msg.join('\t').replace(/\n/g, '\\n'));
-                    }
-                    console.error("Debug log:\n", lines.join("\n"));
-                    console.error("Parser stack:\n", this.stack);
-                }
-                this.error = e;
+            let result = this.generator.next().value;
+            if (result == BufferEmpty) {
+                assert(!this.buffer.closed);
+                return undefined;
+            } else {
+                return result;
             }
+        } catch(e) {
+            assert(e != ParseBufferExhaustedError);
+            if (this.options.debugErrors) {
+                let lines = [];
+                for (let msg of this.debugLog) {
+                    lines.push(msg.join('\t').replace(/\n/g, '\\n'));
+                }
+                console.error("Debug log:\n", lines.join("\n"));
+                console.error("Parser stack:\n", this.stack);
+            }
+            this.error = e;
+            this.generator = null;
             throw e;
         }    
     }

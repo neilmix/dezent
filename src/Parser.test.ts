@@ -21,7 +21,7 @@ import "jest";
 import { execSync } from "child_process";
 
 import "./Parser";
-import { Dezent } from "./Dezent";
+import { Dezent, DezentStream } from "./Dezent";
 import * as parser from "./Parser";
 import { createUncompiledDezentGrammar } from "./Grammar";
 import { Functions } from "./Output";
@@ -344,6 +344,23 @@ scheduleTest("dezent grammar documentation", () => {
     hackedGrammar.vars.meta = prevMeta;
 
     expect(parsedDezent).toEqual(uncompiledDezent);
+});
+
+scheduleTest("chunked parsing", () => {
+    function compare(grammar, text) {
+        let expected = new Dezent(grammar).parse(text);
+
+        let dez = new DezentStream(grammar, null, {debugErrors:true});
+        for (let char of text) {
+            dez.write(char);
+        }
+        let actual = dez.close();
+        expect(actual).toEqual(expected);
+    }
+
+    compare("return [a]* -> $0;", "aa");
+    let textDezent = readFileSync("./src/grammar.dezent").toString();
+    compare(textDezent, textDezent);
 });
 
 test("command line util", () => {

@@ -180,8 +180,8 @@ export class GrammarCompiler {
                 return ret;
             }).join(' ');
             node.match = (buf, idx) => {
+                let c = buf.charAt(idx);
                 for (let range of node.ranges) {
-                    let c = buf.charAt(idx);
                     if (c >= range[0].match && c <= range[1].match) {
                         return [true, 1];
                     }

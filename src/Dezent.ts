@@ -82,7 +82,6 @@ export class DezentStream {
     private options:ParserOptions;
     private buffer:ParseBuffer;
     private parser:Parser;
-    private result:any;
 
     constructor(grammar:string|Grammar, functions?:Functions, options?:ParserOptions) {
         grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
@@ -94,13 +93,7 @@ export class DezentStream {
 
     write(text:string) {
         this.buffer.addChunk(text);
-        try {
-            this.parser.parse();
-        } catch (err) {
-            if (err != ParseBufferExhaustedError) {
-                throw err;
-            }
-        }
+        this.parser.parse();
     }
 
     close() : any {
@@ -108,7 +101,6 @@ export class DezentStream {
             throw this.parser.error;
         }
         this.buffer.close();
-        this.result = this.parser.parse();
-        return this.result;
+        return this.parser.parse();
     }
 }

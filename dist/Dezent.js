@@ -56,22 +56,14 @@ var DezentStream = /** @class */ (function () {
     }
     DezentStream.prototype.write = function (text) {
         this.buffer.addChunk(text);
-        try {
-            this.parser.parse();
-        }
-        catch (err) {
-            if (err != ParseBuffer_1.ParseBufferExhaustedError) {
-                throw err;
-            }
-        }
+        this.parser.parse();
     };
     DezentStream.prototype.close = function () {
         if (this.parser.error) {
             throw this.parser.error;
         }
         this.buffer.close();
-        this.result = this.parser.parse();
-        return this.result;
+        return this.parser.parse();
     };
     return DezentStream;
 }());

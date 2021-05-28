@@ -101,53 +101,37 @@
         throw parserError(ErrorCode.Unreachable);
     }
 
-    *lineIterator() : IterableIterator<{ line: number, char: number, length: number, lineText: string }> {
-        let linenum = 0, char = 0, remainder = '';
-        for (let i = this.chunks.length - 1; i >= 0; i--) {
-            let lines = this.chunks[i].split('\n');
-            for (let j = 0; j < lines.length; j++) {
-                let line = j == 0 ? remainder + lines[j] : lines[j];
-                if (j < lines.length - 1) {
-                    linenum++;
-                    yield { line: linenum, char: char, length: lines[j].length + 1, lineText: lines[j] };
-                    char += lines[j].length + 1;    
-                } else {
-                    remainder = lines[j];
-                }
-            }
-        }
-        yield { line: ++linenum, char: char, length: remainder.length, lineText: remainder };
-    }
-
     findLineAndChar(pos:number) : { line: number, char: number, lineText: string, pointerText: string } {
-        let lineData;
-        for (lineData of this.lineIterator()) {
-            if (lineData.char + lineData.length >= pos) {
-                let char = pos - lineData.char;
+        let lineText = '';
+        let line = 0;
+        for (lineText of this.chunks.reverse().join('').split('\n')) {
+            line++;
+            if (pos <= lineText.length) {
                 let leading = 0;
-                for (let i = 0; i < char; i++) {
-                    if (lineData.lineText[i] == '\t') {
+                for (let i = 0; i < pos; i++) {
+                    if (lineText[i] == '\t') {
                         leading += 4;
                     } else {
                         leading++;
                     }
                 }
-                let detabbed = lineData.lineText.replace(/\t/g, ' '.repeat(4));
+                let detabbed = lineText.replace(/\t/g, ' '.repeat(4));
                 return {
-                    line: lineData.line,
-                    char: pos - lineData.char + 1,
+                    line: line,
+                    char: pos + 1,
                     lineText: detabbed,
                     pointerText: ' '.repeat(leading) + '^'
                 }
             }
+            pos -= lineText.length + 1;
         }
         // this *should* not happen,but we're in the middle of error handling, so just give
         // an obtuse answer rather than blowing everything up.
         return {
-            line: lineData.line,
-            char: lineData.length,
-            lineText: lineData.lineText,
-            pointerText: ' '.repeat(lineData.length) + '^'
+            line: line,
+            char: lineText.length,
+            lineText: lineText,
+            pointerText: ' '.repeat(lineText.length) + '^'
         }
     }
 
