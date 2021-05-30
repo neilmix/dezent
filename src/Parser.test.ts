@@ -341,6 +341,11 @@ scheduleTest("dezent grammar documentation", () => {
 });
 
 scheduleTest("chunked parsing", () => {
+    let ds = new DezentStream(`return {[a-zA-Z]+} ' '+ {[a-zA-Z]+} {[!.?]} -> [$1, $2, $3];`);
+    ds.write("Hello w");
+    ds.write("orld!");
+    expect(ds.close()).toEqual(["Hello","world","!"]);
+
     function compare(grammar, text) {
         let expected = new Dezent(grammar).parse(text);
 

@@ -203,10 +203,7 @@ var ValueBuilder = /** @class */ (function () {
                             if (!Array.isArray(tuple) || tuple.length != 2) {
                                 GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
                             }
-                            // make sure our value isn't void...
-                            if (tuple[1] !== undefined) {
-                                ret[tuple[0]] = tuple[1];
-                            }
+                            ret[tuple[0]] = tuple[1];
                         }
                     }
                     catch (e_6_1) { e_6 = { error: e_6_1 }; }
@@ -243,8 +240,7 @@ var ValueBuilder = /** @class */ (function () {
                 }
                 else {
                     var val = this.value(elem, captures, metas);
-                    if (val !== undefined // void
-                        && ((elem.type == "backref" && !elem.collapse) || val !== null)) {
+                    if ((elem.type == "backref" && !elem.collapse) || val !== null) {
                         ret.push(val);
                     }
                 }
@@ -293,9 +289,6 @@ var ValueBuilder = /** @class */ (function () {
     };
     ValueBuilder.prototype.null = function () {
         return null;
-    };
-    ValueBuilder.prototype.void = function () {
-        return undefined;
     };
     return ValueBuilder;
 }());

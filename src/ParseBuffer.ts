@@ -44,8 +44,8 @@
     }
 
     addChunk(text:string) {
+        this.indices.unshift(this.indices.length ? this.indices[0] + this.chunks[0].length : 0);
         this.chunks.unshift(text);
-        this.indices.unshift(this.indices.length ? this.indices[0] + text.length : 0);
         this._length += text.length;
     }
 

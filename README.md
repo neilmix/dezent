@@ -7,7 +7,8 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
 * [Status](#Status)
 * [License](#License)
 * [Quick Start](#Quick-Start)
-* [Reference - javascript library](#Reference---javascript-library)
+* [Reference - the Dezent object](#Reference---the-dezent-object)
+* [Reference - the DezentStream object](#Reference---the-dezentstream-object)
 * [Reference - command-line util](#Reference---command-line-util)
 * [Reference - grammar - pattern matching](#Reference---grammar---pattern-matching)
   * [return](#return)
@@ -47,13 +48,14 @@ Dezent is ideal for:
 * Complex nested pattern matching
 * Converting text data into hierarchical data structures
 * Extracting numerous text segments into structured output
+* Parsing large data files
 * Recursive descent parsing
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 # Status
 
-Dezent is currently in _alpha_. This is the first public release of Dezent, for the purpose of soliciting feedback. Dezent is fully functional and ready for use, and we encourage its use, but the grammar and APIs of Dezent may change as a result of public feedback, so please be aware that future releases might not be backward compatible with this release.
+Dezent is currently in _alpha_. This is the first public release of Dezent, for the purpose of soliciting feedback. Dezent is fully functional and ready for use, and its use is encouraged, but the grammar and APIs of Dezent may change as a result of public feedback, so please be aware that future releases might not be backward compatible with this release.
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
@@ -76,10 +78,8 @@ The following examples are included in this distribution:
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
-# Reference - javascript library
+# Reference - the Dezent object
 
-## The Dezent object
----
 The Dezent constructor parses and compiles your grammar:
 ```javascript
 > Dezent = require('dezent').default;
@@ -114,6 +114,25 @@ At line 1 char 9:
 Hello to the whole world!
         ^
 ```
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
+# Reference - the DezentStream object
+
+The DezentStream class provides partial or chunked parsing, which is useful for large files.
+It works much like the Dezent class, but uses the ```write``` and ```close``` methods in place of the ```parse``` method.
+```javascript
+> DezentStream = require('dezent').DezentStream;
+[Function: DezentStream]
+> let ds = new DezentStream(`return {[a-zA-Z]+} ' '+ {[a-zA-Z]+} {[!.?]} -> [$1, $2, $3];`);
+undefined
+ds.write('Hello w');
+undefined
+ds.write('orld!');
+undefined
+ds.close();
+[ 'Hello', 'world', '!' ]
+```
+
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 # Reference - command-line util

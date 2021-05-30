@@ -46,10 +46,10 @@ function createUncompiledDezentGrammar() {
     return {
         ruleset: [
             returndef("_ ( {returndef|ruleset} _ | {constant} _ | {pragma} _ )*", { ruleset: "$1", vars: { '...$2': '' }, pragmas: { '...$3': '' } }),
-            ruleset('_', "( singleLineComment | multiLineComment | whitespace? )*", undefined),
-            ruleset('singleLineComment', "'//' ( !'\\n' . )* '\\n'", undefined),
-            ruleset('multiLineComment', "'/*' ( !'*/' . )* '*/'", undefined),
-            ruleset('whitespace', "[\\u0020\\t-\\r]+", undefined),
+            ruleset('_', "( singleLineComment | multiLineComment | whitespace? )*", null),
+            ruleset('singleLineComment', "'//' ( !'\\n' . )* '\\n'", null),
+            ruleset('multiLineComment', "'/*' ( !'*/' . )* '*/'", null),
+            ruleset('whitespace', "[\\u0020\\t-\\r]+", null),
             ruleset('returndef', "'return' whitespace _ {rule} _ ';'", { type: 'ruleset', name: 'return', rules: ['$1'], '...$meta': '' }),
             ruleset('ruleset', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
             ruleset('constant', "'$' {identifier} _ '=' _ {value} _ ';'", ['$1', '$2']),
@@ -72,7 +72,7 @@ function createUncompiledDezentGrammar() {
             ruleset('ruleref', "{identifier}", { type: 'ruleref', name: '$1', '...$meta': '' }),
             ruleset('predicate', "'&'", { and: true, not: false }, "'!'", { and: false, not: true }, "''", { and: false, not: false }),
             ruleset('modifier', "'*'", { repeat: true, required: false }, "'+'", { repeat: true, required: true }, "'?'", { repeat: false, required: false }, "''", { repeat: false, required: true }),
-            ruleset('value', "{backref|constref|metaref|pivot|object|array|call|string|number|boolean|null|void}", '$1'),
+            ruleset('value', "{backref|constref|metaref|pivot|object|array|call|string|number|boolean|null}", '$1'),
             ruleset('backref', "'$' {[0-9]+} '?' {access}", { type: 'backref', index: '$1', collapse: true, access: '$2', '...$meta': '' }, "'$' {[0-9]+} {access}", { type: 'backref', index: '$1', collapse: false, access: '$2', '...$meta': '' }),
             ruleset('constref', "'$' {identifier} {access}", { type: 'constref', name: '$1', access: '$2', '...$meta': '' }),
             ruleset('metaref', "'@' {'position'|'length'}", { type: 'metaref', name: '$1' }),
@@ -88,7 +88,6 @@ function createUncompiledDezentGrammar() {
             ruleset('number', "'-'? ( [0-9]+ )? '.' [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }, "'-'? [0-9]+ ( [eE] [-+] [0-9]+ )?", { type: 'number', value: '$0' }),
             ruleset('boolean', "'true'", { type: 'boolean', value: true }, "'false'", { type: 'boolean', value: false }),
             ruleset('null', "'null'", { type: 'null' }),
-            ruleset('void', "'void'", { type: 'void' }),
             ruleset('access', "{dotAccess|bracketAccess}*", '$1'),
             ruleset('dotAccess', "'.' {identifier}", { name: '$1', '...$meta': '' }),
             ruleset('bracketAccess', "'[' _ {backref|constref|metaref|string|index} _ ']'", { value: '$1', '...$meta': '' }),
@@ -390,8 +389,6 @@ function output(value) {
                 type: 'boolean',
                 value: !!value
             };
-        case 'undefined':
-            return { type: 'void' };
         default:
             throw new Error('Unexpected JSON data type: ' + typeof value);
     }

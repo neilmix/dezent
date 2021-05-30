@@ -548,7 +548,7 @@ var Parser = /** @class */ (function () {
             value: this.buffer.substr(base.pos, base.consumed),
         });
         // always build the value so that output callbacks can be called
-        // even if the grammar returns void
+        // even if the grammar returns null
         var value = this.valueBuilder.buildValue(exited);
         if (base.wantOutput || base.node.name == "return") {
             // our ruleset emerged from a capture - create an output (which will descend the stack)
