@@ -58,11 +58,16 @@ export class ValueBuilder {
             assert(capture.captureIndex !== undefined);
             assert(capture.captureIndex < rule.captures.length);
             if (rule.captures[capture.captureIndex]) {
-                // this indicates the capture is an array
+                // the capture is an array due to token repetition
                 if (!captureValues[capture.captureIndex]) {
                     captureValues[capture.captureIndex] = [];
                 }
                 captureValues[capture.captureIndex].push(capture.value);
+                Object.defineProperty(
+                    captureValues[capture.captureIndex],
+                    "repeated",
+                    { configurable: true, enumerable: false, value: true }
+                );
             } else {
                 // this is a solo capture
                 assert(captureValues[capture.captureIndex] === null);
@@ -97,7 +102,7 @@ export class ValueBuilder {
 
     backref(node:BackRefNode, captures) {
         let cap = captures[node.index];
-        if (node.collapse && Array.isArray(cap)) {
+        if (node.collapse && Array.isArray(cap) && cap["repeated"]) {
             let ret = [];
             for (let item of cap) {
                 if (item != null) {
@@ -184,7 +189,7 @@ export class ValueBuilder {
                 ret = ret.concat(this.value(elem, captures, metas));
             } else {
                 let val = this.value(elem, captures, metas);
-                if ((elem.type == "backref" && !elem.collapse) || val !== null) {
+                if (elem.type != "backref" || !elem.collapse || val !== null) {
                     ret.push(val);
                 }
             }

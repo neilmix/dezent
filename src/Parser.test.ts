@@ -116,6 +116,9 @@ scheduleTest("object outputs", () => {
     // trailing commas
     expectParse("return .* -> [1,2,];").toEqual([1,2]);
     expectParse("return .* -> { a: 1, b: 2, };").toEqual({ a: 1, b: 2 });
+
+    // regression bug
+    expectParse("return .* -> [ 1, null, 1 ];").toEqual([ 1, null, 1 ]);
 });
 
 scheduleTest("backref outputs", () => {
@@ -224,6 +227,7 @@ scheduleTest('array collapse', () => {
     expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2 ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', null, 'b']);
     expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2? ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', 'b']);
     expectParse(`letter = {[a-d]|[f-i]} -> $1, 'e' -> null; return {letter}* -> $1?;`, 'abcdefghi').toEqual(['a','b','c','d','f','g','h','i']);
+    expectParse(`return {rule}? -> $1?; rule = . -> [1, null];`, 'a').toEqual([1, null]);
 });
 
 scheduleTest("variables", () => {
