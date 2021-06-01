@@ -48,11 +48,12 @@ var ValueBuilder = /** @class */ (function () {
                     Parser_1.assert(capture.captureIndex !== undefined);
                     Parser_1.assert(capture.captureIndex < rule.captures.length);
                     if (rule.captures[capture.captureIndex]) {
-                        // this indicates the capture is an array
+                        // the capture is an array due to token repetition
                         if (!captureValues[capture.captureIndex]) {
                             captureValues[capture.captureIndex] = [];
                         }
                         captureValues[capture.captureIndex].push(capture.value);
+                        Object.defineProperty(captureValues[capture.captureIndex], "repeated", { configurable: true, enumerable: false, value: true });
                     }
                     else {
                         // this is a solo capture
@@ -108,7 +109,7 @@ var ValueBuilder = /** @class */ (function () {
     ValueBuilder.prototype.backref = function (node, captures) {
         var e_3, _a;
         var cap = captures[node.index];
-        if (node.collapse && Array.isArray(cap)) {
+        if (node.collapse && Array.isArray(cap) && cap["repeated"]) {
             var ret = [];
             try {
                 for (var cap_1 = __values(cap), cap_1_1 = cap_1.next(); !cap_1_1.done; cap_1_1 = cap_1.next()) {
@@ -240,7 +241,7 @@ var ValueBuilder = /** @class */ (function () {
                 }
                 else {
                     var val = this.value(elem, captures, metas);
-                    if ((elem.type == "backref" && !elem.collapse) || val !== null) {
+                    if (elem.type != "backref" || !elem.collapse || val !== null) {
                         ret.push(val);
                     }
                 }
