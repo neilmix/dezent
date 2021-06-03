@@ -17,7 +17,7 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>. 
  */
 
-import { ParseFrame, MatchStatus, assert } from "./Parser";
+import { ParseFrame, assert } from "./Parser";
 import { Node, ReturnNode, RulesetNode, TokenNode } from "./Grammar";
 
 export enum ParseCacheScope {
@@ -37,12 +37,12 @@ export class ParseCache {
     }
 
     store(frame:ParseFrame, pos?:number) {
-        if (frame.node.type == "ruleset" && frame.status != MatchStatus.Continue) {
+        if (frame.node.type == "ruleset" && frame.complete) {
             // rulesets are cached early so as to enable left recursion detection,
             // so we don't need to cache them at pass/fail
             return;
         }
-        if (frame.node.type != "ruleset" && (this.scope == ParseCacheScope.Rulesets || frame.status == MatchStatus.Continue)) {
+        if (frame.node.type != "ruleset" && (this.scope == ParseCacheScope.Rulesets || !frame.complete)) {
             return;
         }
         if (frame.cached && typeof pos == "undefined") {
@@ -55,7 +55,7 @@ export class ParseCache {
         let key = this.key(frame.node.id, frame.leftOffset);
         if (!this.frameCache[pos]) this.frameCache[pos] = [];
         assert(!this.frameCache[pos][key]);
-        this.frameCache[pos][key] = frame.status == MatchStatus.Fail ? false : frame;
+        this.frameCache[pos][key] = frame.complete && !frame.match ? false : frame;
         frame.cached = true;
     }
 

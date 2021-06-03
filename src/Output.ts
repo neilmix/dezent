@@ -63,6 +63,13 @@ export class ValueBuilder {
                     captureValues[capture.captureIndex] = [];
                 }
                 captureValues[capture.captureIndex].push(capture.value);
+
+                // This is a hack. A backref that is configured to collapse
+                // empty results (e.g. $1?) is unable to distinguish between
+                // an array generated via token repetition vs an array returned
+                // as output from a rule. So we bolt on a little info here to
+                // help out the backref processing later. We'll make this non-enumerable 
+                // so that our tests don't freak out about this extra property.
                 Object.defineProperty(
                     captureValues[capture.captureIndex],
                     "repeated",
@@ -102,6 +109,7 @@ export class ValueBuilder {
 
     backref(node:BackRefNode, captures) {
         let cap = captures[node.index];
+        // n.b. the "repeated" property is added dynamically above
         if (node.collapse && Array.isArray(cap) && cap["repeated"]) {
             let ret = [];
             for (let item of cap) {

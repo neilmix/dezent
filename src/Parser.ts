@@ -96,7 +96,8 @@ export const errorMessages = {
 }
 
 export type ParseFrame = {
-    status: MatchStatus,
+    complete: boolean,
+    match: boolean,
     node: ParseNode,
     items: RuleNode[] | PatternNode[] | TokenNode[],
     paths: number,
@@ -141,12 +142,6 @@ export function parseGrammar(text:string, options?:ParserOptions) : Grammar {
             throw e;
         }
     }
-}
-
-export enum MatchStatus {
-    Continue,
-    Pass,
-    Fail
 }
 
 export var lastParser:Parser = null; // for testing purposes
@@ -215,7 +210,7 @@ export class Parser {
                 parserError(ErrorCode.ArrayOverrun);
             }
 
-            if (current.status == MatchStatus.Continue) {
+            if (!current.complete) {
                 switch (current.node.type) {
                     case "token":
                         let desc = <MatcherNode>current.node.descriptor;
@@ -239,27 +234,24 @@ export class Parser {
                                     }
                                 }
                                 if (current.node.and || current.node.not) {
-                                    if ((current.node.and && matched) || (current.node.not && !matched)) {
-                                        current.status = MatchStatus.Pass
-                                    } else {
-                                        current.status = MatchStatus.Fail;
-                                    }
+                                    current.match = (current.node.and && matched) || (current.node.not && !matched);
                                 } else if (matched) {
                                     current.consumed += consumed;
-                                    current.status = MatchStatus.Pass;
+                                    current.match = true;
                                     this.parseCache.store(current, pos);
                                     pos += consumed;
                                 } else {
                                     if (current.consumed > 0 || !current.node.required) {
-                                        current.status = MatchStatus.Pass;
+                                        current.match = true;
                                     } else {
-                                        current.status = MatchStatus.Fail;
+                                        current.match = false;
                                         if (pos == maxPos && !this.omitFails && desc.pattern != '') {
                                             failedPatterns[desc.pattern] = true;
                                         }
                                     }
                                 }        
                             } while (matched && current.node.repeat);
+                            current.complete = true;
                             break;
                         }
                         // FALL THROUGH
@@ -286,7 +278,7 @@ export class Parser {
                 if (exited.node["pattern"] || exited.node.type == "ruleref") {
                     if (this.options.debugErrors) {
                         this.debugLog.push([
-                            exited.status == MatchStatus.Pass ? 'PASS' : 'FAIL', 
+                            exited.match ? 'PASS' : 'FAIL', 
                             this.buffer.substr(exited.pos, 20), 
                             exited.node["pattern"] || exited.node["name"]
                         ]);
@@ -294,7 +286,7 @@ export class Parser {
                 }
                 // special handling is required for left recursion
                 if (next.leftContinuation) {
-                    if (exited.status == MatchStatus.Pass && exited.consumed > next.consumed) {
+                    if (exited.match && exited.consumed > next.consumed) {
                         assert(exited.node.type == "rule");
                         // try again using a copy of our continuation, but update our leftOffsets 
                         // to reflect further consumption
@@ -314,17 +306,18 @@ export class Parser {
                             next.output = top.output;
                         }
                         // we got at least one successful continuation - mark our base ruleset as a success
-                        next.status = MatchStatus.Pass;
+                        next.match = true;
+                        next.complete = true;
                         continue;
-                    } else if (next.status == MatchStatus.Pass) {
+                    } else if (next.match) {
                         // we previously successfully recursed, we're passing!
                         // don't fall through or we'll get marked as a fail.
                         continue;
                     }
                     // FALL THROUGH
                 }
-                if ((next.node.type == "token" && next.node.not && exited.status == MatchStatus.Fail) || 
-                    ((next.node.type != "token" || !next.node.not) && exited.status == MatchStatus.Pass)) 
+                if ((next.node.type == "token" && next.node.not && !exited.match) || 
+                    ((next.node.type != "token" || !next.node.not) && exited.match)) 
                 {
                     if (exited.pos + exited.consumed > maxPos) {
                         maxPos = exited.pos + exited.consumed;
@@ -336,10 +329,12 @@ export class Parser {
                     }
                     if (next.node.type == "pattern") {
                         if (++next.index >= next.items.length) {
-                            next.status = MatchStatus.Pass;
-                        } // otherwise stay at Continue
+                            next.match = true;
+                            next.complete = true;
+                        } // otherwise stay at incomplete
                     } else {
-                        next.status = MatchStatus.Pass;
+                        next.match = true;
+                        next.complete = true;
                     }
                     if (next.node.type == "token") {
                         // when repeating, make sure we consumed to avoid infinite loops
@@ -380,10 +375,11 @@ export class Parser {
                     } else if (next.node.type == "ruleset") {
                         this.yieldOutput(exited, next, next);
                     }
-                } else { // exited.matchStatus == MatchStatus.FAIL
+                } else { // exited.match == false
                     if (["ruleset", "rule", "capture", "group"].includes(next.node.type)) {
                         if (++next.index >= next.items.length) {
-                            next.status = MatchStatus.Fail;
+                            next.match = false;
+                            next.complete = true;
                         } else if (next.paths > 0) {
                             next.paths--;
                             assert(next.paths >= 1);
@@ -391,7 +387,8 @@ export class Parser {
                     } else if (next.node.type == "token") {
                         if (!next.node.required) {
                             // nodes that are not required always pass
-                            next.status = MatchStatus.Pass;
+                            next.match = true;
+                            next.complete = true;
                             if (exited.node.type == "capture" && !next.node.repeat) {
                                 // a failed non-required non-repeating capture should yield null
                                 next.captures = [{
@@ -401,12 +398,14 @@ export class Parser {
                                     value: null
                                 }];
                             }
-                        } else if (next.status == MatchStatus.Continue) {
+                        } else if (!next.complete) {
                             // this node's descriptor never passed - it failed
-                            next.status = MatchStatus.Fail;
-                        } // it is already marked as Pass
+                            next.match = false; // could be true if .not == true
+                            next.complete = true;
+                        } // it is already marked as match == false
                     } else {
-                        next.status = MatchStatus.Fail;
+                        next.match = false;
+                        next.complete = true;
                     }
                     if (next.node.type == "ruleset" && next.node.name == 'return') {
                         parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
@@ -541,7 +540,7 @@ export class Parser {
         // the cache (if only momentarily)
         let cachedFrame = this.parseCache.retrieve(pos, node, leftOffset);
         if (cachedFrame) {
-            if (cachedFrame.status == MatchStatus.Continue) {
+            if (!cachedFrame.complete) {
                 assert(cachedFrame.node.type == "ruleset");
                 // left recursion detected
                 // build a continuation and set leftOffsets
@@ -558,7 +557,8 @@ export class Parser {
                 this.stack[i].leftContinuation.forEach((f) => { f.cached = false, f.paths = -1 });
 
                 let failFrame = <ParseFrame> {};
-                failFrame.status = MatchStatus.Fail;
+                failFrame.complete = true;
+                failFrame.match = false;
                 failFrame.node = node;
                 failFrame.items = items;
                 failFrame.paths = current.paths + paths;
@@ -576,7 +576,8 @@ export class Parser {
                 let contFrame = <ParseFrame> {};
                 // subsequent continuation executions need to pass at the top to kick off
                 // downward descent through the stack
-                contFrame.status = MatchStatus.Pass;
+                contFrame.complete = true;
+                contFrame.match = true;
                 contFrame.node = node;
                 contFrame.items = items;
                 contFrame.paths = -1;
@@ -606,7 +607,8 @@ export class Parser {
                 wantOutput = false;
             }
             let newFrame:ParseFrame = <ParseFrame>{};
-            newFrame.status = cachedFrame === false ? MatchStatus.Fail : MatchStatus.Continue;
+            newFrame.match = false;
+            newFrame.complete = cachedFrame === false;
             newFrame.node = node;
             newFrame.items = items;
             newFrame.paths = current ? current.paths + paths-1 : paths;
