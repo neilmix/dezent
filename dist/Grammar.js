@@ -45,7 +45,7 @@ function createUncompiledDezentGrammar() {
     // - spread operator can only be used with backref or constref
     return {
         ruleset: [
-            returndef("_ ( {returndef|ruleset} _ | {constant} _ | {pragma} _ )*", { ruleset: "$1", vars: { '...$2': '' }, pragmas: { '...$3': '' } }),
+            returndef("_ ( {returndef|ruleset} _ | {constant} _ )*", { ruleset: "$1", vars: { '...$2': '' }, pragmas: {} }),
             ruleset('_', "( singleLineComment | multiLineComment | whitespace? )*", null),
             ruleset('singleLineComment', "'//' ( !'\\n' . )* '\\n'", null),
             ruleset('multiLineComment', "'/*' ( !'*/' . )* '*/'", null),
@@ -53,7 +53,6 @@ function createUncompiledDezentGrammar() {
             ruleset('returndef', "'return' whitespace _ {rule} _ ';'", { type: 'ruleset', name: 'return', rules: ['$1'], '...$meta': '' }),
             ruleset('ruleset', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
             ruleset('constant', "'$' {identifier} _ '=' _ {value} _ ';'", ['$1', '$2']),
-            ruleset('pragma', "'#' {'enableCache'} _ 'true' '\\n'", ['$1', true], "'#' {'enableCache'} _ 'false' '\\n'", ['$1', false]),
             ruleset('rule', "{patterns} _ '->' _ {value}", { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
             ruleset('patterns', "{pattern} _ ( '|' _ {pattern} _ )*", { patterns: ['$1', '...$2'] }),
             ruleset('pattern', "( {token} _ )+", { type: 'pattern', tokens: '$1' }),
@@ -101,9 +100,7 @@ function createUncompiledDezentGrammar() {
         vars: {
             meta: output({ meta: { pos: "@position", length: "@length" } })
         },
-        pragmas: {
-            enableCache: false
-        }
+        pragmas: {}
     };
 }
 exports.createUncompiledDezentGrammar = createUncompiledDezentGrammar;

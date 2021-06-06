@@ -136,8 +136,8 @@ export function createUncompiledDezentGrammar():Grammar {
 
 	return {
 		ruleset: [
-			returndef(`_ ( {returndef|ruleset} _ | {constant} _ | {pragma} _ )*`, 
-				{ ruleset: "$1", vars: { '...$2': '' }, pragmas: { '...$3': '' } }),
+			returndef(`_ ( {returndef|ruleset} _ | {constant} _ )*`, 
+				{ ruleset: "$1", vars: { '...$2': '' }, pragmas: { } }),
 
 			ruleset('_', `( singleLineComment | multiLineComment | whitespace? )*`, null),
 
@@ -153,10 +153,6 @@ export function createUncompiledDezentGrammar():Grammar {
 
 			ruleset('constant', `'$' {identifier} _ '=' _ {value} _ ';'`,
 				['$1', '$2']),
-
-			ruleset('pragma', 
-				`'#' {'enableCache'} _ 'true' '\\n'`, ['$1', true],
-				`'#' {'enableCache'} _ 'false' '\\n'`, ['$1', false]),
 
 			ruleset('rule', `{patterns} _ '->' _ {value}`,
 				{ type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
@@ -301,7 +297,6 @@ export function createUncompiledDezentGrammar():Grammar {
 			meta: output({ meta: { pos: "@position", length: "@length" } })
 		},
 		pragmas: {
-			enableCache: false
 		}
 	};
 }

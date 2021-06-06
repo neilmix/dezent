@@ -176,9 +176,7 @@ var Parser = /** @class */ (function () {
         this.rulesets = grammar.rulesetLookup;
         this.options = {};
         for (var pragma in grammar.pragmas) {
-            if (pragma != 'enableCache') {
-                GrammarCompiler_1.grammarError(ErrorCode.UnknownPragma, pragma);
-            }
+            GrammarCompiler_1.grammarError(ErrorCode.UnknownPragma, pragma);
             this.options[pragma] = grammar.pragmas[pragma];
         }
         for (var option in options) {

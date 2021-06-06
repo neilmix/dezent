@@ -127,7 +127,6 @@ export function findDezentGrammar() : Grammar{
 
 export interface ParserOptions {
     debugErrors?: boolean,
-    enableCache?: boolean,
 }
 
 export function parseGrammar(text:string, options?:ParserOptions) : Grammar {
@@ -150,6 +149,7 @@ export function parseGrammar(text:string, options?:ParserOptions) : Grammar {
 export var lastParser:Parser = null; // for testing purposes
 
 export class Parser {
+    grammar : Grammar;
     root : ReturnNode;
     stack : ParseFrame[] = [];
     cache : ParseFrame[] = [];
@@ -164,6 +164,9 @@ export class Parser {
 
     constructor(grammar:Grammar, buffer:ParseBuffer, functions:Functions, options:ParserOptions) {
         lastParser = this;
+
+        this.grammar = grammar;
+
         let root:ReturnNode;
     
         for (let ruleset of grammar.ruleset) {
@@ -182,9 +185,7 @@ export class Parser {
         this.rulesets = grammar.rulesetLookup;
         this.options = {};
         for (let pragma in grammar.pragmas) {
-            if (pragma != 'enableCache') {
-                grammarError(ErrorCode.UnknownPragma, pragma);
-            }
+            grammarError(ErrorCode.UnknownPragma, pragma);
             this.options[pragma] = grammar.pragmas[pragma];
         }
         for (let option in options) {
@@ -483,7 +484,7 @@ export class Parser {
 
     callFrame(caller:ParseFrame, callee:SelectorNode|RulesetNode) {
         let pos = caller ? caller.pos + caller.consumed : 0;
-        let cacheKey = pos * callee.id + callee.id;
+        let cacheKey = pos * this.grammar.maxid + callee.id;
 
         let frame = callee.type == "ruleset" ? this.cache[cacheKey] : null;
         if (frame && !frame.complete) {
