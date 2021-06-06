@@ -45,7 +45,7 @@ export interface OutputNode extends Node {
 	access?: {name?: string, value?: ValueNode, meta: Meta}[]
 }
 
-export interface SelectorNode extends Node { options: PatternNode[], canFail?: boolean }
+export interface SelectorNode extends Node { patterns: PatternNode[], canFail?: boolean }
 export interface MatcherNode extends Node { 
 	pattern?: string; // for debug purposes
 	match?(buf:ParseBuffer, idx:number) : [boolean, number]; 
@@ -158,11 +158,11 @@ export function createUncompiledDezentGrammar():Grammar {
 				`'#' {'enableCache'} _ 'true' '\\n'`, ['$1', true],
 				`'#' {'enableCache'} _ 'false' '\\n'`, ['$1', false]),
 
-			ruleset('rule', `{options} _ '->' _ {value}`,
+			ruleset('rule', `{patterns} _ '->' _ {value}`,
 				{ type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
 			
-			ruleset('options', `{pattern} _ ( '|' _ {pattern} _ )*`,
-				{ options: ['$1', '...$2'] }),
+			ruleset('patterns', `{pattern} _ ( '|' _ {pattern} _ )*`,
+				{ patterns: ['$1', '...$2'] }),
 
 			ruleset('pattern', `( {token} _ )+`,
 				{ type: 'pattern', tokens: '$1' }),
@@ -170,14 +170,14 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('token', `{predicate} {capture|group|string|class|ruleref|any} {modifier}`,
 				{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
 			
-			ruleset('capture', `'{' _ {captureOptions} _ '}'`,
+			ruleset('capture', `'{' _ {capturePatterns} _ '}'`,
 				{ type: 'capture', '...$1': '' }),
 
-			ruleset('group', `'(' _ {options} _ ')'`,
+			ruleset('group', `'(' _ {patterns} _ ')'`,
 				{ type: 'group', '...$1': '' }),
 
-			ruleset('captureOptions', `{capturePattern} _ ( '|' _ {capturePattern} _ )*`,
-				{ options: ['$1', '...$2'] }),
+			ruleset('capturePatterns', `{capturePattern} _ ( '|' _ {capturePattern} _ )*`,
+				{ patterns: ['$1', '...$2'] }),
 
 			ruleset('capturePattern', `( {captureToken} _ )+`,
 				{ type: 'pattern', tokens: '$1' }),
@@ -185,7 +185,7 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('captureToken', `{predicate} {captureGroup|string|class|ruleref|any} {modifier}`,
 				{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
 
-			ruleset('captureGroup', `'(' _ {captureOptions} _ ')'`,
+			ruleset('captureGroup', `'(' _ {capturePatterns} _ ')'`,
 				{ type: 'group', '...$1': '' }),
 
 			ruleset('class', `'[' {classComponent}* ']'`,
@@ -306,11 +306,11 @@ export function createUncompiledDezentGrammar():Grammar {
 	};
 }
 
-function returndef(options:string, output:any) : ReturnNode {
+function returndef(patterns:string, output:any) : ReturnNode {
     return {
 		type: 'ruleset',
 		name: 'return',
-		rules: [rule(options, output)],
+		rules: [rule(patterns, output)],
     }
 }
 
@@ -326,10 +326,10 @@ function ruleset(name:string, ...args:any) : RulesetNode {
 	}
 }
 
-function rule(options:string, out:any) : RuleNode {
+function rule(patterns:string, out:any) : RuleNode {
 	return {
 		type: 'rule',
-		options: [ pattern(options.split(/ +/)) ],
+		patterns: [ pattern(patterns.split(/ +/)) ],
 		value: output(out)
 	}
 }
@@ -388,18 +388,18 @@ function pattern(tokStrs:string[]) : PatternNode {
 }
 
 function group(tokens:string[]) : GroupNode {
-	let options = [];
+	let patterns = [];
 	let lastOr = -1;
 	for (let i = 0; i < tokens.length; i++) {
 		if (tokens[i] == '|') {
-			options.push(pattern(tokens.slice(lastOr+1, i)));
+			patterns.push(pattern(tokens.slice(lastOr+1, i)));
 			lastOr = i;
 		}
 	}
-	options.push(pattern(tokens.slice(lastOr+1, tokens.length)));
+	patterns.push(pattern(tokens.slice(lastOr+1, tokens.length)));
 	return {
 		type: 'group',
-		options: options
+		patterns: patterns
 	}
 }
 
@@ -407,11 +407,11 @@ function capture(token:string) : CaptureNode {
 	let repeat = null;
 	token = token.substr(0, token.length - 1);
 
-	let options = token.substr(1, token.length - 1).split('|');
+	let patterns = token.substr(1, token.length - 1).split('|');
 
 	return {
 		type: 'capture',
-		options: options.map((t) => pattern([t])),
+		patterns: patterns.map((t) => pattern([t])),
 	}
 }
 

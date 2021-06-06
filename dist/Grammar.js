@@ -54,16 +54,16 @@ function createUncompiledDezentGrammar() {
             ruleset('ruleset', "{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'", { type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
             ruleset('constant', "'$' {identifier} _ '=' _ {value} _ ';'", ['$1', '$2']),
             ruleset('pragma', "'#' {'enableCache'} _ 'true' '\\n'", ['$1', true], "'#' {'enableCache'} _ 'false' '\\n'", ['$1', false]),
-            ruleset('rule', "{options} _ '->' _ {value}", { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
-            ruleset('options', "{pattern} _ ( '|' _ {pattern} _ )*", { options: ['$1', '...$2'] }),
+            ruleset('rule', "{patterns} _ '->' _ {value}", { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
+            ruleset('patterns', "{pattern} _ ( '|' _ {pattern} _ )*", { patterns: ['$1', '...$2'] }),
             ruleset('pattern', "( {token} _ )+", { type: 'pattern', tokens: '$1' }),
             ruleset('token', "{predicate} {capture|group|string|class|ruleref|any} {modifier}", { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
-            ruleset('capture', "'{' _ {captureOptions} _ '}'", { type: 'capture', '...$1': '' }),
-            ruleset('group', "'(' _ {options} _ ')'", { type: 'group', '...$1': '' }),
-            ruleset('captureOptions', "{capturePattern} _ ( '|' _ {capturePattern} _ )*", { options: ['$1', '...$2'] }),
+            ruleset('capture', "'{' _ {capturePatterns} _ '}'", { type: 'capture', '...$1': '' }),
+            ruleset('group', "'(' _ {patterns} _ ')'", { type: 'group', '...$1': '' }),
+            ruleset('capturePatterns', "{capturePattern} _ ( '|' _ {capturePattern} _ )*", { patterns: ['$1', '...$2'] }),
             ruleset('capturePattern', "( {captureToken} _ )+", { type: 'pattern', tokens: '$1' }),
             ruleset('captureToken', "{predicate} {captureGroup|string|class|ruleref|any} {modifier}", { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
-            ruleset('captureGroup', "'(' _ {captureOptions} _ ')'", { type: 'group', '...$1': '' }),
+            ruleset('captureGroup', "'(' _ {capturePatterns} _ ')'", { type: 'group', '...$1': '' }),
             ruleset('class', "'[' {classComponent}* ']'", { type: 'class', ranges: '$1' }),
             ruleset('classComponent', "{classChar} '-' {classChar}", ['$1', '$2'], "{classChar}", ['$1', '$1']),
             ruleset('classChar', "!']' {escape|char}", '$1'),
@@ -107,11 +107,11 @@ function createUncompiledDezentGrammar() {
     };
 }
 exports.createUncompiledDezentGrammar = createUncompiledDezentGrammar;
-function returndef(options, output) {
+function returndef(patterns, output) {
     return {
         type: 'ruleset',
         name: 'return',
-        rules: [rule(options, output)],
+        rules: [rule(patterns, output)],
     };
 }
 function ruleset(name) {
@@ -129,10 +129,10 @@ function ruleset(name) {
         rules: rules
     };
 }
-function rule(options, out) {
+function rule(patterns, out) {
     return {
         type: 'rule',
-        options: [pattern(options.split(/ +/))],
+        patterns: [pattern(patterns.split(/ +/))],
         value: output(out)
     };
 }
@@ -201,27 +201,27 @@ function pattern(tokStrs) {
     };
 }
 function group(tokens) {
-    var options = [];
+    var patterns = [];
     var lastOr = -1;
     for (var i = 0; i < tokens.length; i++) {
         if (tokens[i] == '|') {
-            options.push(pattern(tokens.slice(lastOr + 1, i)));
+            patterns.push(pattern(tokens.slice(lastOr + 1, i)));
             lastOr = i;
         }
     }
-    options.push(pattern(tokens.slice(lastOr + 1, tokens.length)));
+    patterns.push(pattern(tokens.slice(lastOr + 1, tokens.length)));
     return {
         type: 'group',
-        options: options
+        patterns: patterns
     };
 }
 function capture(token) {
     var repeat = null;
     token = token.substr(0, token.length - 1);
-    var options = token.substr(1, token.length - 1).split('|');
+    var patterns = token.substr(1, token.length - 1).split('|');
     return {
         type: 'capture',
-        options: options.map(function (t) { return pattern([t]); }),
+        patterns: patterns.map(function (t) { return pattern([t]); }),
     };
 }
 function charClass(token) {

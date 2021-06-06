@@ -92,7 +92,7 @@ export class GrammarCompiler {
             });
             visitParseNodes(["capture","group","rule"], ruleset, null, null, (node:SelectorNode) => {
                 node.canFail = true;
-                for (let pattern of node.options) {
+                for (let pattern of node.patterns) {
                     if (!pattern.canFail) {
                         node.canFail = false;
                         break;
@@ -125,7 +125,7 @@ export class GrammarCompiler {
             info.captures = [null];
             visitParseNodes(
                 "token",
-                rule.options[i], 
+                rule.patterns[i], 
                 info, 
                 (node:TokenNode, info) => {
                     if (node.repeat) info.repeats++;
@@ -143,7 +143,7 @@ export class GrammarCompiler {
             }
             lastCount = info.captures.length;
             i++;
-         } while (i < rule.options.length);
+         } while (i < rule.patterns.length);
     
          visitParseNodes("string", rule, null, null, (node:StringNode) => {
             let matchString = buildString(node);
@@ -231,7 +231,7 @@ function visitParseNodes(
     let items = [];
     switch(root.type) {
         case "ruleset": items = (<RulesetNode>root).rules; break;
-        case "rule": case "capture": case "group": items = (<SelectorNode>root).options; break;
+        case "rule": case "capture": case "group": items = (<SelectorNode>root).patterns; break;
         case "pattern": items = (<PatternNode>root).tokens; break;
         case "token": items = [(<TokenNode>root).descriptor]; break;
         default: break;

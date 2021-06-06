@@ -23,7 +23,7 @@ var Parser_1 = require("./Parser");
 var ParseBuffer_1 = require("./ParseBuffer");
 var Dezent = /** @class */ (function () {
     function Dezent(grammarStr, functions, options) {
-        this.grammar = Parser_1.parseGrammar(grammarStr);
+        this.grammar = Parser_1.parseGrammar(grammarStr, options);
         this.functions = functions;
         this.options = options;
         this.debugErrors = options ? !!options.debugErrors : false;

@@ -39,7 +39,7 @@ var ValueBuilder = /** @class */ (function () {
     }
     ValueBuilder.prototype.buildValue = function (frame) {
         var e_1, _a;
-        var rule = frame.node;
+        var rule = frame.ruleset.rules[frame.ruleIndex];
         var captureValues = rule.captures.map(function (b) { return b === true ? [] : null; });
         if (frame.captures)
             try {
@@ -53,6 +53,12 @@ var ValueBuilder = /** @class */ (function () {
                             captureValues[capture.captureIndex] = [];
                         }
                         captureValues[capture.captureIndex].push(capture.value);
+                        // This is a hack. A backref that is configured to collapse
+                        // empty results (e.g. $1?) is unable to distinguish between
+                        // an array generated via token repetition vs an array returned
+                        // as output from a rule. So we bolt on a little info here to
+                        // help out the backref processing later. We'll make this non-enumerable 
+                        // so that our tests don't freak out about this extra property.
                         Object.defineProperty(captureValues[capture.captureIndex], "repeated", { configurable: true, enumerable: false, value: true });
                     }
                     else {
@@ -109,6 +115,7 @@ var ValueBuilder = /** @class */ (function () {
     ValueBuilder.prototype.backref = function (node, captures) {
         var e_3, _a;
         var cap = captures[node.index];
+        // n.b. the "repeated" property is added dynamically above
         if (node.collapse && Array.isArray(cap) && cap["repeated"]) {
             var ret = [];
             try {

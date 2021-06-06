@@ -55,7 +55,7 @@ export class Dezent {
     error:DezentError|GrammarError|ParseError;
 
     constructor(grammarStr:string, functions?:Functions, options?:ParserOptions) {
-        this.grammar = parseGrammar(grammarStr);
+        this.grammar = parseGrammar(grammarStr, options);
         this.functions = functions;
         this.options = options;
         this.debugErrors = options ? !!options.debugErrors : false;

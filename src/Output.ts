@@ -52,7 +52,7 @@ export class ValueBuilder {
     }
 
     buildValue(frame:ParseFrame) {
-        let rule = <RuleNode>frame.node;
+        let rule = <RuleNode>frame.ruleset.rules[frame.ruleIndex];
         let captureValues:any = rule.captures.map((b) => b === true ? [] : null); 
         if (frame.captures) for (let capture of frame.captures) {
             assert(capture.captureIndex !== undefined);

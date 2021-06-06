@@ -116,7 +116,7 @@ var GrammarCompiler = /** @class */ (function () {
                     var e_5, _a;
                     node.canFail = true;
                     try {
-                        for (var _b = (e_5 = void 0, __values(node.options)), _c = _b.next(); !_c.done; _c = _b.next()) {
+                        for (var _b = (e_5 = void 0, __values(node.patterns)), _c = _b.next(); !_c.done; _c = _b.next()) {
                             var pattern = _c.value;
                             if (!pattern.canFail) {
                                 node.canFail = false;
@@ -174,7 +174,7 @@ var GrammarCompiler = /** @class */ (function () {
         var lastCount = -1;
         do {
             info.captures = [null];
-            visitParseNodes("token", rule.options[i], info, function (node, info) {
+            visitParseNodes("token", rule.patterns[i], info, function (node, info) {
                 if (node.repeat)
                     info.repeats++;
                 if (node.descriptor.type == "capture") {
@@ -190,7 +190,7 @@ var GrammarCompiler = /** @class */ (function () {
             }
             lastCount = info.captures.length;
             i++;
-        } while (i < rule.options.length);
+        } while (i < rule.patterns.length);
         visitParseNodes("string", rule, null, null, function (node) {
             var matchString = Output_1.buildString(node);
             node.pattern = matchString;
@@ -299,7 +299,7 @@ function visitParseNodes(types, root, data, enter, exit) {
         case "rule":
         case "capture":
         case "group":
-            items = root.options;
+            items = root.patterns;
             break;
         case "pattern":
             items = root.tokens;

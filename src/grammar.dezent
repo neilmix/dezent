@@ -45,11 +45,11 @@ pragma =
 	'#' {'enableCache'} _ 'true' '\n' -> [$1, true],
 	'#' {'enableCache'} _ 'false' '\n' -> [$1, false];
 
-rule = {options} _ '->' _ {value} 
+rule = {patterns} _ '->' _ {value} 
 	-> { type: 'rule', ...$1, value: $2, ...$meta };
 
-options = {pattern} _ ( '|' _ {pattern} _ )* 
-	-> { options: [$1, ...$2] };
+patterns = {pattern} _ ( '|' _ {pattern} _ )* 
+	-> { patterns: [$1, ...$2] };
 
 pattern = ( { token } _ )+
 	-> { type: 'pattern', tokens: $1 };
@@ -57,14 +57,14 @@ pattern = ( { token } _ )+
 token = {predicate} { capture | group | string | class | ruleref | any } {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: $2 };
 
-capture = '{' _ {captureOptions} _ '}'
+capture = '{' _ {capturePatterns} _ '}'
 	-> { type: 'capture', ...$1 };
 
-group = '(' _ {options} _ ')'
+group = '(' _ {patterns} _ ')'
 	-> { type: 'group', ...$1 };
 
-captureOptions = {capturePattern} _ ( '|' _ {capturePattern} _ )*
-	-> { options: [$1, ...$2] };
+capturePatterns = {capturePattern} _ ( '|' _ {capturePattern} _ )*
+	-> { patterns: [$1, ...$2] };
 
 capturePattern = ( { captureToken } _ )+
 	-> { type: 'pattern', tokens: $1 };
@@ -72,7 +72,7 @@ capturePattern = ( { captureToken } _ )+
 captureToken = {predicate} { captureGroup | string | class | ruleref | any } {modifier}
 	-> { type: 'token', ...$3, ...$1, descriptor: $2 };
 	
-captureGroup = '(' _ {captureOptions} _ ')'
+captureGroup = '(' _ {capturePatterns} _ ')'
 	-> { type: 'group', ...$1 };
 
 class = '[' { classComponent }* ']'
