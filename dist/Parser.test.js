@@ -228,7 +228,7 @@ test("left recursion", () => {
             {expr} _ '+' _ {mult} -> ['+',$1,$2],
             {mult} -> $1;
         mult =
-            {mult} _ '*' _ {num} -> ['*',$1,$2],
+            {mult} _ '*' _ {mult} -> ['*',$1,$2],
             num -> $0;
         num = [0-9]+ -> $0;
         return _ {expr} _ -> $1;
@@ -330,7 +330,6 @@ test("errors", function () {
     /* 1013 */ expect(parseError("$foo = {}; return .* -> [1][$foo];", 'a').char).toEqual(28);
     /* 1014 */ expect(parseError("return .* -> {}.foo;", 'a').char).toEqual(16);
     /* 1015 */ expect(parseError("return .* -> foo();", 'a').char).toEqual(14);
-    /* 1016 */ expect(parseGrammarError("#zzz false\nreturn .* -> true;").char).toEqual(2);
 });
 test("comments", function () {
     expectParse("\n        // return .* -> 1;\n        /*\n           return .* -> 2;\n        */\n        return .* -> 3;\n    ").toEqual(3);

@@ -24,7 +24,6 @@
     "dist": "npm run compile && chmod +x dist/dezent_cli.js && jest dist/Parser.test.js",
     "compile-debug": "tsc src/*.ts -t ES5 --downlevelIteration --inlineSourceMap --outDir ./test && cp src/*.dezent ./test",
     "test": "npm run compile-debug && jest test/Parser.test.js",
-    "test-debug": "npm run compile-debug && node ./node_modules/.bin/jest ./test/Parser.test.js --runInBand -t 'boolean / null outputs'",
     "clean": "rm -f *.js && rm -fr test && rm -fr dist",
     "prepublishOnly": "npm run clean && npm run dist && git remote update && echo 'Verifying local repo is same as remote...' && git diff --no-ext-diff --quiet --exit-code",
     "postpublish": "git tag v`./getversion` && git push --tags"

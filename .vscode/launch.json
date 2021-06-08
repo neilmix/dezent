@@ -5,14 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "npm test debug",
+            "name": "interactive debug",
             "type": "node",
             "request": "launch",
             "cwd": "${workspaceRoot}",
-            "runtimeExecutable": "npm",
-            "runtimeArgs": [
-                "run-script", "test-debug"
-            ],
+            "program": "test/Parser.interactive.test.js",
+            "preLaunchTask": "compile debug",
             "port": 5858
         }
     ]

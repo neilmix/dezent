@@ -280,7 +280,7 @@ test("left recursion", () => {
             {expr} _ '+' _ {mult} -> ['+',$1,$2],
             {mult} -> $1;
         mult =
-            {mult} _ '*' _ {num} -> ['*',$1,$2],
+            {mult} _ '*' _ {mult} -> ['*',$1,$2],
             num -> $0;
         num = [0-9]+ -> $0;
         return _ {expr} _ -> $1;
