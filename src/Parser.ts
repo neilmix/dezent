@@ -94,6 +94,37 @@ export const errorMessages = {
     2011: "Assertion failed",
 }
 
+/*
+ * ---- Notes on left recursion ----
+ * Left recursion is a real mind-bender. Here's an overview of how it
+ * works in this implementation.
+ * 1) The recursing ruleset executes its base frame and is cached.
+ * 2) When the ruleset is called again, left recursion is detected by virtue of the 
+ *    fact that the given ruleset is already active in the cache at the same location.
+ * 3) Rather than executing a new default-initialized frame (which would lead to an
+ *    infinite loop), the base ruleset frame is duplicated and advanced to the rule 
+ *    immediately following the currently executing rule. This allows execution to 
+ *    proceed and find a match (any match) for the ruleset in question (or fail).
+ * 4) The base ruleset frame is market as leftRecursing, for later reference.
+ * 5) When the stack descends back to the base ruleset frame, the fact that it is
+ *    leftRecursing is detected, leading to special frame handling.
+ * 6) The returning callee frame is set aside for the moment (leftReturn) and the 
+ *    base frame executes from the same position again.
+ * 7) Execution proceeds until the ruleset is called again in recursion.
+ * 8) This time, the base frame is retrieved from the cache and detected as leftRecursing, 
+ *    leading to duplication of the base frame (without advancement) and placement 
+ *    on the stack, followed by placement of the base frame's previously stored leftReturn
+ *    onto the stack. This allows execution to resume with the previous recursion's 
+ *    output as this recursions return value, thereby resulting in an increased 
+ *    consumption of input. In this way, output consumption grows with each recursion.
+ * 9) Returning to the base frame, once recursion fails to match or consume more input,
+ *    the frame is complete and its execution terminated. This is counter-intuitive,
+ *    because remaining rules will be skipped and unexecuted on the base frame, but
+ *    that is OK because the rules were executed during the iterative recursion process.
+ *    (The largest valid consumption of input that satisfies the ruleset is the return
+ *    value for the ruleset.)
+ */ 
+
 export type ParseFrame = {
     complete: boolean,
     matched: boolean,
@@ -110,8 +141,8 @@ export type ParseFrame = {
     output?: Output,
     captures?: Output[],
     cacheKey: number,
-    leftRecursing: boolean,
-    leftReturn: ParseFrame,
+    leftRecursing: boolean, // see note above
+    leftReturn: ParseFrame, // see note above
 }
 
 export const BufferEmpty = { toString: () => "BufferEmpty" };
@@ -128,6 +159,7 @@ export function findDezentGrammar() : Grammar{
 
 export interface ParserOptions {
     debugErrors?: boolean,
+    dumpDebug?: boolean,
 }
 
 export function parseGrammar(text:string, options?:ParserOptions) : Grammar {
@@ -207,12 +239,18 @@ export class Parser {
                 if (current.complete) {
                     if (this.stack.length > 1) {
                         let exited = this.stack.pop();
-                        delete this.cache[exited.cacheKey];
-                        if (this.options.debugErrors && exited.ruleset) {
+                        // a left-recursing frame could be cached at the same location as the current frame,
+                        // so we need to double-check that current is the one that is cached
+                        if (this.cache[exited.cacheKey] == current) {
+                            delete this.cache[exited.cacheKey];
+                        }
+                        if (this.options.debugErrors) {
                             this.debugLog.push([
-                                exited.matched ? 'PASS' : 'FAIL', 
+                                exited.matched ? 'PASS ' : 'FAIL ', 
                                 this.buffer.substr(exited.pos, 20), 
-                                exited.ruleset.name
+                                this.stack.length,
+                                exited.ruleset ? exited.ruleset.name : exited.selector.type,
+                                JSON.stringify(exited.ruleset ? exited.output : exited.captures)
                             ]);
                         }
                         continue STACK;
@@ -234,6 +272,9 @@ export class Parser {
                     }        
                     if (final.output.length > this.buffer.length) {
                         parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, ["<EOF>"]);
+                    }
+                    if (this.options.dumpDebug) {
+                        this.dumpDebug();
                     }
                     return final.output.value;
                 }
@@ -339,16 +380,26 @@ export class Parser {
                         }
                     }
 
+                    // see notes on left recursion toward the beginning of this file
                     if (current.leftRecursing) {
-                        if (matched) {
+                        // it's possible to get a match without consuming more input than previous
+                        // recursion attempts, so make sure there's increased consumption, too.
+                        if (matched && (current.leftReturn == null || consumed > current.leftReturn.consumed)) {
+                            // stow away our returning callee for later use in the next recursion iteration
                             current.leftReturn = callee;
-                            continue STACK;
+                        } else {
+                            // at this point our left recursion is failing to consumer more input,
+                            // time to wrap things up
+                            current.complete = true;
+                            if (current.leftReturn) {
+                                // we found the largest match for this recursing rule on a previous iteration.
+                                // use that as the return value for this frame.
+                                current.matched = true;
+                                current.consumed = current.leftReturn.consumed;
+                                current.output = current.leftReturn.output;
+                            }
                         }
-                        callee = current.leftReturn || callee;
-                        matched = !!current.leftReturn;
-                        debugger;
-                        current.leftRecursing = false;
-                        current.leftReturn = null;
+                        continue STACK;
                     }
 
                     if (token.and || token.not) {
@@ -358,8 +409,9 @@ export class Parser {
                     
                     if (this.options.debugErrors && !callee) {
                         this.debugLog.push([
-                            matched ? 'PASS' : 'FAIL', 
+                            matched ? 'PASS ' : 'FAIL ', 
                             this.buffer.substr(current.pos + current.consumed, 20), 
+                            this.stack.length,
                             descriptor["pattern"]
                         ]);
                     }
@@ -468,18 +520,25 @@ export class Parser {
 
         let frame:ParseFrame;
         let cached = callee.type == "ruleset" ? this.cache[cacheKey] : null;
+        let secondFrame;
         if (cached) {
-            throw new Error("left recursion in-progress");
-            // left recursion detected
+            // left recursion detected - see notes near the top of this file
             frame = Object.assign({}, cached);
             if (cached.leftRecursing) {
+                // this is the second or later recursion iteration.
+                // set up the base frame's previous returning callee
+                // as our callee now so it can properly recurse.
                 frame.leftRecursing = false;
                 frame.callee = frame.leftReturn;
                 frame.leftReturn = null;
                 caller.callee = frame;
                 this.stack.push(frame);
-                this.stack.push(frame.callee);
+                this.stack.push(secondFrame = frame.callee);
             } else {
+                // this is the first recursion iteration - get ourselves ready
+                // to work through multiple recursion iterations by marking our
+                // base frame as left recursing and advancing our new frame to
+                // avoid infinite loop.
                 this.nextRule(frame);
                 cached.leftRecursing = true;
                 caller.callee = frame;
@@ -509,6 +568,22 @@ export class Parser {
             }
             if (caller) caller.callee = frame;
             this.stack.push(frame);
+        }
+
+        this.debugLog.push([
+            'enter', 
+            this.buffer.substr(frame.pos, 20), 
+            secondFrame ? this.stack.length - 2 : this.stack.length - 1,
+            frame.ruleset ? frame.ruleset.name : frame.selector.type
+        ]);
+
+        if (secondFrame) {
+            this.debugLog.push([
+                'enter', 
+                this.buffer.substr(secondFrame.pos, 20), 
+                this.stack.length - 1,
+                secondFrame.ruleset ? secondFrame.ruleset.name : secondFrame.selector.type
+            ]);    
         }
     }
 

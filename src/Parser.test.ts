@@ -272,7 +272,6 @@ test("function calls", () => {
     expectParseFail(`return .* -> foo();`);
 });
 
-/*
 test("left recursion", () => {
     let grammar = `
         _ = [ \\n]* -> null;
@@ -280,11 +279,12 @@ test("left recursion", () => {
             {expr} _ '+' _ {mult} -> ['+',$1,$2],
             {mult} -> $1;
         mult =
-            {mult} _ '*' _ {mult} -> ['*',$1,$2],
+            {mult} _ '*' _ {num} -> ['*',$1,$2],
             num -> $0;
         num = [0-9]+ -> $0;
         return _ {expr} _ -> $1;
     `;
+
     expectParse(grammar, '5').toEqual('5');
     expectParse(grammar, '5+4').toEqual(['+','5','4']);
     expectParse(grammar, '5+4+3').toEqual(['+',['+','5','4'],'3']);
@@ -306,7 +306,6 @@ test("left recursion", () => {
     `;
     expectParse(grammar, 'ab').toEqual('ab');        
 });
-*/
 
 test("dezent grammar documentation", () => {
     let uncompiledDezent = createUncompiledDezentGrammar();

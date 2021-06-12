@@ -55,7 +55,7 @@ export class Dezent {
     error:DezentError|GrammarError|ParseError;
 
     constructor(grammarStr:string, functions?:Functions, options?:ParserOptions) {
-        this.grammar = parseGrammar(grammarStr, options);
+        this.grammar = parseGrammar(grammarStr, grammarOptions(options));
         this.functions = functions;
         this.options = options;
         this.debugErrors = options ? !!options.debugErrors : false;
@@ -84,7 +84,8 @@ export class DezentStream {
     private parser:Parser;
 
     constructor(grammar:string|Grammar, functions?:Functions, options?:ParserOptions) {
-        grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
+        grammar = typeof grammar == "string" ? parseGrammar(grammar, grammarOptions(options)) : grammar;
+
         this.options = options || {};
         this.functions = functions;
         this.buffer = new ParseBuffer();
@@ -104,3 +105,11 @@ export class DezentStream {
         return this.parser.parse();
     }
 }
+
+function grammarOptions(opt:ParserOptions) {
+        // don't dumpDebug when parsing the grammar
+        let gOpt = Object.assign({}, opt||{});
+        gOpt.dumpDebug = false;
+        return gOpt;
+}
+

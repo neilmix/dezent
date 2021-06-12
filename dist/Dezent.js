@@ -23,7 +23,7 @@ var Parser_1 = require("./Parser");
 var ParseBuffer_1 = require("./ParseBuffer");
 var Dezent = /** @class */ (function () {
     function Dezent(grammarStr, functions, options) {
-        this.grammar = Parser_1.parseGrammar(grammarStr, options);
+        this.grammar = Parser_1.parseGrammar(grammarStr, grammarOptions(options));
         this.functions = functions;
         this.options = options;
         this.debugErrors = options ? !!options.debugErrors : false;
@@ -48,7 +48,7 @@ var Dezent = /** @class */ (function () {
 exports.Dezent = Dezent;
 var DezentStream = /** @class */ (function () {
     function DezentStream(grammar, functions, options) {
-        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, this.options) : grammar;
+        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, grammarOptions(options)) : grammar;
         this.options = options || {};
         this.functions = functions;
         this.buffer = new ParseBuffer_1.ParseBuffer();
@@ -68,3 +68,9 @@ var DezentStream = /** @class */ (function () {
     return DezentStream;
 }());
 exports.DezentStream = DezentStream;
+function grammarOptions(opt) {
+    // don't dumpDebug when parsing the grammar
+    var gOpt = Object.assign({}, opt || {});
+    gOpt.dumpDebug = false;
+    return gOpt;
+}

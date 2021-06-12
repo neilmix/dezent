@@ -196,12 +196,18 @@ var Parser = /** @class */ (function () {
                 if (current.complete) {
                     if (_this.stack.length > 1) {
                         var exited = _this.stack.pop();
-                        delete _this.cache[exited.cacheKey];
-                        if (_this.options.debugErrors && exited.ruleset) {
+                        // a left-recursing frame could be cached at the same location as the current frame,
+                        // so we need to double-check that current is the one that is cached
+                        if (_this.cache[exited.cacheKey] == current) {
+                            delete _this.cache[exited.cacheKey];
+                        }
+                        if (_this.options.debugErrors) {
                             _this.debugLog.push([
-                                exited.matched ? 'PASS' : 'FAIL',
+                                exited.matched ? 'PASS ' : 'FAIL ',
                                 _this.buffer.substr(exited.pos, 20),
-                                exited.ruleset.name
+                                _this.stack.length,
+                                exited.ruleset ? exited.ruleset.name : exited.selector.type,
+                                JSON.stringify(exited.ruleset ? exited.output : exited.captures)
                             ]);
                         }
                         continue STACK;
@@ -222,6 +228,9 @@ var Parser = /** @class */ (function () {
                     }
                     if (final.output.length > _this.buffer.length) {
                         parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, ["<EOF>"]);
+                    }
+                    if (_this.options.dumpDebug) {
+                        _this.dumpDebug();
                     }
                     return final.output.value;
                 }
@@ -327,16 +336,27 @@ var Parser = /** @class */ (function () {
                             _this.omitFails--;
                         }
                     }
+                    // see notes on left recursion toward the beginning of this file
                     if (current.leftRecursing) {
-                        if (matched) {
+                        // it's possible to get a match without consuming more input than previous
+                        // recursion attempts, so make sure there's increased consumption, too.
+                        if (matched && (current.leftReturn == null || consumed > current.leftReturn.consumed)) {
+                            // stow away our returning callee for later use in the next recursion iteration
                             current.leftReturn = callee;
-                            continue STACK;
                         }
-                        callee = current.leftReturn || callee;
-                        matched = !!current.leftReturn;
-                        debugger;
-                        current.leftRecursing = false;
-                        current.leftReturn = null;
+                        else {
+                            // at this point our left recursion is failing to consumer more input,
+                            // time to wrap things up
+                            current.complete = true;
+                            if (current.leftReturn) {
+                                // we found the largest match for this recursing rule on a previous iteration.
+                                // use that as the return value for this frame.
+                                current.matched = true;
+                                current.consumed = current.leftReturn.consumed;
+                                current.output = current.leftReturn.output;
+                            }
+                        }
+                        continue STACK;
                     }
                     if (token.and || token.not) {
                         matched = (token.and && matched) || (token.not && !matched);
@@ -344,8 +364,9 @@ var Parser = /** @class */ (function () {
                     }
                     if (_this.options.debugErrors && !callee) {
                         _this.debugLog.push([
-                            matched ? 'PASS' : 'FAIL',
+                            matched ? 'PASS ' : 'FAIL ',
                             _this.buffer.substr(current.pos + current.consumed, 20),
+                            _this.stack.length,
                             descriptor["pattern"]
                         ]);
                     }
@@ -451,19 +472,26 @@ var Parser = /** @class */ (function () {
         var cacheKey = pos * this.grammar.maxid + callee.id;
         var frame;
         var cached = callee.type == "ruleset" ? this.cache[cacheKey] : null;
+        var secondFrame;
         if (cached) {
-            throw new Error("left recursion in-progress");
-            // left recursion detected
+            // left recursion detected - see notes near the top of this file
             frame = Object.assign({}, cached);
             if (cached.leftRecursing) {
+                // this is the second or later recursion iteration.
+                // set up the base frame's previous returning callee
+                // as our callee now so it can properly recurse.
                 frame.leftRecursing = false;
                 frame.callee = frame.leftReturn;
                 frame.leftReturn = null;
                 caller.callee = frame;
                 this.stack.push(frame);
-                this.stack.push(frame.callee);
+                this.stack.push(secondFrame = frame.callee);
             }
             else {
+                // this is the first recursion iteration - get ourselves ready
+                // to work through multiple recursion iterations by marking our
+                // base frame as left recursing and advancing our new frame to
+                // avoid infinite loop.
                 this.nextRule(frame);
                 cached.leftRecursing = true;
                 caller.callee = frame;
@@ -495,6 +523,20 @@ var Parser = /** @class */ (function () {
             if (caller)
                 caller.callee = frame;
             this.stack.push(frame);
+        }
+        this.debugLog.push([
+            'enter',
+            this.buffer.substr(frame.pos, 20),
+            secondFrame ? this.stack.length - 2 : this.stack.length - 1,
+            frame.ruleset ? frame.ruleset.name : frame.selector.type
+        ]);
+        if (secondFrame) {
+            this.debugLog.push([
+                'enter',
+                this.buffer.substr(secondFrame.pos, 20),
+                this.stack.length - 1,
+                secondFrame.ruleset ? secondFrame.ruleset.name : secondFrame.selector.type
+            ]);
         }
     };
     Parser.prototype.dumpDebug = function () {
