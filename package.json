@@ -1,6 +1,6 @@
 {
   "name": "dezent",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Powerful pattern matching and parsing that's readable, recursive, and structured.",
   "keywords": [
     "parse",
@@ -29,7 +29,7 @@
     "postpublish": "git tag v`./getversion` && git push --tags"
   },
   "author": "Neil Mix <neilmix@gmail.com>",
-  "license": "SEE LICENSE IN License.txt",
+  "license": "MIT",
   "devDependencies": {
     "@types/jest": "^23.3.2",
     "jest": "^23.6.0"
