@@ -771,7 +771,11 @@ Provide your own custom callback functions to produce special output, or even SA
 ```javascript
 > new Dezent(
     `return {.*} -> translate($1);`,
-    { translate: (txt) => txt.replace("foo", "bar") }
+    { 
+        callbacks: {
+            translate: (txt) => txt.replace("foo", "bar") 
+        }
+    }
 ).parse('all foo all the time');
 'all bar all the time'
 ```
