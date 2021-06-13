@@ -32,13 +32,49 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildString = exports.ValueBuilder = void 0;
 var Parser_1 = require("./Parser");
 var GrammarCompiler_1 = require("./GrammarCompiler");
+var defaultCallbacks = {
+    pivot: function (value) {
+        var e_1, _a;
+        if (!Array.isArray(value)) {
+            throw new Error("Invalid pivot argment: " + value);
+        }
+        value.map(function (item) {
+            if (!Array.isArray(item)) {
+                throw new Error("Invalid pivot argument: " + JSON.stringify(item));
+            }
+            if (item.length != value[0].length) {
+                throw new Error("All subarrays in a pivot must be of the same length");
+            }
+        });
+        var ret = [];
+        try {
+            for (var _b = __values(value[0]), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var item = _c.value;
+                ret.push([]);
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        for (var i = 0; i < value.length; i++) {
+            for (var j = 0; j < value[0].length; j++) {
+                ret[j][i] = value[i][j];
+            }
+        }
+        return ret;
+    }
+};
 var ValueBuilder = /** @class */ (function () {
     function ValueBuilder(grammar, callbacks) {
         this.grammar = grammar;
         this.callbacks = callbacks || {};
     }
     ValueBuilder.prototype.buildValue = function (frame) {
-        var e_1, _a;
+        var e_2, _a;
         var rule = frame.ruleset.rules[frame.ruleIndex];
         var captureValues = rule.captures.map(function (b) { return b === true ? [] : null; });
         if (frame.captures)
@@ -68,17 +104,17 @@ var ValueBuilder = /** @class */ (function () {
                     }
                 }
             }
-            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            catch (e_2_1) { e_2 = { error: e_2_1 }; }
             finally {
                 try {
                     if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
                 }
-                finally { if (e_1) throw e_1.error; }
+                finally { if (e_2) throw e_2.error; }
             }
         return this.value(rule.value, captureValues, { position: frame.pos, length: frame.consumed });
     };
     ValueBuilder.prototype.value = function (node, captureValues, metas) {
-        var e_2, _a;
+        var e_3, _a;
         var out = this[node.type](node, captureValues, metas);
         if (node.access)
             try {
@@ -103,17 +139,17 @@ var ValueBuilder = /** @class */ (function () {
                     out = out[index];
                 }
             }
-            catch (e_2_1) { e_2 = { error: e_2_1 }; }
+            catch (e_3_1) { e_3 = { error: e_3_1 }; }
             finally {
                 try {
                     if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
                 }
-                finally { if (e_2) throw e_2.error; }
+                finally { if (e_3) throw e_3.error; }
             }
         return out;
     };
     ValueBuilder.prototype.backref = function (node, captures) {
-        var e_3, _a;
+        var e_4, _a;
         var cap = captures[node.index];
         // n.b. the "repeated" property is added dynamically above
         if (node.collapse && Array.isArray(cap) && cap["repeated"]) {
@@ -126,12 +162,12 @@ var ValueBuilder = /** @class */ (function () {
                     }
                 }
             }
-            catch (e_3_1) { e_3 = { error: e_3_1 }; }
+            catch (e_4_1) { e_4 = { error: e_4_1 }; }
             finally {
                 try {
                     if (cap_1_1 && !cap_1_1.done && (_a = cap_1.return)) _a.call(cap_1);
                 }
-                finally { if (e_3) throw e_3.error; }
+                finally { if (e_4) throw e_4.error; }
             }
             return ret;
         }
@@ -145,42 +181,6 @@ var ValueBuilder = /** @class */ (function () {
     };
     ValueBuilder.prototype.metaref = function (node, captures, metas) {
         return metas[node.name];
-    };
-    ValueBuilder.prototype.pivot = function (node, captures, metas) {
-        var e_4, _a;
-        var _this = this;
-        var value = this.value(node.value, captures, metas);
-        if (!Array.isArray(value)) {
-            GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidPivot, this.grammar.text, node.meta, JSON.stringify(value));
-        }
-        value.map(function (item) {
-            if (!Array.isArray(item)) {
-                GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidPivot, _this.grammar.text, node.meta, JSON.stringify(item));
-            }
-            if (item.length != value[0].length) {
-                GrammarCompiler_1.grammarError(Parser_1.ErrorCode.PivotArraySizeMismatch, _this.grammar.text, node.meta);
-            }
-        });
-        var ret = [];
-        try {
-            for (var _b = __values(value[0]), _c = _b.next(); !_c.done; _c = _b.next()) {
-                var item = _c.value;
-                ret.push([]);
-            }
-        }
-        catch (e_4_1) { e_4 = { error: e_4_1 }; }
-        finally {
-            try {
-                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
-            }
-            finally { if (e_4) throw e_4.error; }
-        }
-        for (var i = 0; i < value.length; i++) {
-            for (var j = 0; j < value[0].length; j++) {
-                ret[j][i] = value[i][j];
-            }
-        }
-        return ret;
     };
     ValueBuilder.prototype.spread = function (node, captures, metas) {
         var value = this.value(node.value, captures, metas);
@@ -279,11 +279,19 @@ var ValueBuilder = /** @class */ (function () {
             }
             finally { if (e_8) throw e_8.error; }
         }
-        if (!this.callbacks[node.name]) {
+        var caller = this.callbacks[node.name];
+        if (!caller)
+            caller = defaultCallbacks[node.name];
+        if (!caller) {
             GrammarCompiler_1.grammarError(Parser_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
         }
         else {
-            return this.callbacks[node.name].apply(null, argVals);
+            try {
+                return caller.apply(null, argVals);
+            }
+            catch (e) {
+                GrammarCompiler_1.grammarError(Parser_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
+            }
         }
     };
     ValueBuilder.prototype.string = function (node) {

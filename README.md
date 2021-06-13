@@ -26,14 +26,14 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
   * [`&` predicate - match](#-predicate---match)
   * [`!` predicate - does not match](#-predicate---does-not-match)
   * [`=` constant](#-constant)
-  [Reference - grammar - output](#Reference---grammar---output)
+* [Reference - grammar - output](#Reference---grammar---output)
   * [JSON-like](#JSON-like)
   * [`$0` back reference](#0-back-reference)
   * [`$1...$n` back references](#1n-back-references)
   * [`$identifier` constant reference](#identifier-constant-reference)
   * [`@identifier` meta reference](#identifier-meta-reference)
   * [`...` spread](#-spread)
-  * [`^` pivot](#-pivot)
+  * [pivot callback](#-pivot-callback)
   * [`.` or `[]` property access](#-or--property-access)
   * [`?` collapse](-collapse)
   * [callbacks](#-callbacks)
@@ -705,18 +705,18 @@ The spread operator allows you to incorporate one array or object within another
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
-## `^` pivot
+## pivot callback
 ---
 
-The pivot operator swaps an array's rows with its columns. This is particularly useful for spreading a pair of captures inside an object:
+The pivot callback swaps an array's rows with its columns. This is particularly useful for spreading a pair of captures inside an object:
 ```javascript
 > new Dezent(`
     return {[a-z]}* {[0-9]}* -> 
         { 
             '1': $1, 
             '2': $2, 
-            pivot: ^[$1, $2], 
-            spread: { ...^[$1, $2] }
+            pivot([$1, $2]), 
+            spread: { ...pivot([$1, $2]) }
         };
 `).parse('abc123');
 { '1': [ 'a', 'b', 'c' ],

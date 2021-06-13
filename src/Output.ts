@@ -27,7 +27,7 @@ import {
 
 import { 
     Grammar, RuleNode, ValueNode, ObjectNode, ArrayNode, CallNode, BooleanNode, StringNode, StringTextNode, EscapeNode,
-    NumberNode, BackRefNode, ConstRefNode, MetaRefNode, PivotNode, SpreadNode
+    NumberNode, BackRefNode, ConstRefNode, MetaRefNode, SpreadNode
 } from './Grammar';
 
 export type Output = {
@@ -39,6 +39,32 @@ export type Output = {
 
 export type Callbacks = {
     [key:string]: Function
+}
+
+let defaultCallbacks = {
+    pivot: (value) => {
+        if (!Array.isArray(value)) {
+            throw new Error("Invalid pivot argment: " + value);
+        }
+        value.map((item) => {
+            if (!Array.isArray(item)) {
+                throw new Error("Invalid pivot argument: " + JSON.stringify(item));
+            }
+            if (item.length != value[0].length) {
+                throw new Error("All subarrays in a pivot must be of the same length");
+            }
+        })
+        let ret = [];
+        for (let item of value[0]) {
+            ret.push([]);
+        }
+        for (let i = 0; i < value.length; i++) {
+            for (let j = 0; j < value[0].length; j++) {
+                ret[j][i] = value[i][j];
+            }
+        }
+        return ret;            
+    }
 }
 
 export class ValueBuilder {
@@ -132,31 +158,6 @@ export class ValueBuilder {
         return metas[node.name];
     }
 
-    pivot(node:PivotNode, captures, metas) {
-        let value = this.value(node.value, captures, metas);
-        if (!Array.isArray(value)) {
-            grammarError(ErrorCode.InvalidPivot, this.grammar.text, node.meta, JSON.stringify(value));
-        }
-        value.map((item) => {
-            if (!Array.isArray(item)) {
-                grammarError(ErrorCode.InvalidPivot, this.grammar.text, node.meta, JSON.stringify(item));
-            }
-            if (item.length != value[0].length) {
-                grammarError(ErrorCode.PivotArraySizeMismatch, this.grammar.text, node.meta);
-            }
-        })
-        let ret = [];
-        for (let item of value[0]) {
-            ret.push([]);
-        }
-        for (let i = 0; i < value.length; i++) {
-            for (let j = 0; j < value[0].length; j++) {
-                ret[j][i] = value[i][j];
-            }
-        }
-        return ret;
-    }
-
     spread(node:SpreadNode, captures, metas) {
         let value = this.value(node.value, captures, metas);
         if (!value || (typeof value != 'object' && typeof value != 'string')) {
@@ -210,10 +211,16 @@ export class ValueBuilder {
         for (let arg of node.args) {
             argVals.push(this.value(arg, captures, metas));
         }
-        if (!this.callbacks[node.name]) {
+        let caller = this.callbacks[node.name];
+        if (!caller) caller = defaultCallbacks[node.name];
+        if (!caller) {
             grammarError(ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
         } else {
-            return this.callbacks[node.name].apply(null, argVals);
+            try {
+                return caller.apply(null, argVals);
+            } catch(e) {
+                grammarError(ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
+            }
         }
     }
 

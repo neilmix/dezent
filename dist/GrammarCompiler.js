@@ -330,7 +330,7 @@ function visitOutputNodes(node, data, f) {
     var e_9, _a;
     f(node, data);
     var items;
-    if (node.type == "spread" || node.type == "pivot") {
+    if (node.type == "spread") {
         items = [node.value];
     }
     else if (node.type == "array") {

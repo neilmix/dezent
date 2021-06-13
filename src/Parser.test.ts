@@ -113,10 +113,11 @@ test("backref outputs", () => {
 });
 
 test("pivot", () => {
-    expectParse(`return .* -> ^[[1,2,3],[4,5,6]];`).toEqual([[1,4],[2,5],[3,6]]);
-    expectParse(`return .* -> ^^[[1,2,3],[4,5,6]];`).toEqual([[1,2,3],[4,5,6]]);
-    expectParseFail(`return .* -> ^[1,2,3];`);
-    expectParseFail(`return .* -> ^[[1,2],[1,2,3]];`);
+    expectParse(`return .* -> pivot([[1,2,3],[4,5,6]]);`).toEqual([[1,4],[2,5],[3,6]]);
+    expectParse(`return .* -> {...pivot([['foo','bar','baz'],[4,5,6]])};`).toEqual({foo:4,bar:5,baz:6});
+    expectParse(`return .* -> pivot(pivot([[1,2,3],[4,5,6]]));`).toEqual([[1,2,3],[4,5,6]]);
+    expectParseFail(`return .* -> pivot([1,2,3]);`);
+    expectParseFail(`return .* -> pivot([[1,2],[1,2,3]]);`);
 });
 
 test("spread", () => {

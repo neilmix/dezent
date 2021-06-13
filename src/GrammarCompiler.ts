@@ -247,7 +247,7 @@ function visitParseNodes(
 function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
     f(node, data);
     let items;
-    if (node.type == "spread" || node.type == "pivot") {
+    if (node.type == "spread") {
         items = [node.value];
     } else if (node.type == "array") {
         items = node.elements;

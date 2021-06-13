@@ -62,14 +62,13 @@ var ErrorCode;
     ErrorCode[ErrorCode["CaptureCountMismatch"] = 1006] = "CaptureCountMismatch";
     ErrorCode[ErrorCode["InvalidBackRef"] = 1007] = "InvalidBackRef";
     ErrorCode[ErrorCode["InvalidConstRef"] = 1008] = "InvalidConstRef";
-    ErrorCode[ErrorCode["InvalidPivot"] = 1009] = "InvalidPivot";
-    ErrorCode[ErrorCode["PivotArraySizeMismatch"] = 1010] = "PivotArraySizeMismatch";
+    ErrorCode[ErrorCode["FunctionNotFound"] = 1009] = "FunctionNotFound";
+    ErrorCode[ErrorCode["CallbackError"] = 1010] = "CallbackError";
     ErrorCode[ErrorCode["InvalidObjectTuple"] = 1011] = "InvalidObjectTuple";
     ErrorCode[ErrorCode["InvalidAccessRoot"] = 1012] = "InvalidAccessRoot";
     ErrorCode[ErrorCode["InvalidAccessIndex"] = 1013] = "InvalidAccessIndex";
     ErrorCode[ErrorCode["InvalidAccessProperty"] = 1014] = "InvalidAccessProperty";
-    ErrorCode[ErrorCode["FunctionNotFound"] = 1015] = "FunctionNotFound";
-    ErrorCode[ErrorCode["UnknownPragma"] = 2016] = "UnknownPragma";
+    ErrorCode[ErrorCode["UnknownPragma"] = 2015] = "UnknownPragma";
     ErrorCode[ErrorCode["ArrayOverrun"] = 2001] = "ArrayOverrun";
     ErrorCode[ErrorCode["MismatchOutputFrames"] = 2002] = "MismatchOutputFrames";
     ErrorCode[ErrorCode["CaptureAlreadyInProgress"] = 2003] = "CaptureAlreadyInProgress";
@@ -94,13 +93,12 @@ exports.errorMessages = {
     1006: "All options within a rule must have the same number of captures",
     1007: "Invalid back reference: $$1",
     1008: "Invalid variable reference: $$1",
-    1009: "Invalid pivot argment: $1",
-    1010: "All subarrays in a pivot must be of the same length",
+    1009: "Function not found: $1",
+    1010: "Error executing callback: $1",
     1011: "When spreading an array into an object, array elements must be arrays of length 2 but instead received: $1",
     1012: "Attempted to access property of non-object value: $1",
     1013: "Attempted to access property using a key that was not a string or number: $1",
     1014: "Attempted to access a property that doesn't exist: $1",
-    1015: "Function not found: $1",
     1016: "Unknown pragma: $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",

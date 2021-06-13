@@ -57,7 +57,7 @@ export interface RangeNode extends Node {
 
 export type DescriptorNode = CaptureNode | GroupNode | StringNode | ClassNode | RuleRefNode | AnyNode;
 export type ParseNode = RulesetNode | RuleNode | PatternNode | TokenNode | DescriptorNode;
-export type ValueNode = BackRefNode | ConstRefNode | MetaRefNode | PivotNode | SpreadNode | ObjectNode | ArrayNode | CallNode | StringNode | NumberNode | BooleanNode | NullNode;
+export type ValueNode = BackRefNode | ConstRefNode | MetaRefNode | SpreadNode | ObjectNode | ArrayNode | CallNode | StringNode | NumberNode | BooleanNode | NullNode;
 
 export interface MetaData {
 }
@@ -109,8 +109,7 @@ export interface CharNode         extends RangeNode    { type: 'char',      valu
 export interface BackRefNode      extends OutputNode { type: 'backref',   index: string, collapse: boolean }
 export interface ConstRefNode     extends OutputNode { type: 'constref',  name: string }
 export interface MetaRefNode      extends OutputNode { type: 'metaref',   name: string }
-export interface PivotNode        extends OutputNode { type: 'pivot',     value: BackRefNode|ConstRefNode|ObjectNode|ArrayNode|PivotNode }
-export interface SpreadNode       extends OutputNode { type: 'spread',    value: BackRefNode|ConstRefNode|PivotNode|ObjectNode|ArrayNode }
+export interface SpreadNode       extends OutputNode { type: 'spread',    value: BackRefNode|ConstRefNode|ObjectNode|ArrayNode }
 export interface ObjectNode       extends OutputNode { type: 'object',    members: (MemberNode|SpreadNode)[] }
 export interface ArrayNode        extends OutputNode { type: 'array',     elements: ValueNode[] }
 export interface CallNode         extends OutputNode { type: 'call',      name: string, args: ValueNode[] }
@@ -214,7 +213,7 @@ export function createUncompiledDezentGrammar():Grammar {
 				`'?'`, { repeat: false, required: false },
 				`''`,  { repeat: false, required: true }),
 
-			ruleset('value', `{backref|constref|metaref|pivot|object|array|call|string|number|boolean|null}`,
+			ruleset('value', `{backref|constref|metaref|object|array|call|string|number|boolean|null}`,
 				'$1'),
 
 			ruleset('backref', 
@@ -227,10 +226,7 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('metaref', `'@' {'position'|'length'}`,
 				{ type: 'metaref', name: '$1' }),
 
-			ruleset('pivot', `'^' {backref|constref|array|pivot}`,
-				{ type: 'pivot', value: '$1', '...$meta':'' }),
-
-			ruleset('spread', `'...' {backref|constref|pivot|object|array|string}`, 
+			ruleset('spread', `'...' {backref|constref|object|array|string|call}`, 
 				{ type: 'spread', value: '$1', '...$meta': '' }),
 
 			ruleset('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}`,

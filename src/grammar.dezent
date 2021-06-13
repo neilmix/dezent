@@ -99,7 +99,7 @@ modifier =
 	'?' -> { repeat: false, required: false },
 	''  -> { repeat: false, required: true };
 
-value = { backref | constref | metaref | pivot | object | array | call | string | number | boolean | null } 
+value = { backref | constref | metaref | object | array | call | string | number | boolean | null } 
 	-> $1;
 
 backref = 
@@ -112,10 +112,7 @@ constref = '$' { identifier } {access}
 metaref = '@' { 'position' | 'length' }
 	-> { type: 'metaref', name: $1 };
 
-pivot = '^' {backref|constref|array|pivot}
-	-> { type: 'pivot', value: $1, ...$meta };
-
-spread = '...' {backref|constref|pivot|object|array|string} 
+spread = '...' {backref|constref|object|array|string|call} 
 	-> { type: 'spread', value: $1, ...$meta };
 
 object = '{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}
