@@ -46,21 +46,21 @@ Dezent is a parser that makes complex pattern matching easier to build, maintain
 Dezent is ideal for:
 * Complex nested pattern matching
 * Converting text data into hierarchical data structures
-* Extracting numerous text segments into structured output
-* Parsing large data files
+* Extracting text segments into structured output
+* Parsing large data files, especially containing non-standard data formats
 * Recursive descent parsing
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 # Status
 
-Dezent is currently in _alpha_. This is the first public release of Dezent, for the purpose of soliciting feedback. Dezent is fully functional and ready for use, and its use is encouraged, but the grammar and APIs of Dezent may change as a result of public feedback, so please be aware that future releases might not be backward compatible with this release.
+Dezent is currently in _beta_. Please try it out! We'd love your feedback.
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 # License
 
-Dezent is made available under the GNU Affero General Public License. See License.txt for details. Commercial licensing and support are available, please contact neilmix@gmail.com.
+Dezent is made available under the MIT License, see License.txt for details. Please contact neilmix@gmail.com for support.
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
@@ -72,7 +72,7 @@ The Dezent javascript library and the dezent command-line tool are included in t
 
 The following examples are included in this distribution:
 * [URLparser.js](examples/URLparser.js): A utility to interactively read and parse URLs. This example demonstrates general-purpose complex pattern matching.
-* [randomJSONGenerator.js](examples/randomJSONGenerator.js) and [randomJSONParser.js](examples/randomJSONParser.js): an hypothentical advanced example of streamed log file parsing. This example demonstrates how Dezent can be used to parse large files or streams of data. The ```randomJSONGenerator.js``` script generates log files consisting of timestamps followed by
+* [randomJSONGenerator.js](examples/randomJSONGenerator.js) and [randomJSONParser.js](examples/randomJSONParser.js): a hypothentical advanced example of streamed log file parsing. This example demonstrates how Dezent can be used to parse large files or streams of data. The ```randomJSONGenerator.js``` script generates log files consisting of timestamps followed by
 a JSON object. The ```randomJSONParser.js``` parses and processes the JSON object on each line
  and displays how quickly the parser is able to consume data. To try out the example, run<br>
  ```    node examples/randomJSONGenerator.js | node examples/randomJSONParser.js```<br>
@@ -85,7 +85,7 @@ a JSON object. The ```randomJSONParser.js``` parses and processes the JSON objec
 
 The Dezent constructor parses and compiles your grammar:
 ```javascript
-> Dezent = require('dezent').default;
+> Dezent = require('dezent').Dezent;
 [Function: Dezent]
 > let d = new Dezent(`return {[a-zA-Z]+} ' '+ {[a-zA-Z]+} {[!.?]} -> [$1, $2, $3];`);
 ```
