@@ -20,30 +20,30 @@
 import "jest";
 import { execSync } from "child_process";
 
-import "./Parser";
 import { Dezent, DezentStream } from "./Dezent";
 import * as parser from "./Parser";
 import { createUncompiledDezentGrammar } from "./Grammar";
-import { Functions } from "./Output";
+import { Callbacks } from "./Output";
 import { readFileSync } from "fs";
 import { ParseBuffer } from "./ParseBuffer";
 
-function parse(grammar:string, text:string, functions?:Functions) {
-    let d = new Dezent(grammar, functions, {debugErrors: true});
+function parse(grammar:string, text:string, options?:parser.ParserOptions) {
+    if (options && options.debugErrors === undefined) options.debugErrors = true;
+    let d = new Dezent(grammar, options);
     return d.parse(text);
 }
 
 function parseError(grammar:string, text:string) {
     try {
-        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer(text), null, null).parse();
+        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer(text), null).parse();
         fail();
     } catch(e) {
         return e;
     }
 }
 
-function expectParse(grammar:string, text?:string, functions?:Functions) {
-    return expect(parse(grammar, text||'Did you forget the second argument?', functions));
+function expectParse(grammar:string, text?:string, options?:parser.ParserOptions) {
+    return expect(parse(grammar, text||'Did you forget the second argument?', options));
 }
 
 function expectGrammarFail(grammar:string) {
@@ -53,13 +53,13 @@ function expectGrammarFail(grammar:string) {
 }
 
 function expectParseFail(grammar:string, text?:string) {
-    let d = new Dezent(grammar, null, {debugErrors: false});
+    let d = new Dezent(grammar, {debugErrors: false});
     expect(d.parse(text||'Did you forget the second argument?')).toBe(undefined);
 }
 
-function parseGrammarError(grammar:string, functions?:Functions) {
+function parseGrammarError(grammar:string, options?:parser.ParserOptions) {
     try {
-        parser.parseGrammar(grammar, functions);
+        parser.parseGrammar(grammar, options);
         fail();
     } catch(e) {
         return e;
@@ -253,12 +253,12 @@ test("access", () => {
     expectParse(`$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;`).toEqual(2);
 });
 
-test("function calls", () => {
-    expectParse(`return .* -> foo();`, 'anything', { foo: () => 4 }).toEqual(4);
+test("callbacks", () => {
+    expectParse(`return .* -> foo();`, 'anything', { callbacks: { foo: () => 4 } }).toEqual(4);
     expectParse(`return .* -> foo(1, 'a', true, [1,2,3], { foo: 'bar' });`, 'anything', 
-        { foo: function() { return [].slice.call(arguments) } })
+        { callbacks: { foo: function() { return [].slice.call(arguments) } } })
         .toEqual([1, 'a', true, [1,2,3], { foo: 'bar' }]);
-    expectParse(`return .* -> { foo: [ foo() ] };`, 'anything', { foo: () => 4 })
+    expectParse(`return .* -> { foo: [ foo() ] };`, 'anything', { callbacks: { foo: () => 4 } })
         .toEqual({foo: [4]});
 
     let value = 0;
@@ -266,7 +266,7 @@ test("function calls", () => {
            foo = . bar -> null;
            bar = .* -> blah();`, 
         'anything', 
-        { blah: () => value = 5 });
+        { callbacks: { blah: () => value = 5 } });
     expect(value).toEqual(5);
 
     expectParseFail(`return .* -> foo();`);
@@ -320,7 +320,7 @@ test("dezent grammar documentation", () => {
     let prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
     let buf = new ParseBuffer(textDezent);
-    let parsedDezent = new parser.Parser(hackedGrammar, buf, null, {debugErrors: true}).parse();
+    let parsedDezent = new parser.Parser(hackedGrammar, buf, {debugErrors: true}).parse();
     hackedGrammar.vars.meta = prevMeta;
 
     expect(parsedDezent).toEqual(uncompiledDezent);
@@ -335,7 +335,7 @@ test("chunked parsing", () => {
     function compare(grammar, text) {
         let expected = new Dezent(grammar).parse(text);
 
-        let dez = new DezentStream(grammar, null, {debugErrors:true});
+        let dez = new DezentStream(grammar, {debugErrors:true});
         for (let char of text) {
             dez.write(char);
         }

@@ -33,9 +33,9 @@ exports.buildString = exports.ValueBuilder = void 0;
 var Parser_1 = require("./Parser");
 var GrammarCompiler_1 = require("./GrammarCompiler");
 var ValueBuilder = /** @class */ (function () {
-    function ValueBuilder(grammar, functions) {
+    function ValueBuilder(grammar, callbacks) {
         this.grammar = grammar;
-        this.functions = functions || {};
+        this.callbacks = callbacks || {};
     }
     ValueBuilder.prototype.buildValue = function (frame) {
         var e_1, _a;
@@ -279,11 +279,11 @@ var ValueBuilder = /** @class */ (function () {
             }
             finally { if (e_8) throw e_8.error; }
         }
-        if (!this.functions[node.name]) {
+        if (!this.callbacks[node.name]) {
             GrammarCompiler_1.grammarError(Parser_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
         }
         else {
-            return this.functions[node.name].apply(null, argVals);
+            return this.callbacks[node.name].apply(null, argVals);
         }
     };
     ValueBuilder.prototype.string = function (node) {

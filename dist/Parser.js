@@ -127,7 +127,7 @@ function findDezentGrammar() {
 exports.findDezentGrammar = findDezentGrammar;
 function parseGrammar(text, options) {
     var buf = new ParseBuffer_1.ParseBuffer(text);
-    var parser = new Parser(findDezentGrammar(), buf, null, options);
+    var parser = new Parser(findDezentGrammar(), buf, options);
     try {
         var grammar = parser.parse();
         GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text);
@@ -146,7 +146,7 @@ function parseGrammar(text, options) {
 exports.parseGrammar = parseGrammar;
 exports.lastParser = null; // for testing purposes
 var Parser = /** @class */ (function () {
-    function Parser(grammar, buffer, functions, options) {
+    function Parser(grammar, buffer, options) {
         var e_1, _a;
         var _this = this;
         this.stack = [];
@@ -185,7 +185,7 @@ var Parser = /** @class */ (function () {
         for (var option in options) {
             this.options[option] = options[option];
         }
-        this.valueBuilder = new Output_1.ValueBuilder(grammar, functions);
+        this.valueBuilder = new Output_1.ValueBuilder(grammar, this.options.callbacks);
         this.callFrame(null, root);
         var maxPos = 0;
         var failedPatterns = {};
@@ -218,11 +218,11 @@ var Parser = /** @class */ (function () {
                         return exports.BufferEmpty;
                     }
                     // our parsing is complete
-                    if (!final.output) {
-                        parserError(ErrorCode.EmptyOutput);
-                    }
                     if (final.pos != 0) {
                         parserError(ErrorCode.InputConsumedBeforeResult);
+                    }
+                    if (!final.output) {
+                        parserError(ErrorCode.EmptyOutput);
                     }
                     if (final.output.length < _this.buffer.length) {
                         parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());

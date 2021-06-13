@@ -31,27 +31,28 @@ var __values = (this && this.__values) || function(o) {
 Object.defineProperty(exports, "__esModule", { value: true });
 require("jest");
 var child_process_1 = require("child_process");
-require("./Parser");
 var Dezent_1 = require("./Dezent");
 var parser = require("./Parser");
 var Grammar_1 = require("./Grammar");
 var fs_1 = require("fs");
 var ParseBuffer_1 = require("./ParseBuffer");
-function parse(grammar, text, functions) {
-    var d = new Dezent_1.Dezent(grammar, functions, { debugErrors: true });
+function parse(grammar, text, options) {
+    if (options && options.debugErrors === undefined)
+        options.debugErrors = true;
+    var d = new Dezent_1.Dezent(grammar, options);
     return d.parse(text);
 }
 function parseError(grammar, text) {
     try {
-        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer_1.ParseBuffer(text), null, null).parse();
+        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer_1.ParseBuffer(text), null).parse();
         fail();
     }
     catch (e) {
         return e;
     }
 }
-function expectParse(grammar, text, functions) {
-    return expect(parse(grammar, text || 'Did you forget the second argument?', functions));
+function expectParse(grammar, text, options) {
+    return expect(parse(grammar, text || 'Did you forget the second argument?', options));
 }
 function expectGrammarFail(grammar) {
     expect(function () {
@@ -59,12 +60,12 @@ function expectGrammarFail(grammar) {
     }).toThrow();
 }
 function expectParseFail(grammar, text) {
-    var d = new Dezent_1.Dezent(grammar, null, { debugErrors: false });
+    var d = new Dezent_1.Dezent(grammar, { debugErrors: false });
     expect(d.parse(text || 'Did you forget the second argument?')).toBe(undefined);
 }
-function parseGrammarError(grammar, functions) {
+function parseGrammarError(grammar, options) {
     try {
-        parser.parseGrammar(grammar, functions);
+        parser.parseGrammar(grammar, options);
         fail();
     }
     catch (e) {
@@ -209,14 +210,14 @@ test("access", function () {
     expectParse("foo = .* -> {a: 1}; return {foo} -> $1['a'];").toEqual(1);
     expectParse("$foo = {a:[{b:2}]}; return .* -> $foo.a[0].b;").toEqual(2);
 });
-test("function calls", function () {
-    expectParse("return .* -> foo();", 'anything', { foo: function () { return 4; } }).toEqual(4);
-    expectParse("return .* -> foo(1, 'a', true, [1,2,3], { foo: 'bar' });", 'anything', { foo: function () { return [].slice.call(arguments); } })
+test("callbacks", function () {
+    expectParse("return .* -> foo();", 'anything', { callbacks: { foo: function () { return 4; } } }).toEqual(4);
+    expectParse("return .* -> foo(1, 'a', true, [1,2,3], { foo: 'bar' });", 'anything', { callbacks: { foo: function () { return [].slice.call(arguments); } } })
         .toEqual([1, 'a', true, [1, 2, 3], { foo: 'bar' }]);
-    expectParse("return .* -> { foo: [ foo() ] };", 'anything', { foo: function () { return 4; } })
+    expectParse("return .* -> { foo: [ foo() ] };", 'anything', { callbacks: { foo: function () { return 4; } } })
         .toEqual({ foo: [4] });
     var value = 0;
-    parse("return foo -> null;\n           foo = . bar -> null;\n           bar = .* -> blah();", 'anything', { blah: function () { return value = 5; } });
+    parse("return foo -> null;\n           foo = . bar -> null;\n           bar = .* -> blah();", 'anything', { callbacks: { blah: function () { return value = 5; } } });
     expect(value).toEqual(5);
     expectParseFail("return .* -> foo();");
 });
@@ -245,7 +246,7 @@ test("dezent grammar documentation", function () {
     var prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
     var buf = new ParseBuffer_1.ParseBuffer(textDezent);
-    var parsedDezent = new parser.Parser(hackedGrammar, buf, null, { debugErrors: true }).parse();
+    var parsedDezent = new parser.Parser(hackedGrammar, buf, { debugErrors: true }).parse();
     hackedGrammar.vars.meta = prevMeta;
     expect(parsedDezent).toEqual(uncompiledDezent);
 });
@@ -257,7 +258,7 @@ test("chunked parsing", function () {
     function compare(grammar, text) {
         var e_1, _a;
         var expected = new Dezent_1.Dezent(grammar).parse(text);
-        var dez = new Dezent_1.DezentStream(grammar, null, { debugErrors: true });
+        var dez = new Dezent_1.DezentStream(grammar, { debugErrors: true });
         try {
             for (var text_1 = __values(text), text_1_1 = text_1.next(); !text_1_1.done; text_1_1 = text_1.next()) {
                 var char = text_1_1.value;

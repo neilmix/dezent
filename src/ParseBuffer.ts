@@ -36,7 +36,7 @@
         return this._closed;
     }
 
-    constructor(textOrSize?:string) {
+    constructor(textOrSize?:string|number) {
         if (typeof textOrSize == "string") {
             this.addChunk(textOrSize);
             this.close();

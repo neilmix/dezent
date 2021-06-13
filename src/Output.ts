@@ -37,18 +37,18 @@ export type Output = {
     value: any,
 }
 
-export type Functions = {
+export type Callbacks = {
     [key:string]: Function
 }
 
 export class ValueBuilder {
     grammar:Grammar;
     output:Output;
-    functions:Functions;
+    callbacks:Callbacks;
 
-    constructor(grammar:Grammar, functions?:Functions) {
+    constructor(grammar:Grammar, callbacks?:Callbacks) {
         this.grammar = grammar;
-        this.functions = functions || {};
+        this.callbacks = callbacks || {};
     }
 
     buildValue(frame:ParseFrame) {
@@ -210,10 +210,10 @@ export class ValueBuilder {
         for (let arg of node.args) {
             argVals.push(this.value(arg, captures, metas));
         }
-        if (!this.functions[node.name]) {
+        if (!this.callbacks[node.name]) {
             grammarError(ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
         } else {
-            return this.functions[node.name].apply(null, argVals);
+            return this.callbacks[node.name].apply(null, argVals);
         }
     }
 

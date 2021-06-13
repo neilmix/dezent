@@ -1,5 +1,5 @@
 const readline = require('readline');
-const Dezent = require("../dist/Dezent").default;
+const Dezent = require("../dist/Dezent").Dezent;
 
 const rl = readline.createInterface({
     input: process.stdin,

@@ -24,7 +24,7 @@ import {
 
 import { ParseBuffer, ParseBufferExhaustedError } from "./ParseBuffer";
 import { GrammarCompiler, grammarError } from "./GrammarCompiler";
-import { Output, Functions, ValueBuilder } from "./Output";
+import { Output, Callbacks, ValueBuilder } from "./Output";
 
 export enum ErrorCode {
     TextParsingError          = 1,
@@ -162,11 +162,13 @@ export function findDezentGrammar() : Grammar{
 export interface ParserOptions {
     debugErrors?: boolean,
     dumpDebug?: boolean,
+    minBufferSize?: number,
+    callbacks?: Callbacks,
 }
 
 export function parseGrammar(text:string, options?:ParserOptions) : Grammar {
     let buf = new ParseBuffer(text);
-    let parser = new Parser(findDezentGrammar(), buf, null, options);
+    let parser = new Parser(findDezentGrammar(), buf, options);
     try {
         let grammar = parser.parse();
         GrammarCompiler.compileGrammar(grammar, text);
@@ -197,7 +199,7 @@ export class Parser {
     run : Function;
     error : Error;
 
-    constructor(grammar:Grammar, buffer:ParseBuffer, functions:Functions, options:ParserOptions) {
+    constructor(grammar:Grammar, buffer:ParseBuffer, options:ParserOptions) {
         lastParser = this;
 
         this.grammar = grammar;
@@ -226,7 +228,7 @@ export class Parser {
         for (let option in options) {
             this.options[option] = options[option];
         }
-        this.valueBuilder = new ValueBuilder(grammar, functions);
+        this.valueBuilder = new ValueBuilder(grammar, this.options.callbacks);
         this.callFrame(null, root);
 
         let maxPos = 0;
@@ -262,11 +264,11 @@ export class Parser {
                         return BufferEmpty;
                     }
                     // our parsing is complete
-                    if (!final.output) {
-                        parserError(ErrorCode.EmptyOutput);
-                    }
                     if (final.pos != 0) {
                         parserError(ErrorCode.InputConsumedBeforeResult);
+                    }
+                    if (!final.output) {
+                        parserError(ErrorCode.EmptyOutput);
                     }
                     if (final.output.length < this.buffer.length) {
                         parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());

@@ -20,7 +20,7 @@
 import { parseGrammar, Parser, ParserOptions } from './Parser';
 
 import { Grammar } from './Grammar';
-import { Functions } from './Output';
+import { Callbacks } from './Output';
 import { ParseBuffer } from './ParseBuffer';
 
 export interface DezentError extends Error {
@@ -48,28 +48,24 @@ export interface ParseError extends DezentError {
 
 export class Dezent {
     private grammar:Grammar;
-    private functions:Functions;
     private options:ParserOptions;
-    private debugErrors: boolean;
 
     error:DezentError|GrammarError|ParseError;
 
-    constructor(grammarStr:string, functions?:Functions, options?:ParserOptions) {
+    constructor(grammarStr:string, options?:ParserOptions) {
         this.grammar = parseGrammar(grammarStr, grammarOptions(options));
-        this.functions = functions;
-        this.options = options;
-        this.debugErrors = options ? !!options.debugErrors : false;
+        this.options = options || {};
         this.error = null;
     }
 
     parse(text:string) : any {
         try {
-            let stream = new DezentStream(this.grammar, this.functions, this.options);
+            let stream = new DezentStream(this.grammar, this.options);
             stream.write(text);
             return stream.close();
         } catch (e) {
             this.error = e;
-            if (this.debugErrors) {
+            if (this.options.debugErrors) {
                 throw e;
             }
             return undefined;
@@ -78,18 +74,15 @@ export class Dezent {
 }
 
 export class DezentStream {
-    private functions:Functions;
     private options:ParserOptions;
     private buffer:ParseBuffer;
     private parser:Parser;
 
-    constructor(grammar:string|Grammar, functions?:Functions, options?:ParserOptions) {
-        grammar = typeof grammar == "string" ? parseGrammar(grammar, grammarOptions(options)) : grammar;
-
+    constructor(grammar:string|Grammar, options?:ParserOptions) {
         this.options = options || {};
-        this.functions = functions;
-        this.buffer = new ParseBuffer();
-        this.parser = new Parser(grammar, this.buffer, this.functions, this.options);
+        this.buffer = new ParseBuffer(this.options.minBufferSize);
+        grammar = typeof grammar == "string" ? parseGrammar(grammar, grammarOptions(this.options)) : grammar;
+        this.parser = new Parser(grammar, this.buffer, this.options);
     }
 
     write(text:string) {
@@ -108,7 +101,7 @@ export class DezentStream {
 
 function grammarOptions(opt:ParserOptions) {
         // don't dumpDebug when parsing the grammar
-        let gOpt = Object.assign({}, opt||{});
+        let gOpt = Object.assign({}, opt);
         gOpt.dumpDebug = false;
         return gOpt;
 }

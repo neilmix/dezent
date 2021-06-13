@@ -22,22 +22,20 @@ exports.DezentStream = exports.Dezent = void 0;
 var Parser_1 = require("./Parser");
 var ParseBuffer_1 = require("./ParseBuffer");
 var Dezent = /** @class */ (function () {
-    function Dezent(grammarStr, functions, options) {
+    function Dezent(grammarStr, options) {
         this.grammar = Parser_1.parseGrammar(grammarStr, grammarOptions(options));
-        this.functions = functions;
-        this.options = options;
-        this.debugErrors = options ? !!options.debugErrors : false;
+        this.options = options || {};
         this.error = null;
     }
     Dezent.prototype.parse = function (text) {
         try {
-            var stream = new DezentStream(this.grammar, this.functions, this.options);
+            var stream = new DezentStream(this.grammar, this.options);
             stream.write(text);
             return stream.close();
         }
         catch (e) {
             this.error = e;
-            if (this.debugErrors) {
+            if (this.options.debugErrors) {
                 throw e;
             }
             return undefined;
@@ -47,12 +45,11 @@ var Dezent = /** @class */ (function () {
 }());
 exports.Dezent = Dezent;
 var DezentStream = /** @class */ (function () {
-    function DezentStream(grammar, functions, options) {
-        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, grammarOptions(options)) : grammar;
+    function DezentStream(grammar, options) {
         this.options = options || {};
-        this.functions = functions;
-        this.buffer = new ParseBuffer_1.ParseBuffer();
-        this.parser = new Parser_1.Parser(grammar, this.buffer, this.functions, this.options);
+        this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSize);
+        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, grammarOptions(this.options)) : grammar;
+        this.parser = new Parser_1.Parser(grammar, this.buffer, this.options);
     }
     DezentStream.prototype.write = function (text) {
         this.buffer.addChunk(text);
@@ -70,7 +67,7 @@ var DezentStream = /** @class */ (function () {
 exports.DezentStream = DezentStream;
 function grammarOptions(opt) {
     // don't dumpDebug when parsing the grammar
-    var gOpt = Object.assign({}, opt || {});
+    var gOpt = Object.assign({}, opt);
     gOpt.dumpDebug = false;
     return gOpt;
 }

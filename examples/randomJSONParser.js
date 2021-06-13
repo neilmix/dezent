@@ -48,7 +48,7 @@ let callbacks = {
     number: Number,
 };
 
-let ds = new DezentStream(grammar, callbacks);
+let ds = new DezentStream(grammar, { callbacks: callbacks });
 
 process.stdout.write("...");
 process.stdin.setEncoding('utf8');
