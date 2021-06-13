@@ -81,6 +81,7 @@ var ErrorCode;
     ErrorCode[ErrorCode["InputConsumedBeforeResult"] = 2009] = "InputConsumedBeforeResult";
     ErrorCode[ErrorCode["MultipleOutputsForCapture"] = 2010] = "MultipleOutputsForCapture";
     ErrorCode[ErrorCode["AssertionFailure"] = 2011] = "AssertionFailure";
+    ErrorCode[ErrorCode["InputFreed"] = 2012] = "InputFreed";
 })(ErrorCode = exports.ErrorCode || (exports.ErrorCode = {}));
 exports.errorMessages = {
     1: "Parse failed: $3\nAt line $1 char $2:\n$4\n$5",
@@ -112,6 +113,7 @@ exports.errorMessages = {
     2009: "The result does not start at input index 0",
     2010: "Multiple outputs were found for a non-repeating capture",
     2011: "Assertion failed",
+    2012: "Input text was referenced (perhaps via $0?) but it has already released to free memory. Try increasing minBufferSizeInMB.",
 };
 exports.BufferEmpty = { toString: function () { return "BufferEmpty"; } };
 var dezentGrammar;
@@ -191,7 +193,6 @@ var Parser = /** @class */ (function () {
             var _a, _b;
             STACK: while (_this.stack.length) {
                 var current = _this.top();
-                // left recursion?
                 // caching?
                 if (current.complete) {
                     if (_this.stack.length > 1) {
@@ -425,7 +426,7 @@ var Parser = /** @class */ (function () {
                 } while (matched && token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
                 current.tokenIndex++;
                 current.tokenPos = current.pos + current.consumed;
-                continue STACK;
+                continue STACK; // redundant; for clarity
             }
             function expectedTerminals() {
                 return Object.keys(failedPatterns);
@@ -524,19 +525,21 @@ var Parser = /** @class */ (function () {
                 caller.callee = frame;
             this.stack.push(frame);
         }
-        this.debugLog.push([
-            'enter',
-            this.buffer.substr(frame.pos, 20),
-            secondFrame ? this.stack.length - 2 : this.stack.length - 1,
-            frame.ruleset ? frame.ruleset.name : frame.selector.type
-        ]);
-        if (secondFrame) {
+        if (this.options.debugErrors) {
             this.debugLog.push([
                 'enter',
-                this.buffer.substr(secondFrame.pos, 20),
-                this.stack.length - 1,
-                secondFrame.ruleset ? secondFrame.ruleset.name : secondFrame.selector.type
+                this.buffer.substr(frame.pos, 20),
+                secondFrame ? this.stack.length - 2 : this.stack.length - 1,
+                frame.ruleset ? frame.ruleset.name : frame.selector.type
             ]);
+            if (secondFrame) {
+                this.debugLog.push([
+                    'enter',
+                    this.buffer.substr(secondFrame.pos, 20),
+                    this.stack.length - 1,
+                    secondFrame.ruleset ? secondFrame.ruleset.name : secondFrame.selector.type
+                ]);
+            }
         }
     };
     Parser.prototype.dumpDebug = function () {

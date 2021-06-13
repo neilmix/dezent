@@ -21,7 +21,7 @@ import { parseGrammar, Parser, ParserOptions } from './Parser';
 
 import { Grammar } from './Grammar';
 import { Functions } from './Output';
-import { ParseBuffer, ParseBufferExhaustedError } from './ParseBuffer';
+import { ParseBuffer } from './ParseBuffer';
 
 export interface DezentError extends Error {
     code: number

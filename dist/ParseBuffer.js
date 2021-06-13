@@ -49,15 +49,18 @@ exports.ParseBuffer = exports.ParseBufferExhaustedError = void 0;
 var Parser_1 = require("./Parser");
 exports.ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
 var ParseBuffer = /** @class */ (function () {
-    function ParseBuffer(text) {
+    function ParseBuffer(textOrSize) {
+        this.minSizeInMB = 1;
         this.chunks = [];
         this.indices = [];
-        this.chunkIndex = 0;
         this._length = 0;
         this._closed = false;
-        if (text) {
-            this.addChunk(text);
+        if (typeof textOrSize == "string") {
+            this.addChunk(textOrSize);
             this.close();
+        }
+        else if (typeof textOrSize == "number") {
+            this.minSizeInMB = textOrSize;
         }
     }
     Object.defineProperty(ParseBuffer.prototype, "length", {
@@ -75,6 +78,20 @@ var ParseBuffer = /** @class */ (function () {
         configurable: true
     });
     ParseBuffer.prototype.addChunk = function (text) {
+        var buffered = 0;
+        for (var i = 0; i < this.chunks.length; i++) {
+            if (buffered > this.minSizeInMB * 1024 * 1024) {
+                if (this.chunks[i]) {
+                    this.chunks[i] = null;
+                }
+                else {
+                    // we've already freed everything here on out
+                    break;
+                }
+            }
+            if (this.chunks[i])
+                buffered += this.chunks[i].length;
+        }
         this.indices.unshift(this.indices.length ? this.indices[0] + this.chunks[0].length : 0);
         this.chunks.unshift(text);
         this._length += text.length;
@@ -85,6 +102,9 @@ var ParseBuffer = /** @class */ (function () {
             return '';
         }
         var chunk = this.chunks[chunkIdx];
+        if (chunk == null) {
+            Parser_1.parserError(Parser_1.ErrorCode.InputFreed);
+        }
         var text = chunk.substr(charIdx, length);
         while (text.length < length) {
             chunkIdx--;
@@ -112,9 +132,11 @@ var ParseBuffer = /** @class */ (function () {
         if (chunkIdx < 0) {
             throw exports.ParseBufferExhaustedError;
         }
-        else {
-            return this.chunks[chunkIdx].charAt(charIdx);
+        var chunk = this.chunks[chunkIdx];
+        if (chunk == null) {
+            Parser_1.parserError(Parser_1.ErrorCode.InputFreed);
         }
+        return this.chunks[chunkIdx].charAt(charIdx);
     };
     ParseBuffer.prototype.chunkIndexFor = function (idx) {
         if (this.indices.length == 0 || idx >= this.indices[0] + this.chunks[0].length) {

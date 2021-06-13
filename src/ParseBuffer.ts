@@ -22,9 +22,9 @@
  export const ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
 
  export class ParseBuffer {
+    private minSizeInMB : number = 1;
     private chunks : string[] = [];
     private indices : number[] = [];
-    private chunkIndex : number = 0;
     private _length : number = 0;
     private _closed : boolean = false;
 
@@ -36,14 +36,28 @@
         return this._closed;
     }
 
-    constructor(text?:string) {
-        if (text) {
-            this.addChunk(text);
+    constructor(textOrSize?:string) {
+        if (typeof textOrSize == "string") {
+            this.addChunk(textOrSize);
             this.close();
+        } else if (typeof textOrSize == "number") {
+            this.minSizeInMB = textOrSize;
         }
     }
 
     addChunk(text:string) {
+        let buffered = 0;
+        for (let i = 0; i < this.chunks.length; i++) {
+            if (buffered > this.minSizeInMB * 1024 * 1024) {
+                if (this.chunks[i]) {
+                    this.chunks[i] = null;
+                } else {
+                    // we've already freed everything here on out
+                    break;
+                }
+            }
+            if (this.chunks[i]) buffered += this.chunks[i].length;
+        }
         this.indices.unshift(this.indices.length ? this.indices[0] + this.chunks[0].length : 0);
         this.chunks.unshift(text);
         this._length += text.length;
@@ -56,6 +70,9 @@
         }
 
         let chunk = this.chunks[chunkIdx];
+        if (chunk == null) {
+            parserError(ErrorCode.InputFreed);
+        }
         let text = chunk.substr(charIdx, length);
         while (text.length < length) {
             chunkIdx--;
@@ -84,9 +101,12 @@
         let [chunkIdx, charIdx] = this.chunkIndexFor(idx);
         if (chunkIdx < 0) {
             throw ParseBufferExhaustedError;
-        } else {
-            return this.chunks[chunkIdx].charAt(charIdx);
         }
+        let chunk = this.chunks[chunkIdx];
+        if (chunk == null) {
+            parserError(ErrorCode.InputFreed);
+        }
+        return this.chunks[chunkIdx].charAt(charIdx);
     }
 
     chunkIndexFor(idx:number) : [number, number] {

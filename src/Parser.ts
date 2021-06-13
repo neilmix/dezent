@@ -58,6 +58,7 @@ export enum ErrorCode {
     InputConsumedBeforeResult = 2009,
     MultipleOutputsForCapture = 2010,
     AssertionFailure          = 2011,
+    InputFreed                = 2012,
 }
 
 export const errorMessages = {
@@ -92,6 +93,7 @@ export const errorMessages = {
     2009: "The result does not start at input index 0",
     2010: "Multiple outputs were found for a non-repeating capture",
     2011: "Assertion failed",
+    2012: "Input text was referenced (perhaps via $0?) but it has already released to free memory. Try increasing minBufferSizeInMB.",
 }
 
 /*
@@ -233,7 +235,6 @@ export class Parser {
             STACK: while (this.stack.length) {
                 let current = this.top();
 
-                // left recursion?
                 // caching?
 
                 if (current.complete) {
@@ -471,7 +472,7 @@ export class Parser {
                 } while (matched && token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
                 current.tokenIndex++;
                 current.tokenPos = current.pos + current.consumed;
-                continue STACK;    
+                continue STACK; // redundant; for clarity
             }
             
             function expectedTerminals() {
@@ -570,20 +571,21 @@ export class Parser {
             this.stack.push(frame);
         }
 
-        this.debugLog.push([
-            'enter', 
-            this.buffer.substr(frame.pos, 20), 
-            secondFrame ? this.stack.length - 2 : this.stack.length - 1,
-            frame.ruleset ? frame.ruleset.name : frame.selector.type
-        ]);
-
-        if (secondFrame) {
+        if (this.options.debugErrors) {
             this.debugLog.push([
                 'enter', 
-                this.buffer.substr(secondFrame.pos, 20), 
-                this.stack.length - 1,
-                secondFrame.ruleset ? secondFrame.ruleset.name : secondFrame.selector.type
-            ]);    
+                this.buffer.substr(frame.pos, 20), 
+                secondFrame ? this.stack.length - 2 : this.stack.length - 1,
+                frame.ruleset ? frame.ruleset.name : frame.selector.type
+            ]);
+            if (secondFrame) {
+                this.debugLog.push([
+                    'enter', 
+                    this.buffer.substr(secondFrame.pos, 20), 
+                    this.stack.length - 1,
+                    secondFrame.ruleset ? secondFrame.ruleset.name : secondFrame.selector.type
+                ]);    
+            }
         }
     }
 
