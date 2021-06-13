@@ -23,7 +23,6 @@ import { execSync } from "child_process";
 import { Dezent, DezentStream } from "./Dezent";
 import * as parser from "./Parser";
 import { createUncompiledDezentGrammar } from "./Grammar";
-import { Callbacks } from "./Output";
 import { readFileSync } from "fs";
 import { ParseBuffer } from "./ParseBuffer";
 
@@ -33,9 +32,9 @@ function parse(grammar:string, text:string, options?:parser.ParserOptions) {
     return d.parse(text);
 }
 
-function parseError(grammar:string, text:string) {
+function parseError(grammar:string, text:string, options?:parser.ParserOptions) {
     try {
-        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer(text), null).parse();
+        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer(text), options).parse();
         fail();
     } catch(e) {
         return e;
@@ -52,8 +51,8 @@ function expectGrammarFail(grammar:string) {
     }).toThrow();
 }
 
-function expectParseFail(grammar:string, text?:string) {
-    let d = new Dezent(grammar, {debugErrors: false});
+function expectParseFail(grammar:string, text?:string, options?) {
+    let d = new Dezent(grammar, options||{debugErrors: false});
     expect(d.parse(text||'Did you forget the second argument?')).toBe(undefined);
 }
 
@@ -364,6 +363,28 @@ test("expected grammar terminals", () => {
     expect(parseGrammarError('return . -> {}').expected.sort()).toEqual([';']);
     expect(parseGrammarError('return {.}').expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
     expect(parseGrammarError(`return ( . ([ab] {'f'} 'foo)) -> $1;`).expected.sort()).toEqual(["'", "\\"]);
+});
+
+test("minBufferSize", () => {
+    let ds = new DezentStream("return .* -> null;", {minBufferSizeInMB: 1/(1024*1024)});
+    ds.write('x');
+    ds.write('y');
+    ds.write('z');
+    ds.write('a');
+    ds.write('b');
+    expect(ds["buffer"]["chunks"]).toEqual(['b','a',null,null,null]);
+    ds = new DezentStream("return .* -> $0;", {minBufferSizeInMB: 1/(1024*1024)});
+    ds.write('x');
+    ds.write('y');
+    ds.write('z');
+    ds.write('a');
+    ds.write('b');
+    try {
+        ds.close();
+        fail();
+    } catch (err) {
+        expect(err.code).toBe(2012);
+    }
 });
 
 test("errors", () => {

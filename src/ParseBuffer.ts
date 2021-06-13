@@ -48,7 +48,7 @@
     addChunk(text:string) {
         let buffered = 0;
         for (let i = 0; i < this.chunks.length; i++) {
-            if (buffered > this.minSizeInMB * 1024 * 1024) {
+            if (buffered >= this.minSizeInMB * 1024 * 1024) {
                 if (this.chunks[i]) {
                     this.chunks[i] = null;
                 } else {

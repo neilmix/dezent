@@ -132,6 +132,14 @@ ds.close();
 [ 'Hello', 'world', '!' ]
 ```
 
+The ```minBufferSizeInMB``` configuration controls when input text is released from memory. Take
+care to ensure that this value isn't too small, or you may trigger an exception by referencing
+input text that's already been released (for example, referencing a $0 value that's bigger than
+```minBufferSizeInMB```). The default is 1, for 1 megabyte.
+```javascript
+> let ds = new DezentStream(grammar, { minBufferSizeInMB: 15 }); // minimum buffer size is 15 MB
+```
+
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 # Reference - command-line util

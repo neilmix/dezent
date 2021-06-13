@@ -80,7 +80,7 @@ export class DezentStream {
 
     constructor(grammar:string|Grammar, options?:ParserOptions) {
         this.options = options || {};
-        this.buffer = new ParseBuffer(this.options.minBufferSize);
+        this.buffer = new ParseBuffer(this.options.minBufferSizeInMB);
         grammar = typeof grammar == "string" ? parseGrammar(grammar, grammarOptions(this.options)) : grammar;
         this.parser = new Parser(grammar, this.buffer, this.options);
     }

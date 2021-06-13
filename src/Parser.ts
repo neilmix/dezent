@@ -44,7 +44,7 @@ export enum ErrorCode {
     InvalidAccessRoot         = 1012,
     InvalidAccessIndex        = 1013,
     InvalidAccessProperty     = 1014,
-    UnknownPragma             = 2015,
+    UnknownPragma             = 1015,
 
     ArrayOverrun              = 2001,
     MismatchOutputFrames      = 2002,
@@ -78,7 +78,7 @@ export const errorMessages = {
     1012: "Attempted to access property of non-object value: $1",
     1013: "Attempted to access property using a key that was not a string or number: $1",
     1014: "Attempted to access a property that doesn't exist: $1",
-    1016: "Unknown pragma: $1",
+    1015: "Unknown pragma: $1",
 
     2001: "Array overrun",
     2002: "Mismatched output frames",
@@ -91,7 +91,7 @@ export const errorMessages = {
     2009: "The result does not start at input index 0",
     2010: "Multiple outputs were found for a non-repeating capture",
     2011: "Assertion failed",
-    2012: "Input text was referenced (perhaps via $0?) but it has already released to free memory. Try increasing minBufferSizeInMB.",
+    2012: "Input text was referenced (perhaps via $0?) but has already released to free memory. Try increasing minBufferSizeInMB.",
 }
 
 /*
@@ -160,7 +160,7 @@ export function findDezentGrammar() : Grammar{
 export interface ParserOptions {
     debugErrors?: boolean,
     dumpDebug?: boolean,
-    minBufferSize?: number,
+    minBufferSizeInMB?: number,
     callbacks?: Callbacks,
 }
 

@@ -68,7 +68,7 @@ var ErrorCode;
     ErrorCode[ErrorCode["InvalidAccessRoot"] = 1012] = "InvalidAccessRoot";
     ErrorCode[ErrorCode["InvalidAccessIndex"] = 1013] = "InvalidAccessIndex";
     ErrorCode[ErrorCode["InvalidAccessProperty"] = 1014] = "InvalidAccessProperty";
-    ErrorCode[ErrorCode["UnknownPragma"] = 2015] = "UnknownPragma";
+    ErrorCode[ErrorCode["UnknownPragma"] = 1015] = "UnknownPragma";
     ErrorCode[ErrorCode["ArrayOverrun"] = 2001] = "ArrayOverrun";
     ErrorCode[ErrorCode["MismatchOutputFrames"] = 2002] = "MismatchOutputFrames";
     ErrorCode[ErrorCode["CaptureAlreadyInProgress"] = 2003] = "CaptureAlreadyInProgress";
@@ -99,7 +99,7 @@ exports.errorMessages = {
     1012: "Attempted to access property of non-object value: $1",
     1013: "Attempted to access property using a key that was not a string or number: $1",
     1014: "Attempted to access a property that doesn't exist: $1",
-    1016: "Unknown pragma: $1",
+    1015: "Unknown pragma: $1",
     2001: "Array overrun",
     2002: "Mismatched output frames",
     2003: "Capture already in progress",
@@ -111,7 +111,7 @@ exports.errorMessages = {
     2009: "The result does not start at input index 0",
     2010: "Multiple outputs were found for a non-repeating capture",
     2011: "Assertion failed",
-    2012: "Input text was referenced (perhaps via $0?) but it has already released to free memory. Try increasing minBufferSizeInMB.",
+    2012: "Input text was referenced (perhaps via $0?) but has already released to free memory. Try increasing minBufferSizeInMB.",
 };
 exports.BufferEmpty = { toString: function () { return "BufferEmpty"; } };
 var dezentGrammar;

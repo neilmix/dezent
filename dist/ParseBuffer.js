@@ -80,7 +80,7 @@ var ParseBuffer = /** @class */ (function () {
     ParseBuffer.prototype.addChunk = function (text) {
         var buffered = 0;
         for (var i = 0; i < this.chunks.length; i++) {
-            if (buffered > this.minSizeInMB * 1024 * 1024) {
+            if (buffered >= this.minSizeInMB * 1024 * 1024) {
                 if (this.chunks[i]) {
                     this.chunks[i] = null;
                 }

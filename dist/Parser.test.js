@@ -42,9 +42,9 @@ function parse(grammar, text, options) {
     var d = new Dezent_1.Dezent(grammar, options);
     return d.parse(text);
 }
-function parseError(grammar, text) {
+function parseError(grammar, text, options) {
     try {
-        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer_1.ParseBuffer(text), null).parse();
+        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer_1.ParseBuffer(text), options).parse();
         fail();
     }
     catch (e) {
@@ -59,8 +59,8 @@ function expectGrammarFail(grammar) {
         new Dezent_1.Dezent(grammar);
     }).toThrow();
 }
-function expectParseFail(grammar, text) {
-    var d = new Dezent_1.Dezent(grammar, { debugErrors: false });
+function expectParseFail(grammar, text, options) {
+    var d = new Dezent_1.Dezent(grammar, options || { debugErrors: false });
     expect(d.parse(text || 'Did you forget the second argument?')).toBe(undefined);
 }
 function parseGrammarError(grammar, options) {
@@ -293,6 +293,28 @@ test("expected grammar terminals", function () {
     expect(parseGrammarError('return . -> {}').expected.sort()).toEqual([';']);
     expect(parseGrammarError('return {.}').expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
     expect(parseGrammarError("return ( . ([ab] {'f'} 'foo)) -> $1;").expected.sort()).toEqual(["'", "\\"]);
+});
+test("minBufferSize", function () {
+    var ds = new Dezent_1.DezentStream("return .* -> null;", { minBufferSizeInMB: 1 / (1024 * 1024) });
+    ds.write('x');
+    ds.write('y');
+    ds.write('z');
+    ds.write('a');
+    ds.write('b');
+    expect(ds["buffer"]["chunks"]).toEqual(['b', 'a', null, null, null]);
+    ds = new Dezent_1.DezentStream("return .* -> $0;", { minBufferSizeInMB: 1 / (1024 * 1024) });
+    ds.write('x');
+    ds.write('y');
+    ds.write('z');
+    ds.write('a');
+    ds.write('b');
+    try {
+        ds.close();
+        fail();
+    }
+    catch (err) {
+        expect(err.code).toBe(2012);
+    }
 });
 test("errors", function () {
     /* 1001 */ expect(parseGrammarError("return foo -> null; foo = . -> null; foo = .. -> 1;").char).toEqual(38);

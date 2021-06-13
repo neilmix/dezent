@@ -47,7 +47,7 @@ exports.Dezent = Dezent;
 var DezentStream = /** @class */ (function () {
     function DezentStream(grammar, options) {
         this.options = options || {};
-        this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSize);
+        this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSizeInMB);
         grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, grammarOptions(this.options)) : grammar;
         this.parser = new Parser_1.Parser(grammar, this.buffer, this.options);
     }
