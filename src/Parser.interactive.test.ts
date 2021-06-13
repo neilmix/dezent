@@ -31,6 +31,7 @@
  */
 
 global["test"] = async function(name, f, timeout) {
+    //if (!name.match(/chunked/)) return;
     try {
         await f();
     } catch(e) {

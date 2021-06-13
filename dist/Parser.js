@@ -191,7 +191,6 @@ var Parser = /** @class */ (function () {
             var _a, _b;
             STACK: while (_this.stack.length) {
                 var current = _this.top();
-                // caching?
                 if (current.complete) {
                     if (_this.stack.length > 1) {
                         var exited = _this.stack.pop();
@@ -211,11 +210,23 @@ var Parser = /** @class */ (function () {
                         }
                         continue STACK;
                     }
-                    var final = _this.stack[0];
-                    if (!_this.buffer.closed) {
-                        return exports.BufferEmpty;
-                    }
                     // our parsing is complete
+                    var final = _this.stack[0];
+                    // in the case of streaming, if we get a parse error we want to bail
+                    // before close, i.e. as soon as the parse error happens. So do this
+                    // check prior to checking for BufferEmpty.
+                    if (!current.matched) {
+                        parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());
+                    }
+                    if (!_this.buffer.closed) {
+                        if (current.consumed == buffer.length) {
+                            // give our upstream caller a chance to close() the buffer
+                            return exports.BufferEmpty;
+                        }
+                        else {
+                            parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());
+                        }
+                    }
                     if (final.pos != 0) {
                         parserError(ErrorCode.InputConsumedBeforeResult);
                     }
@@ -374,7 +385,10 @@ var Parser = /** @class */ (function () {
                         && current.pos + current.consumed - current.tokenPos == 0) {
                         // our token failed, therefore the pattern fails
                         if (current.pos + current.consumed == maxPos && !_this.omitFails && descriptor["pattern"]) {
-                            failedPatterns[descriptor["pattern"]] = true;
+                            var pattern_1 = descriptor["pattern"];
+                            if (token.not)
+                                pattern_1 = 'not: ' + pattern_1;
+                            failedPatterns[pattern_1] = true;
                         }
                         current.consumed = 0;
                         current.patternIndex++;

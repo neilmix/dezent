@@ -235,8 +235,6 @@ export class Parser {
             STACK: while (this.stack.length) {
                 let current = this.top();
 
-                // caching?
-
                 if (current.complete) {
                     if (this.stack.length > 1) {
                         let exited = this.stack.pop();
@@ -257,11 +255,23 @@ export class Parser {
                         continue STACK;
                     }
 
-                    let final = this.stack[0];
-                    if (!this.buffer.closed) {
-                        return BufferEmpty;
-                    }
                     // our parsing is complete
+                    let final = this.stack[0];
+
+                    // in the case of streaming, if we get a parse error we want to bail
+                    // before close, i.e. as soon as the parse error happens. So do this
+                    // check prior to checking for BufferEmpty.
+                    if (!current.matched) {
+                        parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
+                    }
+                    if (!this.buffer.closed) {
+                        if (current.consumed == buffer.length) {
+                            // give our upstream caller a chance to close() the buffer
+                            return BufferEmpty;
+                        } else {
+                            parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
+                        }
+                    }
                     if (final.pos != 0) {
                         parserError(ErrorCode.InputConsumedBeforeResult);
                     }
@@ -423,7 +433,9 @@ export class Parser {
                     ) {
                         // our token failed, therefore the pattern fails
                         if (current.pos + current.consumed == maxPos && !this.omitFails && descriptor["pattern"]) {
-                            failedPatterns[descriptor["pattern"]] = true;
+                            let pattern = descriptor["pattern"];
+                            if (token.not) pattern = 'not: ' + pattern;
+                            failedPatterns[pattern] = true;
                         }
                         current.consumed = 0;
                         current.patternIndex++;

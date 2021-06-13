@@ -72,7 +72,11 @@ The Dezent javascript library and the dezent command-line tool are included in t
 
 The following examples are included in this distribution:
 * [URLparser.js](examples/URLparser.js): A utility to interactively read and parse URLs. This example demonstrates general-purpose complex pattern matching.
-<!-- * [JSONtoXML.js](examples/JSONtoXML.js): A utility that interactively reads JSON and translates it into XML. This example demonstrates recursive parsing and output string interpolation. -->
+* [randomJSONGenerator.js](examples/randomJSONGenerator.js) and [randomJSONParser.js](examples/randomJSONParser.js): an hypothentical advanced example of streamed log file parsing. This example demonstrates how Dezent can be used to parse large files or streams of data. The ```randomJSONGenerator.js``` script generates log files consisting of timestamps followed by
+a JSON object. The ```randomJSONParser.js``` parses and processes the JSON object on each line
+ and displays how quickly the parser is able to consume data. To try out the example, run<br>
+ ```    node examples/randomJSONGenerator.js | node examples/randomJSONParser.js```<br>
+ from your command line.
 * [calculator.js](examples/calculator.js): A utility that interactively parses and calculates simple math expressions follow proper order of operations including left-associativity. This example demonstrates a powerful parsing concept called left recursion.
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>

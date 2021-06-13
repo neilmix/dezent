@@ -56,9 +56,6 @@ var DezentStream = /** @class */ (function () {
         this.parser.parse();
     };
     DezentStream.prototype.close = function () {
-        if (this.parser.error) {
-            throw this.parser.error;
-        }
         this.buffer.close();
         return this.parser.parse();
     };

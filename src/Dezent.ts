@@ -91,9 +91,6 @@ export class DezentStream {
     }
 
     close() : any {
-        if (this.parser.error) {
-            throw this.parser.error;
-        }
         this.buffer.close();
         return this.parser.parse();
     }

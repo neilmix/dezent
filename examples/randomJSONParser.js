@@ -6,7 +6,9 @@ let lastOut = start;
 
 let grammar = `
     return line* -> null;
-    line = {object} '\\n' -> processLine($1);
+    line = '[' date 'T' time 'Z] ' {object} '\\n' -> processLine($1);
+    date = [0-9][0-9][0-9][0-9] '-' [0-9][0-9] '-' [0-9][0-9] -> null;
+    time =  [0-9][0-9] ':' [0-9][0-9] ':' [0-9][0-9] '.' [0-9][0-9][0-9] -> null;
     atom = {object|array|string|number|boolean|null} -> $1;
     object = '{' ( {member} ',' )* {member}? '}' -> { ...[...$1, $2?] };
     member = {string} ':' {atom} -> [$1, $2];
@@ -30,17 +32,9 @@ let callbacks = {
         let newOut = epoch();
         if (newOut - lastOut >= 1000) {
             let ksec = Math.round((bytes/((epoch() - start)/1000))/1024);
-            process.stdout.write(`${String.fromCharCode(13)}${ksec} kb/sec`)
+            process.stdout.write(`${String.fromCharCode(13)}Cumulative parsing speed: ${ksec} kb/sec`)
             lastOut = newOut;
         }
-    },
-    obj: (a) => {
-        a.forEach((i) => {
-            if (i.length != 2) {
-                console.log("--1", a);
-                throw new Error();
-            }
-        });
     },
     join: (arr) => arr.join(''),
     unicodeChar: (hex) => String.fromCharCode(Number('0x' + hex)),
@@ -50,7 +44,7 @@ let callbacks = {
 
 let ds = new DezentStream(grammar, { callbacks: callbacks });
 
-process.stdout.write("...");
+process.stdout.write("calculating...");
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', function(data){
     bytes += data.length;

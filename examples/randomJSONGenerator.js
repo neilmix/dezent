@@ -1,6 +1,6 @@
 
 function write() {
-    while (process.stdout.write(JSON.stringify(obj()) + '\n'));
+    while (process.stdout.write(`[${new Date().toISOString()}] ${JSON.stringify(obj())}\n`));
 }
 process.stdout.on("drain", write);
 write();

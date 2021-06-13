@@ -346,6 +346,19 @@ test("chunked parsing", () => {
     compare("return [a]* -> $0;", "aa");
     let textDezent = readFileSync("./src/grammar.dezent").toString();
     compare(textDezent, textDezent);
+
+    // ensure we receive errors as soon as possible...
+    ds = new DezentStream(`return 'a' -> $0;`);
+    try {
+        ds.write('b');
+        fail('the write should have failed due to parse error');
+    } catch(e) {}
+
+    ds = new DezentStream(`return 'a'* -> null;`);
+    try {
+        ds.write('bb');
+        fail('the write should have failed due to parse error');
+    } catch(e) {}
 });
 
 test("command line util", () => {
@@ -363,6 +376,7 @@ test("expected grammar terminals", () => {
     expect(parseGrammarError('return . -> {}').expected.sort()).toEqual([';']);
     expect(parseGrammarError('return {.}').expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
     expect(parseGrammarError(`return ( . ([ab] {'f'} 'foo)) -> $1;`).expected.sort()).toEqual(["'", "\\"]);
+    expect(parseError(`return (!'a' .)+ -> $0;`, 'a').expected.sort()).toEqual(['not: a']);
 });
 
 test("minBufferSize", () => {
