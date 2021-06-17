@@ -320,7 +320,7 @@ test("minBufferSize", function () {
     ds.write('z');
     ds.write('a');
     ds.write('b');
-    expect(ds["buffer"]["chunks"]).toEqual(['b', 'a', null, null, null]);
+    expect(ds["buffer"]["text"]).toEqual("ab");
     ds = new Dezent_1.DezentStream("return .* -> $0;", { minBufferSizeInMB: 1 / (1024 * 1024) });
     ds.write('x');
     ds.write('y');
