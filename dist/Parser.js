@@ -271,15 +271,17 @@ var Parser = /** @class */ (function () {
                     current.matched = true;
                     current.complete = true;
                     if (current.ruleset) {
-                        // create a capture for $0 backref
-                        if (!current.captures)
-                            current.captures = [];
-                        current.captures.push({
-                            captureIndex: 0,
-                            position: current.pos,
-                            length: current.consumed,
-                            value: _this.buffer.substr(current.pos, current.consumed),
-                        });
+                        if (current.selector.hasBackref0) {
+                            // create a capture for $0 backref
+                            if (!current.captures)
+                                current.captures = [];
+                            current.captures.push({
+                                captureIndex: 0,
+                                position: current.pos,
+                                length: current.consumed,
+                                value: _this.buffer.substr(current.pos, current.consumed),
+                            });
+                        }
                         // always build the value so that output callbacks can be called
                         // even if the grammar returns null
                         var value = _this.valueBuilder.buildValue(current);
@@ -517,24 +519,25 @@ var Parser = /** @class */ (function () {
             }
         }
         else if (!frame) {
-            frame = {};
-            frame.matched = false;
-            frame.complete = false;
-            frame.ruleset = callee.type == "ruleset" ? callee : null;
-            frame.ruleIndex = 0;
-            frame.selector = callee.type == "ruleset" ? callee.rules[0] : callee;
-            frame.patternIndex = 0;
-            frame.tokenIndex = 0;
-            frame.pos = pos;
-            frame.tokenPos = pos;
-            frame.consumed = 0;
-            frame.callee = null;
-            frame.wantOutput = caller && (caller.selector.type == "capture" || caller.wantOutput);
-            frame.output = null;
-            frame.captures = null;
-            frame.cacheKey = cacheKey;
-            frame.leftRecursing = false;
-            frame.leftReturn = null;
+            frame = {
+                matched: false,
+                complete: false,
+                ruleset: callee.type == "ruleset" ? callee : null,
+                ruleIndex: 0,
+                selector: callee.type == "ruleset" ? callee.rules[0] : callee,
+                patternIndex: 0,
+                tokenIndex: 0,
+                pos: pos,
+                tokenPos: pos,
+                consumed: 0,
+                callee: null,
+                wantOutput: caller && (caller.selector.type == "capture" || caller.wantOutput),
+                output: null,
+                captures: null,
+                cacheKey: cacheKey,
+                leftRecursing: false,
+                leftReturn: null,
+            };
             if (callee.type == "ruleset") {
                 this.cache[frame.cacheKey] = frame;
             }

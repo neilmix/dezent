@@ -270,8 +270,12 @@ var GrammarCompiler = /** @class */ (function () {
             node.pattern = '';
         });
         visitOutputNodes(rule.value, info, function (node, info) {
-            if (node.type == "backref")
+            if (node.type == "backref") {
                 info.backrefs.push(node);
+                if (node.index == "0") {
+                    rule.hasBackref0 = true;
+                }
+            }
             if (node.type == "constref") {
                 if (!vars[node.name]) {
                     grammarError(Parser_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);

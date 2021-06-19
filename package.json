@@ -21,7 +21,7 @@
   },
   "scripts": {
     "compile": "tsc src/*.ts -t ES5 --downlevelIteration --outDir ./dist",
-    "dist": "npm run compile && chmod +x dist/dezent_cli.js && jest dist/Parser.test.js",
+    "dist": "npm run compile && browserify dist/main.js -o dist/dezent_bundle.js && chmod +x dist/dezent_cli.js && jest dist/Parser.test.js",
     "compile-debug": "tsc src/*.ts -t ES5 --downlevelIteration --inlineSourceMap --outDir ./test && cp src/*.dezent ./test",
     "test": "npm run compile-debug && jest test/Parser.test.js",
     "clean": "rm -f *.js && rm -fr test && rm -fr dist",

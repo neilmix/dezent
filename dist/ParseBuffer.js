@@ -80,10 +80,10 @@ var ParseBuffer = /** @class */ (function () {
         if (startIdx < 0) {
             Parser_1.parserError(Parser_1.ErrorCode.InputFreed);
         }
-        return this.text.substr(startIdx - this.offset, length);
+        return this.text.substr(startIdx, length);
     };
     ParseBuffer.prototype.substrExact = function (startIdx, length) {
-        var s = this.substr(startIdx - this.offset, length);
+        var s = this.substr(startIdx, length);
         if (s.length != length) {
             throw exports.ParseBufferExhaustedError;
         }
@@ -92,7 +92,7 @@ var ParseBuffer = /** @class */ (function () {
         }
     };
     ParseBuffer.prototype.containsAt = function (text, idx) {
-        return text == this.substrExact(idx - this.offset, text.length);
+        return text == this.substrExact(idx, text.length);
     };
     ParseBuffer.prototype.charAt = function (idx) {
         idx -= this.offset;

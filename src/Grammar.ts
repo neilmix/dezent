@@ -72,7 +72,7 @@ export interface RulesetNode extends Node {
 	type: 'ruleset',
 	name: string,
 	rules: RuleNode[],
-	canFail?: boolean
+	canFail?: boolean,
 }
 
 export interface ReturnNode extends RulesetNode {
@@ -85,6 +85,7 @@ export interface RuleNode extends SelectorNode {
 	captures?: boolean[], 
 	rulesetName?: string,
 	rulesetIndex?: number,
+	hasBackref0?: boolean,
 }
 
 export interface PatternNode extends Node { 
@@ -319,7 +320,7 @@ function ruleset(name:string, ...args:any) : RulesetNode {
 	return {
 		type: 'ruleset',
 		name: name,
-		rules: rules
+		rules: rules,
 	}
 }
 

@@ -321,6 +321,7 @@ test("minBufferSize", function () {
     ds.write('a');
     ds.write('b');
     expect(ds["buffer"]["text"]).toEqual("ab");
+    ds.close(); // ensure we don't get an exception trying to build $0 unnecessarily
     ds = new Dezent_1.DezentStream("return .* -> $0;", { minBufferSizeInMB: 1 / (1024 * 1024) });
     ds.write('x');
     ds.write('y');
@@ -334,6 +335,14 @@ test("minBufferSize", function () {
     catch (err) {
         expect(err.code).toBe(2012);
     }
+    ds = new Dezent_1.DezentStream("return 'a' 'b' 'c' 'd' 'e' 'f' -> null;", { minBufferSizeInMB: 1 / (1024 * 1024) });
+    ds.write('a');
+    ds.write('b');
+    ds.write('c');
+    ds.write('d');
+    ds.write('e');
+    ds.write('f');
+    ds.close();
 });
 test("errors", function () {
     /* 1001 */ expect(parseGrammarError("return foo -> null; foo = . -> null; foo = .. -> 1;").char).toEqual(38);
@@ -355,50 +364,3 @@ test("errors", function () {
 test("comments", function () {
     expectParse("\n        // return .* -> 1;\n        /*\n           return .* -> 2;\n        */\n        return .* -> 3;\n    ").toEqual(3);
 });
-/*
-test("packrat", () => {
-    function buildText(count) {
-        let text = 'a'.repeat(count) + 'b';
-    }
-
-    let grammar = `
-        return {theRule}* -> $1;
-        theRule =
-            {'a'}* {'c'} -> [$1, $2],
-            {'b'} -> $1,
-            {'a'} -> $1;
-    `;
-
-    let caching = new Dezent(grammar, null, {enableCache: true});
-    let noncaching = new Dezent(grammar, null, {enableCache: false});
-
-    expect(caching.parse('aaaab')).toEqual(['a','a','a','a','b']);
-    expect(noncaching.parse('aaaab')).toEqual(['a','a','a','a','b']);
-    
-    function time(f:Function):number {
-        let t = new Date().getTime();
-        f();
-        return new Date().getTime() - t;
-    }
-
-    console.log(`Performance of previous tests caching / noncaching: ${cachingTime} / ${noncachingTime}\n`);
-    let log:any[][] = [['packrat cache performance results']];
-    function run(size:number, runUncached:boolean) {
-        let text = 'a'.repeat(size) + 'b';
-        log.push(["size: ", size]);
-        if (runUncached) {
-            log.push(["  uncached:", time(() => noncaching.parse(text))]);
-        }
-        log.push(["  cached:  ", time(() => caching.parse(text))]);
-    }
-
-    run(250, true);
-    run(500, true);
-    run(1000, true);
-    run(2000, false);
-    run(4000, false);
-    run(8000, false);
-
-    console.log(log.map((i)=>i.join(' ')).join('\n'));
-});
-*/ 

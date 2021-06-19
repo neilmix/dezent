@@ -127,7 +127,7 @@ function ruleset(name) {
     return {
         type: 'ruleset',
         name: name,
-        rules: rules
+        rules: rules,
     };
 }
 function rule(patterns, out) {

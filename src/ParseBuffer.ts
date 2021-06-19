@@ -66,11 +66,11 @@
         if (startIdx < 0) {
             parserError(ErrorCode.InputFreed);
         }
-        return this.text.substr(startIdx - this.offset, length);
+        return this.text.substr(startIdx, length);
     }
 
     substrExact(startIdx:number, length:number) : string {
-        let s = this.substr(startIdx - this.offset, length);
+        let s = this.substr(startIdx, length);
         if (s.length != length) {
             throw ParseBufferExhaustedError;
         } else {
@@ -79,7 +79,7 @@
     }
 
     containsAt(text:string, idx:number) : boolean {
-        return text == this.substrExact(idx - this.offset, text.length);
+        return text == this.substrExact(idx, text.length);
     }
 
     charAt(idx:number) : string {

@@ -33,7 +33,7 @@ import {
 
 import { 
     Grammar, GrammarVersion, Node, SelectorNode, Meta, RulesetNode, RuleNode, TokenNode, PatternNode, 
-    RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode,
+    RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode, BackRefNode,
 } from './Grammar';
 
 import { buildString } from './Output';
@@ -204,7 +204,12 @@ export class GrammarCompiler {
          });
 
          visitOutputNodes(rule.value, info, (node:ValueNode, info) => {
-            if (node.type == "backref") info.backrefs.push(node);
+            if (node.type == "backref") {
+                info.backrefs.push(node);
+                if (node.index == "0") {
+                    rule.hasBackref0 = true;
+                }
+            }
             if (node.type == "constref") {
                 if (!vars[node.name]) {
                     grammarError(ErrorCode.InvalidConstRef, text, node.meta, node.name);
