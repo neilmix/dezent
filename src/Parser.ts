@@ -300,7 +300,7 @@ export class Parser {
                 let matched = false, consumed = 0;
                 do {
                     let callee;
-                    if (["string","class","any"].includes(descriptor.type)) {
+                    if (descriptor.type == "string" || descriptor.type == "class" || descriptor.type == "any") {
                         try {
                             [matched, consumed] = (<MatcherNode>descriptor).match(this.buffer, this.current.pos + this.current.consumed);
                         } catch(e) {

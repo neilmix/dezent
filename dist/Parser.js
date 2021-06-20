@@ -251,7 +251,8 @@ var Parser = /** @class */ (function () {
                 var matched = false, consumed = 0;
                 do {
                     var callee = void 0;
-                    if (["string", "class", "any"].includes(descriptor.type)) {
+                    //if (["string","class","any"].includes(descriptor.type)) {
+                    if (descriptor.type == "string" || descriptor.type == "class" || descriptor.type == "any") {
                         try {
                             _a = __read(descriptor.match(_this.buffer, _this.current.pos + _this.current.consumed), 2), matched = _a[0], consumed = _a[1];
                         }

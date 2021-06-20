@@ -26,7 +26,6 @@
 import { parseGrammar, Parser, ParserOptions } from './Parser';
 
 import { Grammar } from './Grammar';
-import { Callbacks } from './Output';
 import { ParseBuffer } from './ParseBuffer';
 
 export interface DezentError extends Error {
