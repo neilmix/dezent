@@ -1567,35 +1567,36 @@ var Parser = /** @class */ (function () {
         var failedPatterns = {};
         this.run = function () {
             var _a, _b;
-            CURRENT: while (_this.current) {
-                if (_this.current.complete) {
-                    if (_this.current.caller) {
+            var current;
+            CURRENT: while (current = _this.current) {
+                if (current.complete) {
+                    if (current.caller) {
                         // a left-recursing frame could be cached at the same location as the current frame,
                         // so we need to double-check that current is the one that is cached
-                        if (_this.cache[_this.current.cacheKey] == _this.current) {
-                            delete _this.cache[_this.current.cacheKey];
+                        if (_this.cache[current.cacheKey] == current) {
+                            delete _this.cache[current.cacheKey];
                         }
                         if (_this.options.debugErrors) {
                             _this.debugLog.push([
-                                _this.current.matched ? 'PASS ' : 'FAIL ',
-                                _this.buffer.substr(_this.current.pos, 20),
-                                _this.current.ruleset ? _this.current.ruleset.name : _this.current.selector.type,
-                                JSON.stringify(_this.current.ruleset ? _this.current.output : _this.current.captures)
+                                current.matched ? 'PASS ' : 'FAIL ',
+                                _this.buffer.substr(current.pos, 20),
+                                current.ruleset ? current.ruleset.name : current.selector.type,
+                                JSON.stringify(current.ruleset ? current.output : current.captures)
                             ]);
                         }
-                        _this.current = _this.current.caller;
-                        _this.current.callee.caller = null;
+                        _this.current = current.caller;
+                        current.caller = null;
                         continue CURRENT;
                     }
                     // our parsing is complete
                     // in the case of streaming, if we get a parse error we want to bail
                     // before close, i.e. as soon as the parse error happens. So do this
                     // check prior to checking for BufferEmpty.
-                    if (!_this.current.matched) {
+                    if (!current.matched) {
                         parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());
                     }
                     if (!_this.buffer.closed) {
-                        if (_this.current.consumed == buffer.length) {
+                        if (current.consumed == buffer.length) {
                             // give our upstream caller a chance to close() the buffer
                             return exports.BufferEmpty;
                         }
@@ -1603,30 +1604,30 @@ var Parser = /** @class */ (function () {
                             parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());
                         }
                     }
-                    if (_this.current.pos != 0) {
+                    if (current.pos != 0) {
                         parserError(ErrorCode.InputConsumedBeforeResult);
                     }
-                    if (!_this.current.output) {
+                    if (!current.output) {
                         parserError(ErrorCode.EmptyOutput);
                     }
-                    if (_this.current.output.length < _this.buffer.length) {
+                    if (current.output.length < _this.buffer.length) {
                         parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());
                     }
-                    if (_this.current.output.length > _this.buffer.length) {
+                    if (current.output.length > _this.buffer.length) {
                         parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, ["<EOF>"]);
                     }
                     if (_this.options.dumpDebug) {
                         _this.dumpDebug();
                     }
-                    return _this.current.output.value;
+                    return current.output.value;
                 }
-                var descriptor = _this.current.token.descriptor;
+                var descriptor = current.token.descriptor;
                 var matched = false, consumed = 0;
                 do {
                     var callee = void 0;
                     if (descriptor["match"]) {
                         try {
-                            _a = __read(descriptor.match(_this.buffer, _this.current.pos + _this.current.consumed), 2), matched = _a[0], consumed = _a[1];
+                            _a = __read(descriptor.match(_this.buffer, current.pos + current.consumed), 2), matched = _a[0], consumed = _a[1];
                         }
                         catch (e) {
                             if (_this.buffer.closed && e == ParseBuffer_1.ParseBufferExhaustedError) {
@@ -1640,7 +1641,7 @@ var Parser = /** @class */ (function () {
                             }
                         }
                     }
-                    else if (!_this.current.callee) {
+                    else if (!current.callee) {
                         var calleeNode = (descriptor.type == "ruleref" ? _this.rulesets[descriptor.name] : descriptor);
                         _this.callFrame(calleeNode);
                         if (!calleeNode.canFail) {
@@ -1649,8 +1650,8 @@ var Parser = /** @class */ (function () {
                         continue CURRENT;
                     }
                     else {
-                        callee = _this.current.callee;
-                        _this.current.callee = null;
+                        callee = current.callee;
+                        current.callee = null;
                         matched = callee.matched;
                         consumed = callee.consumed;
                         if ((callee.ruleset && !callee.ruleset.canFail) || (callee.selector && !callee.selector.canFail)) {
@@ -1658,158 +1659,158 @@ var Parser = /** @class */ (function () {
                         }
                     }
                     // see notes on left recursion toward the beginning of this file
-                    if (_this.current.leftRecursing) {
+                    if (current.leftRecursing) {
                         // it's possible to get a match without consuming more input than previous
                         // recursion attempts, so make sure there's increased consumption, too.
-                        if (matched && (_this.current.leftReturn == null || consumed > _this.current.leftReturn.consumed)) {
+                        if (matched && (current.leftReturn == null || consumed > current.leftReturn.consumed)) {
                             // stow away our returning callee for later use in the next recursion iteration
-                            _this.current.leftReturn = callee;
+                            current.leftReturn = callee;
                         }
                         else {
                             // at this point our left recursion is failing to consumer more input,
                             // time to wrap things up
-                            _this.current.complete = true;
-                            if (_this.current.leftReturn) {
+                            current.complete = true;
+                            if (current.leftReturn) {
                                 // we found the largest match for this recursing rule on a previous iteration.
                                 // use that as the return value for this frame.
-                                _this.current.matched = true;
-                                _this.current.consumed = _this.current.leftReturn.consumed;
-                                _this.current.output = _this.current.leftReturn.output;
+                                current.matched = true;
+                                current.consumed = current.leftReturn.consumed;
+                                current.output = current.leftReturn.output;
                             }
                         }
                         continue CURRENT;
                     }
-                    if (_this.current.token.and || _this.current.token.not) {
-                        matched = (_this.current.token.and && matched) || (_this.current.token.not && !matched);
+                    if (current.token.and || current.token.not) {
+                        matched = (current.token.and && matched) || (current.token.not && !matched);
                         consumed = 0;
                     }
                     if (_this.options.debugErrors && !callee) {
                         _this.debugLog.push([
                             matched ? 'PASS ' : 'FAIL ',
-                            _this.buffer.substr(_this.current.pos + _this.current.consumed, 20),
+                            _this.buffer.substr(current.pos + current.consumed, 20),
                             descriptor["pattern"]
                         ]);
                     }
-                    if (_this.current.token.required && !matched
+                    if (current.token.required && !matched
                         // + modifiers repeat and are required, so we only fail when we haven't consumed...
-                        && _this.current.pos + _this.current.consumed - _this.current.tokenPos == 0) {
+                        && current.pos + current.consumed - current.tokenPos == 0) {
                         // our token failed, therefore the pattern fails
-                        if (_this.current.pos + _this.current.consumed == maxPos && !_this.omitFails && descriptor["pattern"]) {
+                        if (current.pos + current.consumed == maxPos && !_this.omitFails && descriptor["pattern"]) {
                             var pattern = descriptor["pattern"];
-                            if (_this.current.token.not)
+                            if (current.token.not)
                                 pattern = 'not: ' + pattern;
                             failedPatterns[pattern] = true;
                         }
-                        _this.current.consumed = 0;
-                        if (++_this.current.patternIndex >= _this.current.selector.patterns.length) {
+                        current.consumed = 0;
+                        if (++current.patternIndex >= current.selector.patterns.length) {
                             // no matching pattern - go to next rule if applicable, or fail if not
-                            if (_this.current.ruleset) {
-                                _this.nextRule(_this.current);
+                            if (current.ruleset) {
+                                _this.nextRule(current);
                             }
                             else {
-                                _this.current.complete = true;
+                                current.complete = true;
                             }
                         }
                         else {
-                            _this.current.pattern = _this.current.selector.patterns[_this.current.patternIndex];
-                            _this.current.tokenIndex = 0;
-                            _this.current.token = _this.current.pattern.tokens[0];
+                            current.pattern = current.selector.patterns[current.patternIndex];
+                            current.tokenIndex = 0;
+                            current.token = current.pattern.tokens[0];
                         }
                         continue CURRENT;
                     }
                     if (matched) {
-                        _this.current.consumed += consumed;
-                        if (_this.current.pos + _this.current.consumed > maxPos) {
-                            maxPos = _this.current.pos + _this.current.consumed;
+                        current.consumed += consumed;
+                        if (current.pos + current.consumed > maxPos) {
+                            maxPos = current.pos + current.consumed;
                             failedPatterns = {};
                         }
-                        if (_this.current.selector.type == "capture") {
-                            if (callee && callee.output && callee.ruleset && _this.current.pattern.tokens.length == 1) {
+                        if (current.selector.type == "capture") {
+                            if (callee && callee.output && callee.ruleset && current.pattern.tokens.length == 1) {
                                 // output has descended the stack to our capture - capture it
                                 // but only if it's the only node in this capture
-                                _this.current.output = callee.output;
+                                current.output = callee.output;
                             }
                         }
                         else if (callee && callee.captures) {
                             // captures need to descend the stack
-                            if (_this.current.captures) {
-                                _this.current.captures = _this.current.captures.concat(callee.captures);
+                            if (current.captures) {
+                                current.captures = current.captures.concat(callee.captures);
                             }
                             else {
-                                _this.current.captures = callee.captures;
+                                current.captures = callee.captures;
                             }
                         }
                     }
-                    else if (descriptor.type == "capture" && !_this.current.token.required && !_this.current.token.repeat) {
+                    else if (descriptor.type == "capture" && !current.token.required && !current.token.repeat) {
                         // a failed non-required non-repeating capture should yield null
                         var output = {
                             captureIndex: descriptor.index,
-                            position: _this.current.pos + _this.current.consumed,
+                            position: current.pos + current.consumed,
                             length: 0,
                             value: null
                         };
-                        if (_this.current.captures) {
-                            _this.current.captures.push(output);
+                        if (current.captures) {
+                            current.captures.push(output);
                         }
                         else {
-                            _this.current.captures = [output];
+                            current.captures = [output];
                         }
                     }
                     // don't continue STACK here because a) we may be a repeating token
                     // and b) we need to increment tokenIndex below.
-                } while (matched && _this.current.token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
-                if (++_this.current.tokenIndex >= _this.current.pattern.tokens.length) {
+                } while (matched && current.token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
+                if (++current.tokenIndex >= current.pattern.tokens.length) {
                     // we got through all tokens successfully - pass!
-                    _this.current.matched = true;
-                    _this.current.complete = true;
-                    if (_this.current.ruleset) {
-                        if (_this.current.selector.hasBackref0) {
+                    current.matched = true;
+                    current.complete = true;
+                    if (current.ruleset) {
+                        if (current.selector.hasBackref0) {
                             // create a capture for $0 backref
-                            if (!_this.current.captures)
-                                _this.current.captures = [];
-                            _this.current.captures.push({
+                            if (!current.captures)
+                                current.captures = [];
+                            current.captures.push({
                                 captureIndex: 0,
-                                position: _this.current.pos,
-                                length: _this.current.consumed,
-                                value: _this.buffer.substr(_this.current.pos, _this.current.consumed),
+                                position: current.pos,
+                                length: current.consumed,
+                                value: _this.buffer.substr(current.pos, current.consumed),
                             });
                         }
                         // always build the value so that output callbacks can be called
                         // even if the grammar returns null
-                        var value = _this.valueBuilder.buildValue(_this.current);
+                        var value = _this.valueBuilder.buildValue(current);
                         // prevent captures from continuing to descend
-                        _this.current.captures = null;
-                        if (_this.current.wantOutput || (_this.current.ruleset && _this.current.ruleset.name == "return")) {
+                        current.captures = null;
+                        if (current.wantOutput || (current.ruleset && current.ruleset.name == "return")) {
                             // our ruleset was called up the stack by a capture - create an output (which will descend the stack)
-                            _this.current.output = {
-                                position: _this.current.pos,
-                                length: _this.current.consumed,
+                            current.output = {
+                                position: current.pos,
+                                length: current.consumed,
                                 value: value
                             };
                         }
                     }
-                    else if (_this.current.selector.type == "capture") {
-                        var output = _this.current.output;
+                    else if (current.selector.type == "capture") {
+                        var output = current.output;
                         if (!output) {
                             // create a capture text segment - based on our current node, not the callee
                             output = {
-                                position: _this.current.pos,
-                                length: _this.current.consumed,
-                                value: _this.buffer.substr(_this.current.pos, _this.current.consumed),
+                                position: current.pos,
+                                length: current.consumed,
+                                value: _this.buffer.substr(current.pos, current.consumed),
                             };
                         }
-                        output.captureIndex = _this.current.selector.index;
-                        if (_this.current.captures) {
-                            _this.current.captures.push(output);
+                        output.captureIndex = current.selector.index;
+                        if (current.captures) {
+                            current.captures.push(output);
                         }
                         else {
-                            _this.current.captures = [output];
+                            current.captures = [output];
                         }
                     }
                 }
                 else {
-                    _this.current.token = _this.current.pattern.tokens[_this.current.tokenIndex];
-                    _this.current.tokenPos = _this.current.pos + _this.current.consumed;
+                    current.token = current.pattern.tokens[current.tokenIndex];
+                    current.tokenPos = current.pos + current.consumed;
                 }
                 continue CURRENT; // redundant; for clarity
             }
