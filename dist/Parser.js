@@ -247,11 +247,6 @@ var Parser = /** @class */ (function () {
                     }
                     return _this.current.output.value;
                 }
-                if (_this.current.ruleset && _this.current.ruleIndex >= _this.current.ruleset.rules.length) {
-                    // no matching rules - fail
-                    _this.current.complete = true;
-                    continue CURRENT;
-                }
                 var descriptor = _this.current.token.descriptor;
                 var matched = false, consumed = 0;
                 do {

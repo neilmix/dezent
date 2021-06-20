@@ -296,12 +296,6 @@ export class Parser {
                     return this.current.output.value;
                 }
                 
-                if (this.current.ruleset && this.current.ruleIndex >= this.current.ruleset.rules.length) {
-                    // no matching rules - fail
-                    this.current.complete = true;
-                    continue CURRENT;    
-                }
-
                 let descriptor = this.current.token.descriptor;
                 let matched = false, consumed = 0;
                 do {
