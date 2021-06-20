@@ -205,6 +205,8 @@ export class Parser {
     debugLog : any[][] = [];
     run : Function;
     error : Error;
+    maxPos : number = 0;
+    failedPatterns = [];
 
     constructor(grammar:Grammar, buffer:ParseBuffer, options:ParserOptions) {
         lastParser = this;
@@ -238,8 +240,6 @@ export class Parser {
         this.valueBuilder = new ValueBuilder(grammar, this.options.callbacks);
         this.callFrame(root);
 
-        let maxPos = 0;
-        let failedPatterns = {};
         this.run = () => {    
             let current:ParseFrame;
             CURRENT: while (current = this.current) {
@@ -269,14 +269,14 @@ export class Parser {
                     // before close, i.e. as soon as the parse error happens. So do this
                     // check prior to checking for BufferEmpty.
                     if (!current.matched) {
-                        parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
+                        parsingError(ErrorCode.TextParsingError, this.buffer, this.maxPos, this.expectedTerminals());
                     }
                     if (!this.buffer.closed) {
                         if (current.consumed == buffer.length) {
                             // give our upstream caller a chance to close() the buffer
                             return BufferEmpty;
                         } else {
-                            parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
+                            parsingError(ErrorCode.TextParsingError, this.buffer, this.maxPos, this.expectedTerminals());
                         }
                     }
                     if (current.pos != 0) {
@@ -286,10 +286,10 @@ export class Parser {
                         parserError(ErrorCode.EmptyOutput);
                     }
                     if (current.output.length < this.buffer.length) {
-                        parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
+                        parsingError(ErrorCode.TextParsingError, this.buffer, this.maxPos, this.expectedTerminals());
                     }        
                     if (current.output.length > this.buffer.length) {
-                        parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, ["<EOF>"]);
+                        parsingError(ErrorCode.TextParsingError, this.buffer, this.maxPos, ["<EOF>"]);
                     }
                     if (this.options.dumpDebug) {
                         this.dumpDebug();
@@ -370,10 +370,10 @@ export class Parser {
                         && current.pos + current.consumed - current.tokenPos == 0
                     ) {
                         // our token failed, therefore the pattern fails
-                        if (current.pos + current.consumed == maxPos && !this.omitFails && descriptor["pattern"]) {
+                        if (current.pos + current.consumed == this.maxPos && !this.omitFails && descriptor["pattern"]) {
                             let pattern = descriptor["pattern"];
                             if (current.token.not) pattern = 'not: ' + pattern;
-                            failedPatterns[pattern] = true;
+                            this.failedPatterns.push(pattern);
                         }
                         current.consumed = 0;
                         if (++current.patternIndex >= current.selector.patterns.length) {
@@ -393,9 +393,9 @@ export class Parser {
 
                     if (matched) {
                         current.consumed += consumed;
-                        if (current.pos + current.consumed > maxPos) {
-                            maxPos = current.pos + current.consumed;
-                            failedPatterns = {};
+                        if (current.pos + current.consumed > this.maxPos) {
+                            this.maxPos = current.pos + current.consumed;
+                            this.failedPatterns.length = 0;
                         }
 
                         if (current.selector.type == "capture") {
@@ -485,12 +485,20 @@ export class Parser {
                     current.tokenPos = current.pos + current.consumed;
                 }
                 continue CURRENT; // redundant; for clarity
-            }
-            
-            function expectedTerminals() {
-                return Object.keys(failedPatterns);
-            }
+            }            
         }    
+    }
+
+    expectedTerminals() {
+        let lookup = {};
+        let out = [];
+        for (let terminal of this.failedPatterns) {
+            if (!lookup[terminal]) {
+                out.push(terminal);
+                lookup[terminal] = true;
+            }
+        }
+        return out;
     }
 
     nextRule(frame:ParseFrame) {

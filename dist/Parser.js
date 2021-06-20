@@ -156,6 +156,8 @@ var Parser = /** @class */ (function () {
         this.cache = [];
         this.omitFails = 0;
         this.debugLog = [];
+        this.maxPos = 0;
+        this.failedPatterns = [];
         exports.lastParser = this;
         this.grammar = grammar;
         var root;
@@ -190,8 +192,6 @@ var Parser = /** @class */ (function () {
         }
         this.valueBuilder = new Output_1.ValueBuilder(grammar, this.options.callbacks);
         this.callFrame(root);
-        var maxPos = 0;
-        var failedPatterns = {};
         this.run = function () {
             var _a, _b;
             var current;
@@ -220,7 +220,7 @@ var Parser = /** @class */ (function () {
                     // before close, i.e. as soon as the parse error happens. So do this
                     // check prior to checking for BufferEmpty.
                     if (!current.matched) {
-                        parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());
+                        parsingError(ErrorCode.TextParsingError, _this.buffer, _this.maxPos, _this.expectedTerminals());
                     }
                     if (!_this.buffer.closed) {
                         if (current.consumed == buffer.length) {
@@ -228,7 +228,7 @@ var Parser = /** @class */ (function () {
                             return exports.BufferEmpty;
                         }
                         else {
-                            parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());
+                            parsingError(ErrorCode.TextParsingError, _this.buffer, _this.maxPos, _this.expectedTerminals());
                         }
                     }
                     if (current.pos != 0) {
@@ -238,10 +238,10 @@ var Parser = /** @class */ (function () {
                         parserError(ErrorCode.EmptyOutput);
                     }
                     if (current.output.length < _this.buffer.length) {
-                        parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, expectedTerminals());
+                        parsingError(ErrorCode.TextParsingError, _this.buffer, _this.maxPos, _this.expectedTerminals());
                     }
                     if (current.output.length > _this.buffer.length) {
-                        parsingError(ErrorCode.TextParsingError, _this.buffer, maxPos, ["<EOF>"]);
+                        parsingError(ErrorCode.TextParsingError, _this.buffer, _this.maxPos, ["<EOF>"]);
                     }
                     if (_this.options.dumpDebug) {
                         _this.dumpDebug();
@@ -322,11 +322,11 @@ var Parser = /** @class */ (function () {
                         // + modifiers repeat and are required, so we only fail when we haven't consumed...
                         && current.pos + current.consumed - current.tokenPos == 0) {
                         // our token failed, therefore the pattern fails
-                        if (current.pos + current.consumed == maxPos && !_this.omitFails && descriptor["pattern"]) {
+                        if (current.pos + current.consumed == _this.maxPos && !_this.omitFails && descriptor["pattern"]) {
                             var pattern = descriptor["pattern"];
                             if (current.token.not)
                                 pattern = 'not: ' + pattern;
-                            failedPatterns[pattern] = true;
+                            _this.failedPatterns.push(pattern);
                         }
                         current.consumed = 0;
                         if (++current.patternIndex >= current.selector.patterns.length) {
@@ -347,9 +347,9 @@ var Parser = /** @class */ (function () {
                     }
                     if (matched) {
                         current.consumed += consumed;
-                        if (current.pos + current.consumed > maxPos) {
-                            maxPos = current.pos + current.consumed;
-                            failedPatterns = {};
+                        if (current.pos + current.consumed > _this.maxPos) {
+                            _this.maxPos = current.pos + current.consumed;
+                            _this.failedPatterns.length = 0;
                         }
                         if (current.selector.type == "capture") {
                             if (callee && callee.output && callee.ruleset && current.pattern.tokens.length == 1) {
@@ -441,11 +441,30 @@ var Parser = /** @class */ (function () {
                 }
                 continue CURRENT; // redundant; for clarity
             }
-            function expectedTerminals() {
-                return Object.keys(failedPatterns);
-            }
         };
     }
+    Parser.prototype.expectedTerminals = function () {
+        var e_2, _a;
+        var lookup = {};
+        var out = [];
+        try {
+            for (var _b = __values(this.failedPatterns), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var terminal = _c.value;
+                if (!lookup[terminal]) {
+                    out.push(terminal);
+                    lookup[terminal] = true;
+                }
+            }
+        }
+        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_2) throw e_2.error; }
+        }
+        return out;
+    };
     Parser.prototype.nextRule = function (frame) {
         frame.ruleIndex++;
         frame.selector = frame.ruleset.rules[frame.ruleIndex];
@@ -564,7 +583,7 @@ var Parser = /** @class */ (function () {
         }
     };
     Parser.prototype.dumpDebug = function () {
-        var e_2, _a;
+        var e_3, _a;
         if (this.options.debugErrors) {
             var lines = [];
             try {
@@ -573,12 +592,12 @@ var Parser = /** @class */ (function () {
                     lines.push(msg.join('\t').replace(/\n/g, '\\n'));
                 }
             }
-            catch (e_2_1) { e_2 = { error: e_2_1 }; }
+            catch (e_3_1) { e_3 = { error: e_3_1 }; }
             finally {
                 try {
                     if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
                 }
-                finally { if (e_2) throw e_2.error; }
+                finally { if (e_3) throw e_3.error; }
             }
             console.log("Debug log:\n", lines.join("\n"));
         }
