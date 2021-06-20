@@ -1625,58 +1625,7 @@ var Parser = /** @class */ (function () {
                     _this.current.complete = true;
                     continue CURRENT;
                 }
-                var token = _this.current.pattern.tokens[_this.current.tokenIndex];
-                if (!token) {
-                    // we got through all tokens successfully - pass!
-                    _this.current.matched = true;
-                    _this.current.complete = true;
-                    if (_this.current.ruleset) {
-                        if (_this.current.selector.hasBackref0) {
-                            // create a capture for $0 backref
-                            if (!_this.current.captures)
-                                _this.current.captures = [];
-                            _this.current.captures.push({
-                                captureIndex: 0,
-                                position: _this.current.pos,
-                                length: _this.current.consumed,
-                                value: _this.buffer.substr(_this.current.pos, _this.current.consumed),
-                            });
-                        }
-                        // always build the value so that output callbacks can be called
-                        // even if the grammar returns null
-                        var value = _this.valueBuilder.buildValue(_this.current);
-                        // prevent captures from continuing to descend
-                        _this.current.captures = null;
-                        if (_this.current.wantOutput || (_this.current.ruleset && _this.current.ruleset.name == "return")) {
-                            // our ruleset was called up the stack by a capture - create an output (which will descend the stack)
-                            _this.current.output = {
-                                position: _this.current.pos,
-                                length: _this.current.consumed,
-                                value: value
-                            };
-                        }
-                    }
-                    else if (_this.current.selector.type == "capture") {
-                        var output = _this.current.output;
-                        if (!output) {
-                            // create a capture text segment - based on our current node, not the callee
-                            output = {
-                                position: _this.current.pos,
-                                length: _this.current.consumed,
-                                value: _this.buffer.substr(_this.current.pos, _this.current.consumed),
-                            };
-                        }
-                        output.captureIndex = _this.current.selector.index;
-                        if (_this.current.captures) {
-                            _this.current.captures.push(output);
-                        }
-                        else {
-                            _this.current.captures = [output];
-                        }
-                    }
-                    continue CURRENT;
-                }
-                var descriptor = token.descriptor;
+                var descriptor = _this.current.token.descriptor;
                 var matched = false, consumed = 0;
                 do {
                     var callee = void 0;
@@ -1735,8 +1684,8 @@ var Parser = /** @class */ (function () {
                         }
                         continue CURRENT;
                     }
-                    if (token.and || token.not) {
-                        matched = (token.and && matched) || (token.not && !matched);
+                    if (_this.current.token.and || _this.current.token.not) {
+                        matched = (_this.current.token.and && matched) || (_this.current.token.not && !matched);
                         consumed = 0;
                     }
                     if (_this.options.debugErrors && !callee) {
@@ -1746,13 +1695,13 @@ var Parser = /** @class */ (function () {
                             descriptor["pattern"]
                         ]);
                     }
-                    if (token.required && !matched
+                    if (_this.current.token.required && !matched
                         // + modifiers repeat and are required, so we only fail when we haven't consumed...
                         && _this.current.pos + _this.current.consumed - _this.current.tokenPos == 0) {
                         // our token failed, therefore the pattern fails
                         if (_this.current.pos + _this.current.consumed == maxPos && !_this.omitFails && descriptor["pattern"]) {
                             var pattern = descriptor["pattern"];
-                            if (token.not)
+                            if (_this.current.token.not)
                                 pattern = 'not: ' + pattern;
                             failedPatterns[pattern] = true;
                         }
@@ -1769,6 +1718,7 @@ var Parser = /** @class */ (function () {
                         else {
                             _this.current.pattern = _this.current.selector.patterns[_this.current.patternIndex];
                             _this.current.tokenIndex = 0;
+                            _this.current.token = _this.current.pattern.tokens[0];
                         }
                         continue CURRENT;
                     }
@@ -1795,7 +1745,7 @@ var Parser = /** @class */ (function () {
                             }
                         }
                     }
-                    else if (descriptor.type == "capture" && !token.required && !token.repeat) {
+                    else if (descriptor.type == "capture" && !_this.current.token.required && !_this.current.token.repeat) {
                         // a failed non-required non-repeating capture should yield null
                         var output = {
                             captureIndex: descriptor.index,
@@ -1812,9 +1762,60 @@ var Parser = /** @class */ (function () {
                     }
                     // don't continue STACK here because a) we may be a repeating token
                     // and b) we need to increment tokenIndex below.
-                } while (matched && token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
-                _this.current.tokenIndex++;
-                _this.current.tokenPos = _this.current.pos + _this.current.consumed;
+                } while (matched && _this.current.token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
+                if (++_this.current.tokenIndex >= _this.current.pattern.tokens.length) {
+                    // we got through all tokens successfully - pass!
+                    _this.current.matched = true;
+                    _this.current.complete = true;
+                    if (_this.current.ruleset) {
+                        if (_this.current.selector.hasBackref0) {
+                            // create a capture for $0 backref
+                            if (!_this.current.captures)
+                                _this.current.captures = [];
+                            _this.current.captures.push({
+                                captureIndex: 0,
+                                position: _this.current.pos,
+                                length: _this.current.consumed,
+                                value: _this.buffer.substr(_this.current.pos, _this.current.consumed),
+                            });
+                        }
+                        // always build the value so that output callbacks can be called
+                        // even if the grammar returns null
+                        var value = _this.valueBuilder.buildValue(_this.current);
+                        // prevent captures from continuing to descend
+                        _this.current.captures = null;
+                        if (_this.current.wantOutput || (_this.current.ruleset && _this.current.ruleset.name == "return")) {
+                            // our ruleset was called up the stack by a capture - create an output (which will descend the stack)
+                            _this.current.output = {
+                                position: _this.current.pos,
+                                length: _this.current.consumed,
+                                value: value
+                            };
+                        }
+                    }
+                    else if (_this.current.selector.type == "capture") {
+                        var output = _this.current.output;
+                        if (!output) {
+                            // create a capture text segment - based on our current node, not the callee
+                            output = {
+                                position: _this.current.pos,
+                                length: _this.current.consumed,
+                                value: _this.buffer.substr(_this.current.pos, _this.current.consumed),
+                            };
+                        }
+                        output.captureIndex = _this.current.selector.index;
+                        if (_this.current.captures) {
+                            _this.current.captures.push(output);
+                        }
+                        else {
+                            _this.current.captures = [output];
+                        }
+                    }
+                }
+                else {
+                    _this.current.token = _this.current.pattern.tokens[_this.current.tokenIndex];
+                    _this.current.tokenPos = _this.current.pos + _this.current.consumed;
+                }
                 continue CURRENT; // redundant; for clarity
             }
             function expectedTerminals() {
@@ -1833,6 +1834,7 @@ var Parser = /** @class */ (function () {
             frame.patternIndex = 0;
             frame.pattern = frame.selector.patterns[0];
             frame.tokenIndex = 0;
+            frame.token = frame.pattern.tokens[0];
             if (frame.captures)
                 frame.captures.length = 0;
         }
@@ -1893,6 +1895,7 @@ var Parser = /** @class */ (function () {
         }
         else if (!frame) {
             var selector = callee.type == "ruleset" ? callee.rules[0] : callee;
+            var pattern = selector.patterns[0];
             frame = {
                 matched: false,
                 complete: false,
@@ -1900,8 +1903,9 @@ var Parser = /** @class */ (function () {
                 ruleIndex: 0,
                 selector: selector,
                 patternIndex: 0,
-                pattern: selector.patterns[0],
+                pattern: pattern,
                 tokenIndex: 0,
+                token: pattern.tokens[0],
                 pos: pos,
                 tokenPos: pos,
                 consumed: 0,
