@@ -25,7 +25,7 @@
 
 import { 
     Grammar, createUncompiledDezentGrammar, RulesetNode, ReturnNode,
-    SelectorNode, RuleRefNode, MatcherNode, CaptureNode, RuleNode
+    SelectorNode, RuleRefNode, MatcherNode, CaptureNode, RuleNode, PatternNode
 } from "./Grammar";
 
 import { ParseBuffer, ParseBufferExhaustedError } from "./ParseBuffer";
@@ -138,6 +138,7 @@ export type ParseFrame = {
     selector: SelectorNode,
     ruleIndex: number,
     patternIndex: number,
+    pattern: PatternNode,
     tokenIndex: number,
     pos: number,
     tokenPos: number,
@@ -300,18 +301,7 @@ export class Parser {
                     continue CURRENT;    
                 }
 
-                let pattern = this.current.selector.patterns[this.current.patternIndex];
-                if (!pattern) {
-                    // no matching pattern - go to next rule if applicable, or fail if not
-                    if (this.current.ruleset) {
-                        this.nextRule(this.current);
-                    } else {
-                        this.current.complete = true;
-                    }
-                    continue CURRENT;
-                }
-
-                let token = pattern.tokens[this.current.tokenIndex];
+                let token = this.current.pattern.tokens[this.current.tokenIndex];
                 if (!token) {
                     // we got through all tokens successfully - pass!
                     this.current.matched = true;
@@ -443,8 +433,17 @@ export class Parser {
                             failedPatterns[pattern] = true;
                         }
                         this.current.consumed = 0;
-                        this.current.patternIndex++;
-                        this.current.tokenIndex = 0;
+                        if (++this.current.patternIndex >= this.current.selector.patterns.length) {
+                            // no matching pattern - go to next rule if applicable, or fail if not
+                            if (this.current.ruleset) {
+                                this.nextRule(this.current);
+                            } else {
+                                this.current.complete = true;
+                            }
+                        } else {
+                            this.current.pattern = this.current.selector.patterns[this.current.patternIndex];
+                            this.current.tokenIndex = 0;
+                        }        
                         continue CURRENT;
                     }
 
@@ -456,7 +455,7 @@ export class Parser {
                         }
 
                         if (this.current.selector.type == "capture") {
-                            if (callee && callee.output && callee.ruleset && pattern.tokens.length == 1) {
+                            if (callee && callee.output && callee.ruleset && this.current.pattern.tokens.length == 1) {
                                 // output has descended the stack to our capture - capture it
                                 // but only if it's the only node in this capture
                                 this.current.output = callee.output;
@@ -506,6 +505,7 @@ export class Parser {
             frame.complete = true;
         } else {
             frame.patternIndex = 0;
+            frame.pattern = frame.selector.patterns[0];
             frame.tokenIndex = 0;
             if (frame.captures) frame.captures.length = 0;
         }
@@ -565,13 +565,15 @@ export class Parser {
                 this.current = frame;
             }
         } else if (!frame) {
+            let selector = callee.type == "ruleset" ? (<RulesetNode>callee).rules[0] : <SelectorNode>callee;
             frame = {
                 matched: false,
                 complete: false,
                 ruleset: callee.type == "ruleset" ? <RulesetNode>callee : null,
                 ruleIndex: 0,
-                selector: callee.type == "ruleset" ? (<RulesetNode>callee).rules[0] : <SelectorNode>callee,
+                selector: selector,
                 patternIndex: 0,
+                pattern: selector.patterns[0],
                 tokenIndex: 0,
                 pos: pos,
                 tokenPos: pos,

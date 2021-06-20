@@ -1625,18 +1625,7 @@ var Parser = /** @class */ (function () {
                     _this.current.complete = true;
                     continue CURRENT;
                 }
-                var pattern = _this.current.selector.patterns[_this.current.patternIndex];
-                if (!pattern) {
-                    // no matching pattern - go to next rule if applicable, or fail if not
-                    if (_this.current.ruleset) {
-                        _this.nextRule(_this.current);
-                    }
-                    else {
-                        _this.current.complete = true;
-                    }
-                    continue CURRENT;
-                }
-                var token = pattern.tokens[_this.current.tokenIndex];
+                var token = _this.current.pattern.tokens[_this.current.tokenIndex];
                 if (!token) {
                     // we got through all tokens successfully - pass!
                     _this.current.matched = true;
@@ -1762,14 +1751,25 @@ var Parser = /** @class */ (function () {
                         && _this.current.pos + _this.current.consumed - _this.current.tokenPos == 0) {
                         // our token failed, therefore the pattern fails
                         if (_this.current.pos + _this.current.consumed == maxPos && !_this.omitFails && descriptor["pattern"]) {
-                            var pattern_1 = descriptor["pattern"];
+                            var pattern = descriptor["pattern"];
                             if (token.not)
-                                pattern_1 = 'not: ' + pattern_1;
-                            failedPatterns[pattern_1] = true;
+                                pattern = 'not: ' + pattern;
+                            failedPatterns[pattern] = true;
                         }
                         _this.current.consumed = 0;
-                        _this.current.patternIndex++;
-                        _this.current.tokenIndex = 0;
+                        if (++_this.current.patternIndex >= _this.current.selector.patterns.length) {
+                            // no matching pattern - go to next rule if applicable, or fail if not
+                            if (_this.current.ruleset) {
+                                _this.nextRule(_this.current);
+                            }
+                            else {
+                                _this.current.complete = true;
+                            }
+                        }
+                        else {
+                            _this.current.pattern = _this.current.selector.patterns[_this.current.patternIndex];
+                            _this.current.tokenIndex = 0;
+                        }
                         continue CURRENT;
                     }
                     if (matched) {
@@ -1779,7 +1779,7 @@ var Parser = /** @class */ (function () {
                             failedPatterns = {};
                         }
                         if (_this.current.selector.type == "capture") {
-                            if (callee && callee.output && callee.ruleset && pattern.tokens.length == 1) {
+                            if (callee && callee.output && callee.ruleset && _this.current.pattern.tokens.length == 1) {
                                 // output has descended the stack to our capture - capture it
                                 // but only if it's the only node in this capture
                                 _this.current.output = callee.output;
@@ -1831,6 +1831,7 @@ var Parser = /** @class */ (function () {
         }
         else {
             frame.patternIndex = 0;
+            frame.pattern = frame.selector.patterns[0];
             frame.tokenIndex = 0;
             if (frame.captures)
                 frame.captures.length = 0;
@@ -1891,13 +1892,15 @@ var Parser = /** @class */ (function () {
             }
         }
         else if (!frame) {
+            var selector = callee.type == "ruleset" ? callee.rules[0] : callee;
             frame = {
                 matched: false,
                 complete: false,
                 ruleset: callee.type == "ruleset" ? callee : null,
                 ruleIndex: 0,
-                selector: callee.type == "ruleset" ? callee.rules[0] : callee,
+                selector: selector,
                 patternIndex: 0,
+                pattern: selector.patterns[0],
                 tokenIndex: 0,
                 pos: pos,
                 tokenPos: pos,
