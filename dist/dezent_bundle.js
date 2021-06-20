@@ -1625,9 +1625,10 @@ var Parser = /** @class */ (function () {
             var matched = false, consumed = 0;
             do {
                 var callee = void 0;
-                if (descriptor["match"]) {
+                var tokenPos = current.pos + current.consumed;
+                if (descriptor.match) {
                     try {
-                        _a = __read(descriptor.match(this.buffer, current.pos + current.consumed), 2), matched = _a[0], consumed = _a[1];
+                        _a = __read(descriptor.match(this.buffer, tokenPos), 2), matched = _a[0], consumed = _a[1];
                     }
                     catch (e) {
                         if (this.buffer.closed && e == ParseBuffer_1.ParseBufferExhaustedError) {
@@ -1687,18 +1688,18 @@ var Parser = /** @class */ (function () {
                 if (this.options.debugErrors && !callee) {
                     this.debugLog.push([
                         matched ? 'PASS ' : 'FAIL ',
-                        this.buffer.substr(current.pos + current.consumed, 20),
+                        this.buffer.substr(tokenPos, 20),
                         descriptor["pattern"]
                     ]);
                 }
                 if (current.token.required && !matched
                     // + modifiers repeat and are required, so we only fail when we haven't consumed...
-                    && current.pos + current.consumed - current.tokenPos == 0) {
+                    && tokenPos - current.tokenPos == 0) {
                     // our token failed, therefore the pattern fails
-                    if (current.pos + current.consumed >= this.errorPos && !this.omitFails && descriptor.pattern) {
-                        if (current.pos + current.consumed > this.errorPos) {
+                    if (tokenPos >= this.errorPos && !this.omitFails && descriptor.pattern) {
+                        if (tokenPos > this.errorPos) {
                             this.failedPatterns.length = 0;
-                            this.errorPos = current.pos + current.consumed;
+                            this.errorPos = tokenPos;
                         }
                         var pattern = descriptor.pattern;
                         if (current.token.not)
@@ -1745,7 +1746,7 @@ var Parser = /** @class */ (function () {
                     // a failed non-required non-repeating capture should yield null
                     var output = {
                         captureIndex: descriptor.index,
-                        position: current.pos + current.consumed,
+                        position: tokenPos,
                         length: 0,
                         value: null
                     };

@@ -305,9 +305,10 @@ export class Parser {
             let matched = false, consumed = 0;
             do {
                 let callee;
-                if (descriptor["match"]) {
+                let consumedPos = current.pos + current.consumed;
+                if ((<MatcherNode>descriptor).match) {
                     try {
-                        [matched, consumed] = (<MatcherNode>descriptor).match(this.buffer, current.pos + current.consumed);
+                        [matched, consumed] = (<MatcherNode>descriptor).match(this.buffer, consumedPos);
                     } catch(e) {
                         if (this.buffer.closed && e == ParseBufferExhaustedError) {
                             [matched, consumed] = [false, 0];
@@ -364,20 +365,20 @@ export class Parser {
                 if (this.options.debugErrors && !callee) {
                     this.debugLog.push([
                         matched ? 'PASS ' : 'FAIL ', 
-                        this.buffer.substr(current.pos + current.consumed, 20), 
+                        this.buffer.substr(consumedPos, 20), 
                         descriptor["pattern"]
                     ]);
                 }
 
                 if (current.token.required && !matched 
                         // + modifiers repeat and are required, so we only fail when we haven't consumed...
-                    && current.pos + current.consumed - current.tokenPos == 0
+                    && consumedPos - current.tokenPos == 0
                 ) {
                     // our token failed, therefore the pattern fails
-                    if (current.pos + current.consumed >= this.errorPos && !this.omitFails && (<MatcherNode>descriptor).pattern) {
-                        if (current.pos + current.consumed > this.errorPos) {
+                    if (consumedPos >= this.errorPos && !this.omitFails && (<MatcherNode>descriptor).pattern) {
+                        if (consumedPos > this.errorPos) {
                             this.failedPatterns.length = 0;
-                            this.errorPos = current.pos + current.consumed;
+                            this.errorPos = consumedPos;
                         }
                         let pattern = (<MatcherNode>descriptor).pattern;
                         if (current.token.not) pattern = 'not: ' + pattern;
@@ -419,7 +420,7 @@ export class Parser {
                     // a failed non-required non-repeating capture should yield null
                     let output = {
                         captureIndex: (<CaptureNode>descriptor).index,
-                        position: current.pos + current.consumed,
+                        position: consumedPos,
                         length: 0,
                         value: null
                     };
