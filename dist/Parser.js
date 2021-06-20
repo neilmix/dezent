@@ -155,7 +155,7 @@ var Parser = /** @class */ (function () {
         this.cache = [];
         this.omitFails = 0;
         this.debugLog = [];
-        this.maxPos = 0;
+        this.errorPos = 0;
         this.failedPatterns = [];
         exports.lastParser = this;
         this.grammar = grammar;
@@ -197,56 +197,56 @@ var Parser = /** @class */ (function () {
         var current;
         CURRENT: while (current = this.current) {
             if (current.complete) {
-                if (current.caller) {
-                    // a left-recursing frame could be cached at the same location as the current frame,
-                    // so we need to double-check that current is the one that is cached
-                    if (this.cache[current.cacheKey] == current) {
-                        delete this.cache[current.cacheKey];
+                if (!current.caller) {
+                    // our parsing is complete
+                    // in the case of streaming, if we get a parse error we want to bail
+                    // before close, i.e. as soon as the parse error happens. So do this
+                    // check prior to checking for BufferEmpty.
+                    if (!current.matched) {
+                        parsingError(ErrorCode.TextParsingError, this.buffer, this.errorPos, this.expectedTerminals());
                     }
-                    if (this.options.debugErrors) {
-                        this.debugLog.push([
-                            current.matched ? 'PASS ' : 'FAIL ',
-                            this.buffer.substr(current.pos, 20),
-                            current.ruleset ? current.ruleset.name : current.selector.type,
-                            JSON.stringify(current.ruleset ? current.output : current.captures)
-                        ]);
+                    if (!this.buffer.closed) {
+                        if (current.consumed == this.buffer.length) {
+                            // give our upstream caller a chance to close() the buffer
+                            return exports.BufferEmpty;
+                        }
+                        else {
+                            parsingError(ErrorCode.TextParsingError, this.buffer, this.errorPos, this.expectedTerminals());
+                        }
                     }
-                    this.current = current.caller;
-                    current.caller = null;
-                    continue CURRENT;
-                }
-                // our parsing is complete
-                // in the case of streaming, if we get a parse error we want to bail
-                // before close, i.e. as soon as the parse error happens. So do this
-                // check prior to checking for BufferEmpty.
-                if (!current.matched) {
-                    parsingError(ErrorCode.TextParsingError, this.buffer, this.maxPos, this.expectedTerminals());
-                }
-                if (!this.buffer.closed) {
-                    if (current.consumed == this.buffer.length) {
-                        // give our upstream caller a chance to close() the buffer
-                        return exports.BufferEmpty;
+                    if (current.pos != 0) {
+                        parserError(ErrorCode.InputConsumedBeforeResult);
                     }
-                    else {
-                        parsingError(ErrorCode.TextParsingError, this.buffer, this.maxPos, this.expectedTerminals());
+                    if (!current.output) {
+                        parserError(ErrorCode.EmptyOutput);
                     }
+                    if (current.output.length < this.buffer.length) {
+                        parsingError(ErrorCode.TextParsingError, this.buffer, this.errorPos, this.expectedTerminals());
+                    }
+                    if (current.output.length > this.buffer.length) {
+                        parsingError(ErrorCode.TextParsingError, this.buffer, this.errorPos, ["<EOF>"]);
+                    }
+                    if (this.options.dumpDebug) {
+                        this.dumpDebug();
+                    }
+                    return current.output.value;
                 }
-                if (current.pos != 0) {
-                    parserError(ErrorCode.InputConsumedBeforeResult);
+                // a left-recursing frame could be cached at the same location as the current frame,
+                // so we need to double-check that current is the one that is cached
+                if (this.cache[current.cacheKey] == current) {
+                    delete this.cache[current.cacheKey];
                 }
-                if (!current.output) {
-                    parserError(ErrorCode.EmptyOutput);
+                if (this.options.debugErrors) {
+                    this.debugLog.push([
+                        current.matched ? 'PASS ' : 'FAIL ',
+                        this.buffer.substr(current.pos, 20),
+                        current.ruleset ? current.ruleset.name : current.selector.type,
+                        JSON.stringify(current.ruleset ? current.output : current.captures)
+                    ]);
                 }
-                if (current.output.length < this.buffer.length) {
-                    parsingError(ErrorCode.TextParsingError, this.buffer, this.maxPos, this.expectedTerminals());
-                }
-                if (current.output.length > this.buffer.length) {
-                    parsingError(ErrorCode.TextParsingError, this.buffer, this.maxPos, ["<EOF>"]);
-                }
-                if (this.options.dumpDebug) {
-                    this.dumpDebug();
-                }
-                return current.output.value;
+                this.current = current.caller;
+                current.caller = null;
+                continue CURRENT;
             }
             var descriptor = current.token.descriptor;
             var matched = false, consumed = 0;
@@ -322,8 +322,12 @@ var Parser = /** @class */ (function () {
                     // + modifiers repeat and are required, so we only fail when we haven't consumed...
                     && current.pos + current.consumed - current.tokenPos == 0) {
                     // our token failed, therefore the pattern fails
-                    if (current.pos + current.consumed == this.maxPos && !this.omitFails && descriptor["pattern"]) {
-                        var pattern = descriptor["pattern"];
+                    if (current.pos + current.consumed >= this.errorPos && !this.omitFails && descriptor.pattern) {
+                        if (current.pos + current.consumed > this.errorPos) {
+                            this.failedPatterns.length = 0;
+                            this.errorPos = current.pos + current.consumed;
+                        }
+                        var pattern = descriptor.pattern;
                         if (current.token.not)
                             pattern = 'not: ' + pattern;
                         this.failedPatterns.push(pattern);
@@ -347,10 +351,6 @@ var Parser = /** @class */ (function () {
                 }
                 if (matched) {
                     current.consumed += consumed;
-                    if (current.pos + current.consumed > this.maxPos) {
-                        this.maxPos = current.pos + current.consumed;
-                        this.failedPatterns.length = 0;
-                    }
                     if (current.selector.type == "capture") {
                         if (callee && callee.output && callee.ruleset && current.pattern.tokens.length == 1) {
                             // output has descended the stack to our capture - capture it
@@ -386,7 +386,11 @@ var Parser = /** @class */ (function () {
                 // don't continue STACK here because a) we may be a repeating token
                 // and b) we need to increment tokenIndex below.
             } while (matched && current.token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
-            if (++current.tokenIndex >= current.pattern.tokens.length) {
+            if (++current.tokenIndex < current.pattern.tokens.length) {
+                current.token = current.pattern.tokens[current.tokenIndex];
+                current.tokenPos = current.pos + current.consumed;
+            }
+            else {
                 // we got through all tokens successfully - pass!
                 current.matched = true;
                 current.complete = true;
@@ -434,10 +438,6 @@ var Parser = /** @class */ (function () {
                         current.captures = [output];
                     }
                 }
-            }
-            else {
-                current.token = current.pattern.tokens[current.tokenIndex];
-                current.tokenPos = current.pos + current.consumed;
             }
             continue CURRENT; // redundant; for clarity
         }
