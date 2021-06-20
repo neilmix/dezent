@@ -142,6 +142,7 @@ export type ParseFrame = {
     pos: number,
     tokenPos: number,
     consumed: number,
+    caller: ParseFrame | null,
     callee: ParseFrame | null,
     wantOutput: boolean,
     output?: Output,
@@ -192,7 +193,7 @@ export var lastParser:Parser = null; // for testing purposes
 export class Parser {
     grammar : Grammar;
     root : ReturnNode;
-    stack : ParseFrame[] = [];
+    current : ParseFrame = null;
     cache : ParseFrame[] = [];
     buffer : ParseBuffer;
     rulesets: {[key:string]:RulesetNode};
@@ -233,137 +234,134 @@ export class Parser {
             this.options[option] = options[option];
         }
         this.valueBuilder = new ValueBuilder(grammar, this.options.callbacks);
-        this.callFrame(null, root);
+        this.callFrame(root);
 
         let maxPos = 0;
         let failedPatterns = {};
         this.run = () => {    
-            STACK: while (this.stack.length) {
-                let current = this.top();
-
-                if (current.complete) {
-                    if (this.stack.length > 1) {
-                        let exited = this.stack.pop();
+            CURRENT: while (this.current) {
+                if (this.current.complete) {
+                    if (this.current.caller) {
                         // a left-recursing frame could be cached at the same location as the current frame,
                         // so we need to double-check that current is the one that is cached
-                        if (this.cache[exited.cacheKey] == current) {
-                            delete this.cache[exited.cacheKey];
+                        if (this.cache[this.current.cacheKey] == this.current) {
+                            delete this.cache[this.current.cacheKey];
                         }
                         if (this.options.debugErrors) {
                             this.debugLog.push([
-                                exited.matched ? 'PASS ' : 'FAIL ', 
-                                this.buffer.substr(exited.pos, 20), 
-                                this.stack.length,
-                                exited.ruleset ? exited.ruleset.name : exited.selector.type,
-                                JSON.stringify(exited.ruleset ? exited.output : exited.captures)
+                                this.current.matched ? 'PASS ' : 'FAIL ', 
+                                this.buffer.substr(this.current.pos, 20), 
+                                this.current.ruleset ? this.current.ruleset.name : this.current.selector.type,
+                                JSON.stringify(this.current.ruleset ? this.current.output : this.current.captures)
                             ]);
                         }
-                        continue STACK;
+                        this.current = this.current.caller;
+                        this.current.callee.caller = null;
+                        continue CURRENT;
                     }
 
                     // our parsing is complete
-                    let final = this.stack[0];
 
                     // in the case of streaming, if we get a parse error we want to bail
                     // before close, i.e. as soon as the parse error happens. So do this
                     // check prior to checking for BufferEmpty.
-                    if (!current.matched) {
+                    if (!this.current.matched) {
                         parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
                     }
                     if (!this.buffer.closed) {
-                        if (current.consumed == buffer.length) {
+                        if (this.current.consumed == buffer.length) {
                             // give our upstream caller a chance to close() the buffer
                             return BufferEmpty;
                         } else {
                             parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
                         }
                     }
-                    if (final.pos != 0) {
+                    if (this.current.pos != 0) {
                         parserError(ErrorCode.InputConsumedBeforeResult);
                     }
-                    if (!final.output) {
+                    if (!this.current.output) {
                         parserError(ErrorCode.EmptyOutput);
                     }
-                    if (final.output.length < this.buffer.length) {
+                    if (this.current.output.length < this.buffer.length) {
                         parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, expectedTerminals());
                     }        
-                    if (final.output.length > this.buffer.length) {
+                    if (this.current.output.length > this.buffer.length) {
                         parsingError(ErrorCode.TextParsingError, this.buffer, maxPos, ["<EOF>"]);
                     }
                     if (this.options.dumpDebug) {
                         this.dumpDebug();
                     }
-                    return final.output.value;
+                    return this.current.output.value;
                 }
                 
-                if (current.ruleset && current.ruleIndex >= current.ruleset.rules.length) {
+                if (this.current.ruleset && this.current.ruleIndex >= this.current.ruleset.rules.length) {
                     // no matching rules - fail
-                    current.complete = true;
-                    continue STACK;    
+                    this.current.complete = true;
+                    continue CURRENT;    
                 }
 
-                let pattern = current.selector.patterns[current.patternIndex];
+                let pattern = this.current.selector.patterns[this.current.patternIndex];
                 if (!pattern) {
                     // no matching pattern - go to next rule if applicable, or fail if not
-                    if (current.ruleset) {
-                        this.nextRule(current);
+                    if (this.current.ruleset) {
+                        this.nextRule(this.current);
                     } else {
-                        current.complete = true;
+                        this.current.complete = true;
                     }
-                    continue STACK;
+                    continue CURRENT;
                 }
 
-                let token = pattern.tokens[current.tokenIndex];
+                let token = pattern.tokens[this.current.tokenIndex];
                 if (!token) {
                     // we got through all tokens successfully - pass!
-                    current.matched = true;
-                    current.complete = true;
+                    this.current.matched = true;
+                    this.current.complete = true;
 
-                    if (current.ruleset) {
-                        if ((<RuleNode>current.selector).hasBackref0) {
+                    if (this.current.ruleset) {
+                        if ((<RuleNode>this.current.selector).hasBackref0) {
                             // create a capture for $0 backref
-                            if (!current.captures) current.captures = [];
-                            current.captures.push({
+                            if (!this.current.captures) this.current.captures = [];
+                            this.current.captures.push({
                                 captureIndex: 0,
-                                position: current.pos,
-                                length: current.consumed,
-                                value: this.buffer.substr(current.pos, current.consumed),
+                                position: this.current.pos,
+                                length: this.current.consumed,
+                                value: this.buffer.substr(this.current.pos, this.current.consumed),
                             });
                         }
 
                         // always build the value so that output callbacks can be called
                         // even if the grammar returns null
-                        let value = this.valueBuilder.buildValue(current);
+                        let value = this.valueBuilder.buildValue(this.current);
 
                         // prevent captures from continuing to descend
-                        current.captures = null;
+                        this.current.captures = null;
                         
-                        if (current.wantOutput || (current.ruleset && current.ruleset.name == "return")) {
+                        if (this.current.wantOutput || (this.current.ruleset && this.current.ruleset.name == "return")) {
                             // our ruleset was called up the stack by a capture - create an output (which will descend the stack)
-                            current.output = {
-                                position: current.pos,
-                                length: current.consumed,
+                            this.current.output = {
+                                position: this.current.pos,
+                                length: this.current.consumed,
                                 value: value
                             }
                         }
-                    } else if (current.selector.type == "capture") {
-                        let output = current.output;
+                    } else if (this.current.selector.type == "capture") {
+                        let output = this.current.output;
                         if (!output) {
                             // create a capture text segment - based on our current node, not the callee
                             output = {
-                                position: current.pos,
-                                length: current.consumed,
-                                value: this.buffer.substr(current.pos, current.consumed),
+                                position: this.current.pos,
+                                length: this.current.consumed,
+                                value: this.buffer.substr(this.current.pos, this.current.consumed),
                             };                            
                         }
-                        output.captureIndex = (<CaptureNode>current.selector).index;
-                        if (current.captures) {
-                            current.captures.push(output);
+                        output.captureIndex = (<CaptureNode>this.current.selector).index;
+                        if (this.current.captures) {
+                            this.current.captures.push(output);
                         } else {
-                            current.captures = [output];
+                            this.current.captures = [output];
                         }
                     }
-                    continue STACK; 
+                    continue CURRENT; 
                 }
 
                 let descriptor = token.descriptor;
@@ -372,7 +370,7 @@ export class Parser {
                     let callee;
                     if (["string","class","any"].includes(descriptor.type)) {
                         try {
-                            [matched, consumed] = (<MatcherNode>descriptor).match(this.buffer, current.pos + current.consumed);
+                            [matched, consumed] = (<MatcherNode>descriptor).match(this.buffer, this.current.pos + this.current.consumed);
                         } catch(e) {
                             if (this.buffer.closed && e == ParseBufferExhaustedError) {
                                 [matched, consumed] = [false, 0];
@@ -382,16 +380,16 @@ export class Parser {
                                 throw e;
                             }
                         }
-                    } else if (!current.callee) {
+                    } else if (!this.current.callee) {
                         let calleeNode = <SelectorNode> (descriptor.type == "ruleref" ? this.rulesets[(<RuleRefNode>descriptor).name] : descriptor);
-                        this.callFrame(current, calleeNode);
+                        this.callFrame(calleeNode);
                         if (!calleeNode.canFail) {
                             this.omitFails++;
                         }
-                        continue STACK;
+                        continue CURRENT;
                     } else {
-                        callee = current.callee;
-                        current.callee = null;
+                        callee = this.current.callee;
+                        this.current.callee = null;
                         matched = callee.matched;
                         consumed = callee.consumed;
                         if ((callee.ruleset && !callee.ruleset.canFail) || (callee.selector && !callee.selector.canFail)) {
@@ -400,25 +398,25 @@ export class Parser {
                     }
 
                     // see notes on left recursion toward the beginning of this file
-                    if (current.leftRecursing) {
+                    if (this.current.leftRecursing) {
                         // it's possible to get a match without consuming more input than previous
                         // recursion attempts, so make sure there's increased consumption, too.
-                        if (matched && (current.leftReturn == null || consumed > current.leftReturn.consumed)) {
+                        if (matched && (this.current.leftReturn == null || consumed > this.current.leftReturn.consumed)) {
                             // stow away our returning callee for later use in the next recursion iteration
-                            current.leftReturn = callee;
+                            this.current.leftReturn = callee;
                         } else {
                             // at this point our left recursion is failing to consumer more input,
                             // time to wrap things up
-                            current.complete = true;
-                            if (current.leftReturn) {
+                            this.current.complete = true;
+                            if (this.current.leftReturn) {
                                 // we found the largest match for this recursing rule on a previous iteration.
                                 // use that as the return value for this frame.
-                                current.matched = true;
-                                current.consumed = current.leftReturn.consumed;
-                                current.output = current.leftReturn.output;
+                                this.current.matched = true;
+                                this.current.consumed = this.current.leftReturn.consumed;
+                                this.current.output = this.current.leftReturn.output;
                             }
                         }
-                        continue STACK;
+                        continue CURRENT;
                     }
 
                     if (token.and || token.not) {
@@ -429,70 +427,69 @@ export class Parser {
                     if (this.options.debugErrors && !callee) {
                         this.debugLog.push([
                             matched ? 'PASS ' : 'FAIL ', 
-                            this.buffer.substr(current.pos + current.consumed, 20), 
-                            this.stack.length,
+                            this.buffer.substr(this.current.pos + this.current.consumed, 20), 
                             descriptor["pattern"]
                         ]);
                     }
 
                     if (token.required && !matched 
                            // + modifiers repeat and are required, so we only fail when we haven't consumed...
-                        && current.pos + current.consumed - current.tokenPos == 0
+                        && this.current.pos + this.current.consumed - this.current.tokenPos == 0
                     ) {
                         // our token failed, therefore the pattern fails
-                        if (current.pos + current.consumed == maxPos && !this.omitFails && descriptor["pattern"]) {
+                        if (this.current.pos + this.current.consumed == maxPos && !this.omitFails && descriptor["pattern"]) {
                             let pattern = descriptor["pattern"];
                             if (token.not) pattern = 'not: ' + pattern;
                             failedPatterns[pattern] = true;
                         }
-                        current.consumed = 0;
-                        current.patternIndex++;
-                        current.tokenIndex = 0;
-                        continue STACK;
+                        this.current.consumed = 0;
+                        this.current.patternIndex++;
+                        this.current.tokenIndex = 0;
+                        continue CURRENT;
                     }
 
                     if (matched) {
-                        current.consumed += consumed;
-                        if (current.pos + current.consumed > maxPos) {
-                            maxPos = current.pos + current.consumed;
+                        this.current.consumed += consumed;
+                        if (this.current.pos + this.current.consumed > maxPos) {
+                            maxPos = this.current.pos + this.current.consumed;
                             failedPatterns = {};
                         }
 
-                        if (current.selector.type == "capture") {
+                        if (this.current.selector.type == "capture") {
                             if (callee && callee.output && callee.ruleset && pattern.tokens.length == 1) {
                                 // output has descended the stack to our capture - capture it
                                 // but only if it's the only node in this capture
-                                current.output = callee.output;
+                                this.current.output = callee.output;
                             }
                         } else if (callee && callee.captures) {
                             // captures need to descend the stack
-                            if (current.captures) {
-                                current.captures = current.captures.concat(callee.captures);
+                            if (this.current.captures) {
+                                this.current.captures = this.current.captures.concat(callee.captures);
                             } else {
-                                current.captures = callee.captures;
+                                this.current.captures = callee.captures;
                             }
                         }
                     } else if (descriptor.type == "capture" && !token.required && !token.repeat) {
                         // a failed non-required non-repeating capture should yield null
                         let output = {
                             captureIndex: (<CaptureNode>descriptor).index,
-                            position: current.pos + current.consumed,
+                            position: this.current.pos + this.current.consumed,
                             length: 0,
                             value: null
                         };
-                        if (current.captures) {
-                            current.captures.push(output);
+                        if (this.current.captures) {
+                            this.current.captures.push(output);
                         } else {
-                            current.captures = [output];
+                            this.current.captures = [output];
                         }
                     }
 
                     // don't continue STACK here because a) we may be a repeating token
                     // and b) we need to increment tokenIndex below.
                 } while (matched && token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
-                current.tokenIndex++;
-                current.tokenPos = current.pos + current.consumed;
-                continue STACK; // redundant; for clarity
+                this.current.tokenIndex++;
+                this.current.tokenPos = this.current.pos + this.current.consumed;
+                continue CURRENT; // redundant; for clarity
             }
             
             function expectedTerminals() {
@@ -535,8 +532,8 @@ export class Parser {
         }    
     }
 
-    callFrame(caller:ParseFrame, callee:SelectorNode|RulesetNode) {
-        let pos = caller ? caller.pos + caller.consumed : 0;
+    callFrame(callee:SelectorNode|RulesetNode) {
+        let pos = this.current ? this.current.pos + this.current.consumed : 0;
         let cacheKey = pos * this.grammar.maxid + callee.id;
 
         let frame:ParseFrame;
@@ -552,9 +549,10 @@ export class Parser {
                 frame.leftRecursing = false;
                 frame.callee = frame.leftReturn;
                 frame.leftReturn = null;
-                caller.callee = frame;
-                this.stack.push(frame);
-                this.stack.push(secondFrame = frame.callee);
+                this.current.callee = frame;
+                frame.caller = this.current;
+                frame.callee.caller = frame;
+                this.current = secondFrame = frame.callee;
             } else {
                 // this is the first recursion iteration - get ourselves ready
                 // to work through multiple recursion iterations by marking our
@@ -562,8 +560,9 @@ export class Parser {
                 // avoid infinite loop.
                 this.nextRule(frame);
                 cached.leftRecursing = true;
-                caller.callee = frame;
-                this.stack.push(frame);
+                this.current.callee = frame;
+                frame.caller = this.current;
+                this.current = frame;
             }
         } else if (!frame) {
             frame = {
@@ -577,8 +576,9 @@ export class Parser {
                 pos: pos,
                 tokenPos: pos,
                 consumed: 0,
+                caller: this.current,
                 callee: null,
-                wantOutput: caller && (caller.selector.type == "capture" || caller.wantOutput),
+                wantOutput: this.current && (this.current.selector.type == "capture" || this.current.wantOutput),
                 output: null,
                 captures: null,
                 cacheKey: cacheKey,
@@ -588,22 +588,20 @@ export class Parser {
             if (callee.type == "ruleset") {
                 this.cache[frame.cacheKey] = frame;
             }
-            if (caller) caller.callee = frame;
-            this.stack.push(frame);
+            if (this.current) this.current.callee = frame;
+            this.current = frame;
         }
 
         if (this.options.debugErrors) {
             this.debugLog.push([
                 'enter', 
                 this.buffer.substr(frame.pos, 20), 
-                secondFrame ? this.stack.length - 2 : this.stack.length - 1,
                 frame.ruleset ? frame.ruleset.name : frame.selector.type
             ]);
             if (secondFrame) {
                 this.debugLog.push([
                     'enter', 
                     this.buffer.substr(secondFrame.pos, 20), 
-                    this.stack.length - 1,
                     secondFrame.ruleset ? secondFrame.ruleset.name : secondFrame.selector.type
                 ]);    
             }
@@ -619,11 +617,6 @@ export class Parser {
             console.log("Debug log:\n", lines.join("\n"));
         }
 
-    }
-
-
-    top() : ParseFrame|null { 
-        return this.stack[this.stack.length-1] 
     }
 }
 
