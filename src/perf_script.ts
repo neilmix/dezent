@@ -998,9 +998,9 @@ let grammar = `
     return atom -> null;
     _ = [\u0020\t-\r]* -> null;
     atom = object|array|string|number|boolean|null -> null;
-    object = '{' ( _ member _ ',' )* _ member? _ '}' -> null;
+    object = '{' _ ( member _ ( ','  _ member _ )* )? '}' -> null;
     member = string _ ':' _ atom -> null;
-    array = '[' ( _ atom _ ',' )* _ atom _ ']' -> null;
+    array = '[' _ ( atom _ ( ',' _ atom _ )* )? ']' -> null;
     string = '"' (escape|stringText)* '"' -> null;
     stringText = ( !["\\\\] . )+ -> null;
     escape = '\\\\' ( unicodeChar | escapeChar ) -> null;
