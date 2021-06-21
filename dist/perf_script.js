@@ -993,9 +993,28 @@ var json_sample1k = "[\r\n" +
     "    \"favoriteFruit\": \"banana\"\r\n" +
     "  }\r\n" +
     "]";
-var Dezent_1 = require("./Dezent");
-var grammar = "\n    return atom -> null;\n    _ = [ \t-\r]* -> null;\n    atom = object|array|string|number|boolean|null -> null;\n    object = '{' _ ( member _ ( ','  _ member _ )* )? '}' -> null;\n    member = string _ ':' _ atom -> null;\n    array = '[' _ ( atom _ ( ',' _ atom _ )* )? ']' -> null;\n    string = '\"' (escape|stringText)* '\"' -> null;\n    stringText = ( ![\"\\\\] . )+ -> null;\n    escape = '\\\\' ( unicodeChar | escapeChar ) -> null;\n    unicodeChar = 'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] -> null;\n    escapeChar = [\"/\\\\bnfrt] -> null;\n    number = \n        '-'? ( [1-9] [0-9]* | [0-9]+ ) // integer\n        ( '.' [0-9]+ )?                // fraction\n        ( [eE] [-+] [0-9]+ )?          // exponent\n        -> null;\n    boolean = 'true' -> true, 'false' -> false;\n    null = 'null' -> null;\n";
-var dez = new Dezent_1.Dezent(grammar);
+const Dezent_1 = require("./Dezent");
+let grammar = `
+    return atom -> null;
+    _ = [\u0020\t-\r]* -> null;
+    atom = object|array|string|number|boolean|null -> null;
+    object = '{' _ ( member _ ( ','  _ member _ )* )? '}' -> null;
+    member = string _ ':' _ atom -> null;
+    array = '[' _ ( atom _ ( ',' _ atom _ )* )? ']' -> null;
+    string = '"' (escape|stringText)* '"' -> null;
+    stringText = ( !["\\\\] . )+ -> null;
+    escape = '\\\\' ( unicodeChar | escapeChar ) -> null;
+    unicodeChar = 'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] -> null;
+    escapeChar = ["/\\\\bnfrt] -> null;
+    number = 
+        '-'? ( [1-9] [0-9]* | [0-9]+ ) // integer
+        ( '.' [0-9]+ )?                // fraction
+        ( [eE] [-+] [0-9]+ )?          // exponent
+        -> null;
+    boolean = 'true' -> true, 'false' -> false;
+    null = 'null' -> null;
+`;
+let dez = new Dezent_1.Dezent(grammar);
 while (true) {
     dez.parse(json_sample1k);
 }

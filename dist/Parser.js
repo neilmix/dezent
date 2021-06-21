@@ -22,39 +22,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-var __values = (this && this.__values) || function(o) {
-    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
-    if (m) return m.call(o);
-    if (o && typeof o.length === "number") return {
-        next: function () {
-            if (o && i >= o.length) o = void 0;
-            return { value: o && o[i++], done: !o };
-        }
-    };
-    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
-};
-var __read = (this && this.__read) || function (o, n) {
-    var m = typeof Symbol === "function" && o[Symbol.iterator];
-    if (!m) return o;
-    var i = m.call(o), r, ar = [], e;
-    try {
-        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
-    }
-    catch (error) { e = { error: error }; }
-    finally {
-        try {
-            if (r && !r.done && (m = i["return"])) m.call(i);
-        }
-        finally { if (e) throw e.error; }
-    }
-    return ar;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parsingError = exports.assert = exports.parserError = exports.Parser = exports.lastParser = exports.parseGrammar = exports.findDezentGrammar = exports.BufferEmpty = exports.errorMessages = exports.ErrorCode = void 0;
-var Grammar_1 = require("./Grammar");
-var ParseBuffer_1 = require("./ParseBuffer");
-var GrammarCompiler_1 = require("./GrammarCompiler");
-var Output_1 = require("./Output");
+const Grammar_1 = require("./Grammar");
+const ParseBuffer_1 = require("./ParseBuffer");
+const GrammarCompiler_1 = require("./GrammarCompiler");
+const Output_1 = require("./Output");
 var ErrorCode;
 (function (ErrorCode) {
     ErrorCode[ErrorCode["TextParsingError"] = 1] = "TextParsingError";
@@ -118,8 +91,8 @@ exports.errorMessages = {
     2011: "Assertion failed",
     2012: "Input text was referenced (perhaps via $0?) but has already released to free memory. Try increasing minBufferSizeInMB.",
 };
-exports.BufferEmpty = { toString: function () { return "BufferEmpty"; } };
-var dezentGrammar;
+exports.BufferEmpty = { toString: () => "BufferEmpty" };
+let dezentGrammar;
 function findDezentGrammar() {
     if (!dezentGrammar) {
         dezentGrammar = Grammar_1.createUncompiledDezentGrammar();
@@ -129,10 +102,10 @@ function findDezentGrammar() {
 }
 exports.findDezentGrammar = findDezentGrammar;
 function parseGrammar(text, options) {
-    var buf = new ParseBuffer_1.ParseBuffer(text);
-    var parser = new Parser(findDezentGrammar(), buf, options);
+    let buf = new ParseBuffer_1.ParseBuffer(text);
+    let parser = new Parser(findDezentGrammar(), buf, options);
     try {
-        var grammar = parser.parse();
+        let grammar = parser.parse();
         GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text);
         return grammar;
     }
@@ -148,9 +121,8 @@ function parseGrammar(text, options) {
 }
 exports.parseGrammar = parseGrammar;
 exports.lastParser = null; // for testing purposes
-var Parser = /** @class */ (function () {
-    function Parser(grammar, buffer, options) {
-        var e_1, _a;
+class Parser {
+    constructor(grammar, buffer, options) {
         this.current = null;
         this.omitFails = 0;
         this.debugLog = [];
@@ -158,21 +130,11 @@ var Parser = /** @class */ (function () {
         this.failedPatterns = [];
         exports.lastParser = this;
         this.grammar = grammar;
-        var root;
-        try {
-            for (var _b = __values(grammar.ruleset), _c = _b.next(); !_c.done; _c = _b.next()) {
-                var ruleset = _c.value;
-                if (ruleset.name == 'return') {
-                    root = ruleset;
-                }
+        let root;
+        for (let ruleset of grammar.ruleset) {
+            if (ruleset.name == 'return') {
+                root = ruleset;
             }
-        }
-        catch (e_1_1) { e_1 = { error: e_1_1 }; }
-        finally {
-            try {
-                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
-            }
-            finally { if (e_1) throw e_1.error; }
         }
         if (!root) {
             GrammarCompiler_1.grammarError(ErrorCode.ReturnNotFound, grammar.text);
@@ -181,19 +143,18 @@ var Parser = /** @class */ (function () {
         this.buffer = buffer;
         this.rulesets = grammar.rulesetLookup;
         this.options = {};
-        for (var pragma in grammar.pragmas) {
+        for (let pragma in grammar.pragmas) {
             GrammarCompiler_1.grammarError(ErrorCode.UnknownPragma, pragma);
             this.options[pragma] = grammar.pragmas[pragma];
         }
-        for (var option in options) {
+        for (let option in options) {
             this.options[option] = options[option];
         }
         this.valueBuilder = new Output_1.ValueBuilder(grammar, this.options.callbacks);
         this.callFrame(root);
     }
-    Parser.prototype.run = function () {
-        var _a, _b;
-        var current;
+    run() {
+        let current;
         CURRENT: while (current = this.current) {
             if (current.complete) {
                 if (!current.caller) {
@@ -242,18 +203,18 @@ var Parser = /** @class */ (function () {
                 current.caller = null;
                 continue CURRENT;
             }
-            var descriptor = current.token.descriptor;
-            var matched = false, consumed = 0;
+            let descriptor = current.token.descriptor;
+            let matched = false, consumed = 0;
             do {
-                var callee = void 0;
-                var consumedPos = current.pos + current.consumed;
+                let callee;
+                let consumedPos = current.pos + current.consumed;
                 if (descriptor.match) {
                     try {
-                        _a = __read(descriptor.match(this.buffer, consumedPos), 2), matched = _a[0], consumed = _a[1];
+                        [matched, consumed] = descriptor.match(this.buffer, consumedPos);
                     }
                     catch (e) {
                         if (this.buffer.closed && e == ParseBuffer_1.ParseBufferExhaustedError) {
-                            _b = __read([false, 0], 2), matched = _b[0], consumed = _b[1];
+                            [matched, consumed] = [false, 0];
                         }
                         else if (e == ParseBuffer_1.ParseBufferExhaustedError) {
                             return exports.BufferEmpty;
@@ -264,7 +225,7 @@ var Parser = /** @class */ (function () {
                     }
                 }
                 else if (!current.callee) {
-                    var calleeNode = (descriptor.type == "ruleref" ? this.rulesets[descriptor.name] : descriptor);
+                    let calleeNode = (descriptor.type == "ruleref" ? this.rulesets[descriptor.name] : descriptor);
                     this.callFrame(calleeNode);
                     if (!calleeNode.canFail) {
                         this.omitFails++;
@@ -322,7 +283,7 @@ var Parser = /** @class */ (function () {
                             this.failedPatterns.length = 0;
                             this.errorPos = consumedPos;
                         }
-                        var pattern = descriptor.pattern;
+                        let pattern = descriptor.pattern;
                         if (current.token.not)
                             pattern = 'not: ' + pattern;
                         this.failedPatterns.push(pattern);
@@ -365,7 +326,7 @@ var Parser = /** @class */ (function () {
                 }
                 else if (descriptor.type == "capture" && !current.token.required && !current.token.repeat) {
                     // a failed non-required non-repeating capture should yield null
-                    var output = {
+                    let output = {
                         captureIndex: descriptor.index,
                         position: consumedPos,
                         length: 0,
@@ -403,7 +364,7 @@ var Parser = /** @class */ (function () {
                     }
                     // always build the value so that output callbacks can be called
                     // even if the grammar returns null
-                    var value = this.valueBuilder.buildValue(current);
+                    let value = this.valueBuilder.buildValue(current);
                     // prevent captures from continuing to descend
                     current.captures = null;
                     if (current.wantOutput || (current.ruleset && current.ruleset.name == "return")) {
@@ -416,7 +377,7 @@ var Parser = /** @class */ (function () {
                     }
                 }
                 else if (current.selector.type == "capture") {
-                    var output = current.output;
+                    let output = current.output;
                     if (!output) {
                         // create a capture text segment - based on our current node, not the callee
                         output = {
@@ -436,30 +397,19 @@ var Parser = /** @class */ (function () {
             }
             continue CURRENT; // redundant; for clarity
         }
-    };
-    Parser.prototype.expectedTerminals = function () {
-        var e_2, _a;
-        var lookup = {};
-        var out = [];
-        try {
-            for (var _b = __values(this.failedPatterns), _c = _b.next(); !_c.done; _c = _b.next()) {
-                var terminal = _c.value;
-                if (!lookup[terminal]) {
-                    out.push(terminal);
-                    lookup[terminal] = true;
-                }
+    }
+    expectedTerminals() {
+        let lookup = {};
+        let out = [];
+        for (let terminal of this.failedPatterns) {
+            if (!lookup[terminal]) {
+                out.push(terminal);
+                lookup[terminal] = true;
             }
-        }
-        catch (e_2_1) { e_2 = { error: e_2_1 }; }
-        finally {
-            try {
-                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
-            }
-            finally { if (e_2) throw e_2.error; }
         }
         return out;
-    };
-    Parser.prototype.nextRule = function (frame) {
+    }
+    nextRule(frame) {
         frame.ruleIndex++;
         frame.selector = frame.ruleset.rules[frame.ruleIndex];
         frame.callee = null;
@@ -474,13 +424,13 @@ var Parser = /** @class */ (function () {
             if (frame.captures)
                 frame.captures.length = 0;
         }
-    };
-    Parser.prototype.parse = function () {
+    }
+    parse() {
         if (this.error) {
             throw this.error;
         }
         try {
-            var result = this.run();
+            let result = this.run();
             if (result == exports.BufferEmpty) {
                 assert(!this.buffer.closed);
                 return undefined;
@@ -495,12 +445,12 @@ var Parser = /** @class */ (function () {
             this.error = e;
             throw e;
         }
-    };
-    Parser.prototype.callFrame = function (callee) {
-        var pos = this.current ? this.current.pos + this.current.consumed : 0;
-        var cacheKey = pos * this.grammar.maxid + callee.id;
-        var recursed;
-        var check = this.current;
+    }
+    callFrame(callee) {
+        let pos = this.current ? this.current.pos + this.current.consumed : 0;
+        let cacheKey = pos * this.grammar.maxid + callee.id;
+        let recursed;
+        let check = this.current;
         if (check && callee.type == "ruleset")
             do {
                 if (check.ruleset && check.ruleset.name == callee.name) {
@@ -508,8 +458,8 @@ var Parser = /** @class */ (function () {
                     break;
                 }
             } while (check.caller && check.pos == check.caller.pos && (check = check.caller));
-        var frame;
-        var secondFrame;
+        let frame;
+        let secondFrame;
         if (recursed) {
             // left recursion detected - see notes near the top of this file
             frame = Object.assign({}, recursed);
@@ -538,8 +488,8 @@ var Parser = /** @class */ (function () {
             }
         }
         else if (!frame) {
-            var selector = callee.type == "ruleset" ? callee.rules[0] : callee;
-            var pattern = selector.patterns[0];
+            let selector = callee.type == "ruleset" ? callee.rules[0] : callee;
+            let pattern = selector.patterns[0];
             frame = {
                 matched: false,
                 complete: false,
@@ -580,33 +530,21 @@ var Parser = /** @class */ (function () {
                 ]);
             }
         }
-    };
-    Parser.prototype.dumpDebug = function () {
-        var e_3, _a;
+    }
+    dumpDebug() {
         if (this.options.debugErrors) {
-            var lines = [];
-            try {
-                for (var _b = __values(this.debugLog), _c = _b.next(); !_c.done; _c = _b.next()) {
-                    var msg = _c.value;
-                    lines.push(msg.join('\t').replace(/\n/g, '\\n'));
-                }
-            }
-            catch (e_3_1) { e_3 = { error: e_3_1 }; }
-            finally {
-                try {
-                    if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
-                }
-                finally { if (e_3) throw e_3.error; }
+            let lines = [];
+            for (let msg of this.debugLog) {
+                lines.push(msg.join('\t').replace(/\n/g, '\\n'));
             }
             console.log("Debug log:\n", lines.join("\n"));
         }
-    };
-    return Parser;
-}());
+    }
+}
 exports.Parser = Parser;
 function parserError(code) {
-    var msg = exports.errorMessages[code];
-    var e = new Error("Internal parser error " + code + ": " + msg);
+    let msg = exports.errorMessages[code];
+    let e = new Error(`Internal parser error ${code}: ${msg}`);
     e["code"] = code;
     throw e;
 }
@@ -619,13 +557,13 @@ function assert(condition) {
 }
 exports.assert = assert;
 function parsingError(code, buf, pos, expected) {
-    expected = expected.map(function (i) { return i.replace(/\n/g, '\\n'); });
-    var list = [].join.call(expected, '\n\t');
-    var reason = expected.length == 1 ? "expected: " + list : "expected one of the following: \n\t" + list;
-    var info = buf.findLineAndChar(pos);
-    var backrefs = [null, info.line, info.char, reason, info.lineText, info.pointerText];
-    var msg = exports.errorMessages[code].replace(/\$([0-9])/g, function (match, index) { return String(backrefs[index]); });
-    var e = new Error(msg);
+    expected = expected.map((i) => i.replace(/\n/g, '\\n'));
+    let list = [].join.call(expected, '\n\t');
+    let reason = expected.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;
+    let info = buf.findLineAndChar(pos);
+    let backrefs = [null, info.line, info.char, reason, info.lineText, info.pointerText];
+    let msg = exports.errorMessages[code].replace(/\$([0-9])/g, (match, index) => String(backrefs[index]));
+    let e = new Error(msg);
     e["code"] = code;
     e["pos"] = pos;
     e["line"] = info.line;

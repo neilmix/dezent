@@ -24,17 +24,17 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DezentStream = exports.Dezent = void 0;
-var Parser_1 = require("./Parser");
-var ParseBuffer_1 = require("./ParseBuffer");
-var Dezent = /** @class */ (function () {
-    function Dezent(grammarStr, options) {
+const Parser_1 = require("./Parser");
+const ParseBuffer_1 = require("./ParseBuffer");
+class Dezent {
+    constructor(grammarStr, options) {
         this.grammar = Parser_1.parseGrammar(grammarStr, grammarOptions(options));
         this.options = options || {};
         this.error = null;
     }
-    Dezent.prototype.parse = function (text) {
+    parse(text) {
         try {
-            var stream = new DezentStream(this.grammar, this.options);
+            let stream = new DezentStream(this.grammar, this.options);
             stream.write(text);
             return stream.close();
         }
@@ -45,31 +45,29 @@ var Dezent = /** @class */ (function () {
             }
             return undefined;
         }
-    };
-    return Dezent;
-}());
+    }
+}
 exports.Dezent = Dezent;
-var DezentStream = /** @class */ (function () {
-    function DezentStream(grammar, options) {
+class DezentStream {
+    constructor(grammar, options) {
         this.options = options || {};
         this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSizeInMB);
         grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, grammarOptions(this.options)) : grammar;
         this.parser = new Parser_1.Parser(grammar, this.buffer, this.options);
     }
-    DezentStream.prototype.write = function (text) {
+    write(text) {
         this.buffer.addChunk(text);
         this.parser.parse();
-    };
-    DezentStream.prototype.close = function () {
+    }
+    close() {
         this.buffer.close();
         return this.parser.parse();
-    };
-    return DezentStream;
-}());
+    }
+}
 exports.DezentStream = DezentStream;
 function grammarOptions(opt) {
     // don't dumpDebug when parsing the grammar
-    var gOpt = Object.assign({}, opt);
+    let gOpt = Object.assign({}, opt);
     gOpt.dumpDebug = false;
     return gOpt;
 }

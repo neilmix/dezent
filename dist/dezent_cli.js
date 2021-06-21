@@ -24,9 +24,9 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-var fs_1 = require("fs");
-var Dezent_1 = require("./Dezent");
-var process_1 = require("process");
+const fs_1 = require("fs");
+const Dezent_1 = require("./Dezent");
+const process_1 = require("process");
 function usage() {
     console.error("usage: dezent [grammar path] [text path]");
     process_1.exit(1);
@@ -45,8 +45,8 @@ if (typeof process.argv[2] != 'string' || typeof process.argv[3] != 'string') {
 if (process.argv[2] == '-' && process.argv[3] == '-') {
     usage();
 }
-var d = new Dezent_1.Dezent(read(process.argv[2]).toString());
-var output = d.parse(read(process.argv[3]).toString());
+let d = new Dezent_1.Dezent(read(process.argv[2]).toString());
+let output = d.parse(read(process.argv[3]).toString());
 if (!output) {
     throw d.error;
 }

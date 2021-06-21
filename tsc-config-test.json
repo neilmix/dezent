@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+      "allowSyntheticDefaultImports": true,
+      "lib": ["ES2017"],
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "target": "ES2017",
+      "outDir": "./test",
+      "inlineSourceMap": true
+    }
+}
