@@ -200,7 +200,6 @@ export class Parser {
     grammar : Grammar;
     root : ReturnNode;
     current : ParseFrame = null;
-    cache : ParseFrame[] = [];
     buffer : ParseBuffer;
     rulesets: {[key:string]:RulesetNode};
     valueBuilder : ValueBuilder;
@@ -283,11 +282,6 @@ export class Parser {
                     return current.output.value;
                 }
 
-                // a left-recursing frame could be cached at the same location as the current frame,
-                // so we need to double-check that current is the one that is cached
-                if (this.cache[current.cacheKey] == current) {
-                    delete this.cache[current.cacheKey];
-                }
                 if (this.options.debugErrors) {
                     this.debugLog.push([
                         current.matched ? 'PASS ' : 'FAIL ', 
@@ -544,13 +538,20 @@ export class Parser {
         let pos = this.current ? this.current.pos + this.current.consumed : 0;
         let cacheKey = pos * this.grammar.maxid + callee.id;
 
+        let recursed;
+        let check = this.current;
+        if (check && callee.type == "ruleset") do {
+            if (check.ruleset && check.ruleset.name == (<RulesetNode>callee).name) {
+                recursed = check;
+                break;
+            }
+        } while(check.caller && check.pos == check.caller.pos && (check = check.caller));
         let frame:ParseFrame;
-        let cached = callee.type == "ruleset" ? this.cache[cacheKey] : null;
-        let secondFrame;
-        if (cached) {
+        let secondFrame:ParseFrame;
+        if (recursed) {
             // left recursion detected - see notes near the top of this file
-            frame = Object.assign({}, cached);
-            if (cached.leftRecursing) {
+            frame = Object.assign({}, recursed);
+            if (recursed.leftRecursing) {
                 // this is the second or later recursion iteration.
                 // set up the base frame's previous returning callee
                 // as our callee now so it can properly recurse.
@@ -567,7 +568,7 @@ export class Parser {
                 // base frame as left recursing and advancing our new frame to
                 // avoid infinite loop.
                 this.nextRule(frame);
-                cached.leftRecursing = true;
+                recursed.leftRecursing = true;
                 this.current.callee = frame;
                 frame.caller = this.current;
                 this.current = frame;
@@ -597,9 +598,6 @@ export class Parser {
                 leftRecursing: false,
                 leftReturn: null,
             };
-            if (callee.type == "ruleset") {
-                this.cache[frame.cacheKey] = frame;
-            }
             if (this.current) this.current.callee = frame;
             this.current = frame;
         }

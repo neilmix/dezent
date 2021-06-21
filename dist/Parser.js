@@ -152,7 +152,6 @@ var Parser = /** @class */ (function () {
     function Parser(grammar, buffer, options) {
         var e_1, _a;
         this.current = null;
-        this.cache = [];
         this.omitFails = 0;
         this.debugLog = [];
         this.errorPos = 0;
@@ -231,11 +230,6 @@ var Parser = /** @class */ (function () {
                     }
                     return current.output.value;
                 }
-                // a left-recursing frame could be cached at the same location as the current frame,
-                // so we need to double-check that current is the one that is cached
-                if (this.cache[current.cacheKey] == current) {
-                    delete this.cache[current.cacheKey];
-                }
                 if (this.options.debugErrors) {
                     this.debugLog.push([
                         current.matched ? 'PASS ' : 'FAIL ',
@@ -252,10 +246,10 @@ var Parser = /** @class */ (function () {
             var matched = false, consumed = 0;
             do {
                 var callee = void 0;
-                var tokenPos = current.pos + current.consumed;
+                var consumedPos = current.pos + current.consumed;
                 if (descriptor.match) {
                     try {
-                        _a = __read(descriptor.match(this.buffer, tokenPos), 2), matched = _a[0], consumed = _a[1];
+                        _a = __read(descriptor.match(this.buffer, consumedPos), 2), matched = _a[0], consumed = _a[1];
                     }
                     catch (e) {
                         if (this.buffer.closed && e == ParseBuffer_1.ParseBufferExhaustedError) {
@@ -315,18 +309,18 @@ var Parser = /** @class */ (function () {
                 if (this.options.debugErrors && !callee) {
                     this.debugLog.push([
                         matched ? 'PASS ' : 'FAIL ',
-                        this.buffer.substr(tokenPos, 20),
+                        this.buffer.substr(consumedPos, 20),
                         descriptor["pattern"]
                     ]);
                 }
                 if (current.token.required && !matched
                     // + modifiers repeat and are required, so we only fail when we haven't consumed...
-                    && tokenPos - current.tokenPos == 0) {
+                    && consumedPos - current.tokenPos == 0) {
                     // our token failed, therefore the pattern fails
-                    if (tokenPos >= this.errorPos && !this.omitFails && descriptor.pattern) {
-                        if (tokenPos > this.errorPos) {
+                    if (consumedPos >= this.errorPos && !this.omitFails && descriptor.pattern) {
+                        if (consumedPos > this.errorPos) {
                             this.failedPatterns.length = 0;
-                            this.errorPos = tokenPos;
+                            this.errorPos = consumedPos;
                         }
                         var pattern = descriptor.pattern;
                         if (current.token.not)
@@ -373,7 +367,7 @@ var Parser = /** @class */ (function () {
                     // a failed non-required non-repeating capture should yield null
                     var output = {
                         captureIndex: descriptor.index,
-                        position: tokenPos,
+                        position: consumedPos,
                         length: 0,
                         value: null
                     };
@@ -505,13 +499,21 @@ var Parser = /** @class */ (function () {
     Parser.prototype.callFrame = function (callee) {
         var pos = this.current ? this.current.pos + this.current.consumed : 0;
         var cacheKey = pos * this.grammar.maxid + callee.id;
+        var recursed;
+        var check = this.current;
+        if (check && callee.type == "ruleset")
+            do {
+                if (check.ruleset && check.ruleset.name == callee.name) {
+                    recursed = check;
+                    break;
+                }
+            } while (check.caller && check.pos == check.caller.pos && (check = check.caller));
         var frame;
-        var cached = callee.type == "ruleset" ? this.cache[cacheKey] : null;
         var secondFrame;
-        if (cached) {
+        if (recursed) {
             // left recursion detected - see notes near the top of this file
-            frame = Object.assign({}, cached);
-            if (cached.leftRecursing) {
+            frame = Object.assign({}, recursed);
+            if (recursed.leftRecursing) {
                 // this is the second or later recursion iteration.
                 // set up the base frame's previous returning callee
                 // as our callee now so it can properly recurse.
@@ -529,7 +531,7 @@ var Parser = /** @class */ (function () {
                 // base frame as left recursing and advancing our new frame to
                 // avoid infinite loop.
                 this.nextRule(frame);
-                cached.leftRecursing = true;
+                recursed.leftRecursing = true;
                 this.current.callee = frame;
                 frame.caller = this.current;
                 this.current = frame;
@@ -560,9 +562,6 @@ var Parser = /** @class */ (function () {
                 leftRecursing: false,
                 leftReturn: null,
             };
-            if (callee.type == "ruleset") {
-                this.cache[frame.cacheKey] = frame;
-            }
             if (this.current)
                 this.current.callee = frame;
             this.current = frame;
