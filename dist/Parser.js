@@ -203,11 +203,11 @@ class Parser {
                 current.caller = null;
                 continue CURRENT;
             }
-            let descriptor = current.token.descriptor;
             let matched = false, consumed = 0;
             do {
                 let callee;
                 let consumedPos = current.pos + current.consumed;
+                let descriptor = current.token.descriptor;
                 if (descriptor.match) {
                     try {
                         [matched, consumed] = descriptor.match(this.buffer, consumedPos);
@@ -448,7 +448,6 @@ class Parser {
     }
     callFrame(callee) {
         let pos = this.current ? this.current.pos + this.current.consumed : 0;
-        let cacheKey = pos * this.grammar.maxid + callee.id;
         let recursed;
         let check = this.current;
         if (check && callee.type == "ruleset")
@@ -508,7 +507,6 @@ class Parser {
                 wantOutput: this.current && (this.current.selector.type == "capture" || this.current.wantOutput),
                 output: null,
                 captures: null,
-                cacheKey: cacheKey,
                 leftRecursing: false,
                 leftReturn: null,
             };
