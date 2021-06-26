@@ -148,7 +148,6 @@ export type ParseFrame = {
     pos: number,
     tokenPos: number,
     consumed: number,
-    caller: ParseFrame | null,
     callee: ParseFrame | null,
     wantOutput: boolean,
     output?: Output,
@@ -198,7 +197,6 @@ export var lastParser:Parser = null; // for testing purposes
 export class Parser {
     grammar : Grammar;
     root : ReturnNode;
-    current : ParseFrame = null;
     buffer : ParseBuffer;
     rulesets: {[key:string]:RulesetNode};
     valueBuilder : ValueBuilder;
@@ -207,7 +205,8 @@ export class Parser {
     debugLog : any[][] = [];
     error : Error;
     errorPos : number = 0;
-    failedPatterns = [];
+    failedPatterns : string[] = [];
+    frameStack : ParseFrame[] = [];
 
     constructor(grammar:Grammar, buffer:ParseBuffer, options:ParserOptions) {
         lastParser = this;
@@ -239,14 +238,14 @@ export class Parser {
             this.options[option] = options[option];
         }
         this.valueBuilder = new ValueBuilder(grammar, this.options.callbacks);
-        this.callFrame(root);
+        this.callFrame(null, root);
     }
 
     run() {
-        let current:ParseFrame;
-        CURRENT: while (current = this.current) {
+        CURRENT: while (true) {
+            let current = this.frameStack[this.frameStack.length - 1];
             if (current.complete) {
-                if (!current.caller) {
+                if (this.frameStack.length == 1) {
                     // our parsing is complete
 
                     // in the case of streaming, if we get a parse error we want to bail
@@ -289,8 +288,7 @@ export class Parser {
                         JSON.stringify(current.ruleset ? current.output : current.captures)
                     ]);
                 }
-                this.current = current.caller;
-                current.caller = null;
+                this.frameStack.pop();
                 continue CURRENT;
             }
             
@@ -313,7 +311,7 @@ export class Parser {
                     }
                 } else if (!current.callee) {
                     let calleeNode = <SelectorNode> (descriptor.type == "ruleref" ? this.rulesets[(<RuleRefNode>descriptor).name] : descriptor);
-                    this.callFrame(calleeNode);
+                    this.callFrame(current, calleeNode);
                     if (!calleeNode.canFail) {
                         this.omitFails++;
                     }
@@ -336,7 +334,7 @@ export class Parser {
                         // stow away our returning callee for later use in the next recursion iteration
                         current.leftReturn = callee;
                     } else {
-                        // at this point our left recursion is failing to consumer more input,
+                        // at this point our left recursion is failing to consume more input,
                         // time to wrap things up
                         current.complete = true;
                         if (current.leftReturn) {
@@ -533,17 +531,22 @@ export class Parser {
         }    
     }
 
-    callFrame(callee:SelectorNode|RulesetNode) {
-        let pos = this.current ? this.current.pos + this.current.consumed : 0;
+    callFrame(current:ParseFrame, callee:SelectorNode|RulesetNode) {
+        let pos = current ? current.pos + current.consumed : 0;
 
         let recursed;
-        let check = this.current;
-        if (check && callee.type == "ruleset") do {
-            if (check.ruleset && check.ruleset.name == (<RulesetNode>callee).name) {
-                recursed = check;
-                break;
+        if (current && callee.type == "ruleset") {
+            for (let i = this.frameStack.length - 1; i >= 0; i--) {
+                let check = this.frameStack[i];
+                if (check.pos != current.pos) {
+                    break;
+                }
+                if (check.ruleset && check.ruleset.name == (<RulesetNode>callee).name) {
+                    recursed = check;
+                    break;
+                }
             }
-        } while(check.caller && check.pos == check.caller.pos && (check = check.caller));
+        }
         let frame:ParseFrame;
         let secondFrame:ParseFrame;
         if (recursed) {
@@ -556,10 +559,9 @@ export class Parser {
                 frame.leftRecursing = false;
                 frame.callee = frame.leftReturn;
                 frame.leftReturn = null;
-                this.current.callee = frame;
-                frame.caller = this.current;
-                frame.callee.caller = frame;
-                this.current = secondFrame = frame.callee;
+                current.callee = frame;
+                this.frameStack.push(frame);
+                this.frameStack.push(secondFrame = frame.callee);
             } else {
                 // this is the first recursion iteration - get ourselves ready
                 // to work through multiple recursion iterations by marking our
@@ -567,9 +569,8 @@ export class Parser {
                 // avoid infinite loop.
                 this.nextRule(frame);
                 recursed.leftRecursing = true;
-                this.current.callee = frame;
-                frame.caller = this.current;
-                this.current = frame;
+                current.callee = frame;
+                this.frameStack.push(frame);
             }
         } else if (!frame) {
             let selector = callee.type == "ruleset" ? (<RulesetNode>callee).rules[0] : <SelectorNode>callee;
@@ -587,16 +588,15 @@ export class Parser {
                 pos: pos,
                 tokenPos: pos,
                 consumed: 0,
-                caller: this.current,
                 callee: null,
-                wantOutput: this.current && (this.current.selector.type == "capture" || this.current.wantOutput),
+                wantOutput: current && (current.selector.type == "capture" || current.wantOutput),
                 output: null,
                 captures: null,
                 leftRecursing: false,
                 leftReturn: null,
             };
-            if (this.current) this.current.callee = frame;
-            this.current = frame;
+            if (current) current.callee = frame;
+            this.frameStack.push(frame);
         }
 
         if (this.options.debugErrors) {
