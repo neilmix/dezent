@@ -24,7 +24,8 @@
     "compile": "tsc -b tsc-config-dist.json",
     "dist": "npm run compile && browserify dist/main.js -o dist/dezent_bundle.js && chmod +x dist/dezent_cli.js && jest dist/Parser.test.js",
     "compile-debug": "tsc -b tsc-config-test.json && cp src/*.dezent ./test",
-    "test": "npm run compile-debug && jest test/Parser.test.js",
+    "test": "npm run compile-debug && jest test/",
+    "test-interpreter": "npm run compile-debug && jest test/Interpreter.test.js",
     "clean": "rm -f *.js && rm -fr test && rm -fr dist",
     "prepublishOnly": "npm run clean && npm run dist && git remote update && echo 'Verifying local repo is same as remote...' && git diff --no-ext-diff --quiet --exit-code",
     "postpublish": "git tag v`./getversion` && git push --tags"

@@ -22,39 +22,15 @@
  * SOFTWARE. 
  */
 
-import { Operation } from "./OpcodeCompiler";
+import { Interpreter } from "./Interpreter";
+import { OpcodeCompiler } from "./OpcodeCompiler";
 import { ParseBuffer } from "./ParseBuffer";
+import { parseGrammar } from "./Parser";
 
-export const Pass = -1;
-export const Fail = -2;
-export const WaitInput = -3;
-
-export class Context {
-    consumed:number = 0;
-    position:number = 0;
-    output:any;
-    status:number;
-    constructor() {
-    }
-}
-
-export class Interpreter {
-    rootOp:Operation;
-    constructor(op:Operation) {
-        this.rootOp = op;
-    }
-
-    execute(buf:ParseBuffer) {
-        let ctx = new Context();
-        let op = this.rootOp;
-        do {
-            op = op(ctx, buf);
-        } while(op !== null);
-
-        if (ctx.status == Pass) {
-            return ctx.output;
-        } else {
-            throw new Error("not implemented");
-        }
-    }
-}
+ 
+ test("basic execution", () => {
+     let grammar = parseGrammar("return . -> null;");
+     let op = new OpcodeCompiler().compileGrammar(grammar);
+     let result = new Interpreter(op).execute(new ParseBuffer("a"));
+     expect(result).toBe(null);
+ });
