@@ -27,10 +27,21 @@ import { OpcodeCompiler } from "./OpcodeCompiler";
 import { ParseBuffer } from "./ParseBuffer";
 import { parseGrammar } from "./Parser";
 
+function parse(grammarText, text) {
+    let grammar = parseGrammar(grammarText);
+    let op = new OpcodeCompiler().compileGrammar(grammar);
+    return new Interpreter(op).execute(new ParseBuffer(text));
+}
  
  test("basic execution", () => {
-     let grammar = parseGrammar("return . -> null;");
-     let op = new OpcodeCompiler().compileGrammar(grammar);
-     let result = new Interpreter(op).execute(new ParseBuffer("a"));
-     expect(result).toBe(null);
+     expect(parse("return . -> null;", "a")).toBe(null);
+     try {
+        expect(parse("return . -> null;", "aa")).toBe(null);
+        fail();
+     } catch(e) {}
+     expect(parse("return . . . . -> $0;", "abcd")).toBe("abcd");
+ });
+
+ test("repeat", () => {
+    expect(parse("return .* -> $0;", "abcd")).toBe("abcd");
  });

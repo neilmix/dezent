@@ -23,7 +23,7 @@
  */
 
 import {
-    AnyNode, Grammar, PatternNode, RuleNode, RulesetNode, TokenNode, ValueNode
+    AnyNode, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, TokenNode, ValueNode
 } from "./Grammar";
 import { Context, Pass, Fail, WaitInput } from "./Interpreter";
 import { ParseBuffer } from "./ParseBuffer";
@@ -62,33 +62,43 @@ export class OpcodeCompiler {
     }
 
     compilePattern(node:PatternNode, pass:Operation, fail:Operation):Operation {
-        if (node.tokens.length == 1) {
-            return this.compileToken(node.tokens[0], pass, fail);
-        } else {
-            throw new Error("not implemented");
+        let prev = pass;
+        for (let i = node.tokens.length - 1; i >= 0; i--) {
+            prev = this.compileToken(node.tokens[i], prev, pass);
         }
+        return prev;
     }
 
     compileToken(node:TokenNode, pass:Operation, fail:Operation):Operation {
-        if (node.and || node.not || node.repeat || !node.required || node.descriptor.type != "any") {
+        if (node.and || node.not) {
             throw new Error("not implemented");
         }
-
-        if (node.descriptor.type == "any") {
-            return this.compileAny(node.descriptor, pass);
+        
+        let repeat;
+        if (node.repeat) {
+            return repeat = this.compileDescriptor(node.descriptor, () => { return repeat; }, pass);
+        } else {
+            return this.compileDescriptor(node.descriptor, pass, fail);
         }
     }
 
-    compileAny(node:AnyNode, pass:Operation):Operation {
-        return function(ctx, buf) {
-            if (ctx.position < buf.length) {
-                ctx.consumed++;
-                return pass;
-            } else {
-                ctx.status = WaitInput;
-                return null;
-            }
-        };
+    compileDescriptor(node:DescriptorNode, pass:Operation, fail:Operation):Operation {
+        switch (node.type) {
+            case "any":
+                return function(ctx, buf) {
+                    if (ctx.position + ctx.consumed < buf.length) {
+                        ctx.consumed++;
+                        return pass;
+                    } else if (buf.closed) {
+                        return fail;
+                    } else {
+                        ctx.status = WaitInput;
+                        return null;
+                    }
+                };
+            default:
+                throw new Error("not implemented");
+        }
     }
 
     compileValue(node:ValueNode, pass:Operation):Operation {
@@ -99,11 +109,19 @@ export class OpcodeCompiler {
         };
     }
 
-    compileValueBuilder(node:ValueNode) {
+    compileValueBuilder(node:ValueNode):(ctx:Context, buf:ParseBuffer) => any {
         switch (node.type) {
             case "null":
                 return function(ctx, buf) {
                     return null;
+                }
+            case "backref":
+                if (node.index == "0") {
+                    return function(ctx, buf) {
+                        return buf.substrExact(ctx.position, ctx.consumed);
+                    }
+                } else {
+                    throw new Error("not implemented");
                 }
             default:
                 throw new Error("not implemented");

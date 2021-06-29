@@ -24,17 +24,34 @@
 
 import { Operation } from "./OpcodeCompiler";
 import { ParseBuffer } from "./ParseBuffer";
+import { assert, ErrorCode, parsingError } from "./Parser";
 
 export const Pass = -1;
 export const Fail = -2;
 export const WaitInput = -3;
 
 export class Context {
-    consumed:number = 0;
     position:number = 0;
+    consumed:number = 0;
     output:any;
     status:number;
+    parseScopes = [];
     constructor() {
+    }
+    
+    pushParseScope() {
+        this.parseScopes.push({ position: this.position + this.consumed, consumed: 0 })
+    }
+
+    commitParseScope() {
+        let scope = this.parseScopes.pop();
+        assert(scope !== undefined);
+        this.position = scope.position + scope.consumed;
+        this.consumed = 0;
+    }
+
+    rollbackParseScope() {
+        this.parseScopes.pop();
     }
 }
 
@@ -52,6 +69,9 @@ export class Interpreter {
         } while(op !== null);
 
         if (ctx.status == Pass) {
+            if (ctx.consumed < buf.length) {
+                parsingError(ErrorCode.TextParsingError, buf, ctx.consumed, ["<EOF>"]);
+            }
             return ctx.output;
         } else {
             throw new Error("not implemented");
