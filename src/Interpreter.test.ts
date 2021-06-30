@@ -33,24 +33,29 @@ function parse(grammarText, text) {
     return new Interpreter(op).execute(new ParseBuffer(text));
 }
  
- test("basic execution", () => {
-     expect(parse("return . -> null;", "a")).toBe(null);
-     try {
-        expect(parse("return . -> null;", "aa")).toBe(null);
+function expectException(grammarText, text) {
+    try {
+        expect(parse(grammarText, text)).toBe(text);
         fail();
-     } catch(e) {}
-     expect(parse("return . . . . -> $0;", "abcd")).toBe("abcd");
+    } catch(e) {}
+}
+
+test("basic execution", () => {
+    expect(parse("return . -> null;", "a")).toBe(null);
+    expectException("return . -> null;", "aa");
+    expect(parse("return . . . . -> $0;", "abcd")).toBe("abcd");
  });
 
  test("string tokens", () => {
     expect(parse("return 'foo' 'bar' -> $0;", "foobar")).toBe("foobar");
-    try {
-        expect(parse("return 'foo' 'bar' -> $0;", "foobarz")).toBe("foobar");
-        fail();
-    } catch(e) {}
+    expectException("return 'foo' 'bar' -> $0;", "foobarz");
  });
 
  test("repeat", () => {
     expect(parse("return .* -> $0;", "abcd")).toBe("abcd");
     expect(parse("return ('a' 'b' 'c')* -> $0;", "abcabcabc")).toBe("abcabcabc");
- });
+    expect(parse("return .+ -> $0;", "abcd")).toBe("abcd");
+    expect(parse("return ('a' 'b' 'c')+ -> $0;", "abcabcabc")).toBe("abcabcabc");
+    expectException("return .+ -> $0;", "");
+    expectException("return ('a' 'b' 'c')+ -> $0;", "ab");
+});

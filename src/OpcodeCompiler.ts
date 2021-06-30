@@ -97,9 +97,18 @@ export class OpcodeCompiler {
             throw new Error("not implemented");
         }
         
-        let repeat;
         if (node.repeat) {
-            return repeat = this.compileDescriptor(node.descriptor, this.audit(node, "pass", () => { return repeat; }), pass);
+            let repeat = this.compileDescriptor(
+                node.descriptor, 
+                this.audit(node, "pass", () => { return repeat; }), 
+                pass);
+            if (node.required) {
+                // first time through must match, optionally thereafter
+                return this.compileDescriptor(node.descriptor, repeat, fail);
+            } else {
+                // always passes
+                return repeat;
+            }
         } else {
             return this.compileDescriptor(node.descriptor, pass, fail);
         }
