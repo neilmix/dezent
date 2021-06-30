@@ -59,3 +59,7 @@ test("basic execution", () => {
     expectException("return .+ -> $0;", "");
     expectException("return ('a' 'b' 'c')+ -> $0;", "ab");
 });
+
+test("optional tokens", () => {
+    expect(parse("return 'a' 'b'? 'c'? 'd' -> $0;", "abd")).toBe("abd");
+})

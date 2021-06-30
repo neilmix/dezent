@@ -110,7 +110,7 @@ export class OpcodeCompiler {
                 return repeat;
             }
         } else {
-            return this.compileDescriptor(node.descriptor, pass, fail);
+            return this.compileDescriptor(node.descriptor, pass, node.required ? fail : pass);
         }
     }
 
