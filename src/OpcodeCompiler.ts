@@ -23,9 +23,9 @@
  */
 
 import {
-    AnyNode, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, TokenNode, ValueNode
+    Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode
 } from "./Grammar";
-import { Context, Pass, Fail, WaitInput } from "./Interpreter";
+import { Context, Pass, Fail, WaitInput, Interpreter } from "./Interpreter";
 import { ParseBuffer } from "./ParseBuffer";
 
 export type Operation = (ctx:Context, buf:ParseBuffer) => Operation|null;
@@ -34,11 +34,26 @@ export class OpcodeCompiler {
     constructor() {
     }
 
+    audit(node:Node, action:string, op:Operation):Operation {
+        function pad(s:string|number, len:number) {
+            s = String(s).substr(0,len);
+            return s + ' '.repeat(len - s.length);
+        }
+        if (Interpreter.debug) {
+            return (ctx, buf) => {
+                ctx.auditLog.push([pad(node ? node.type : "", 10), pad(action, 10), pad(ctx.position, 8), pad(ctx.consumed, 8), pad(ctx.scopes.length,5)]);
+                return op(ctx, buf);
+            };
+        } else {
+            return op;
+        }
+    }
+
     compileGrammar(grammar:Grammar):Operation {
         return this.compileRuleset(
             grammar.rulesetLookup.return, 
-            (ctx, buf) => { ctx.status = Pass; return null; }, 
-            (ctx, buf) => { ctx.status = Fail; return null; });
+            this.audit(null, "pass", (ctx, buf) => { ctx.status = Pass; return null; }), 
+            this.audit(null, "fail", (ctx, buf) => { ctx.status = Fail; return null; }));
     }
 
     compileRuleset(node:RulesetNode, pass:Operation, fail:Operation):Operation {
@@ -50,12 +65,20 @@ export class OpcodeCompiler {
     }
 
     compileRule(node:RuleNode, pass:Operation, fail:Operation):Operation {
+        return this.compilePatterns(node, this.compileValue(node.value, pass), pass);
+    }
+
+    compilePatterns(node:SelectorNode, pass: Operation, fail:Operation):Operation {
         if (node.patterns.length == 1) {
-            return this.compilePattern(
-                node.patterns[0], 
-                this.compileValue(node.value, pass), 
-                fail
+            let patternOp = this.compilePattern(
+                node.patterns[0],
+                this.audit(node, "pass", (ctx, buf) => { ctx.commit(); return pass; }),
+                this.audit(node, "fail", (ctx, buf) => { ctx.rollback(); return fail; }),
             );
+            return this.audit(node, "run", (ctx, buf) => {
+                ctx.begin();
+                return patternOp;
+            });
         } else {
             throw new Error("Not implemented");
         }
@@ -64,7 +87,7 @@ export class OpcodeCompiler {
     compilePattern(node:PatternNode, pass:Operation, fail:Operation):Operation {
         let prev = pass;
         for (let i = node.tokens.length - 1; i >= 0; i--) {
-            prev = this.compileToken(node.tokens[i], prev, pass);
+            prev = this.compileToken(node.tokens[i], prev, fail);
         }
         return prev;
     }
@@ -76,7 +99,7 @@ export class OpcodeCompiler {
         
         let repeat;
         if (node.repeat) {
-            return repeat = this.compileDescriptor(node.descriptor, () => { return repeat; }, pass);
+            return repeat = this.compileDescriptor(node.descriptor, this.audit(node, "pass", () => { return repeat; }), pass);
         } else {
             return this.compileDescriptor(node.descriptor, pass, fail);
         }
@@ -84,8 +107,27 @@ export class OpcodeCompiler {
 
     compileDescriptor(node:DescriptorNode, pass:Operation, fail:Operation):Operation {
         switch (node.type) {
+            case "group":
+                return this.compilePatterns(node, pass, fail);
+            case "string":
+                let matchStr = node.pattern;
+                return this.audit(node, "run", (ctx, buf) => {
+                    if (ctx.position + ctx.consumed + matchStr.length <= buf.length) {
+                        if (buf.containsAt(matchStr, ctx.position + ctx.consumed)) {
+                            ctx.consumed += matchStr.length;
+                            return pass;
+                        } else {
+                            return fail;
+                        }
+                    } else if (buf.closed) {
+                        return fail;
+                    } else {
+                        ctx.status = WaitInput;
+                        return null;
+                    }
+                });
             case "any":
-                return function(ctx, buf) {
+                return this.audit(node, "run", (ctx, buf) => {
                     if (ctx.position + ctx.consumed < buf.length) {
                         ctx.consumed++;
                         return pass;
@@ -95,7 +137,7 @@ export class OpcodeCompiler {
                         ctx.status = WaitInput;
                         return null;
                     }
-                };
+                });
             default:
                 throw new Error("not implemented");
         }
@@ -103,21 +145,21 @@ export class OpcodeCompiler {
 
     compileValue(node:ValueNode, pass:Operation):Operation {
         let builder = this.compileValueBuilder(node);
-        return function(ctx,buf) {
+        return this.audit(node, "output", (ctx,buf) => {
             ctx.output = builder(ctx, buf);
             return pass;
-        };
+        });
     }
 
     compileValueBuilder(node:ValueNode):(ctx:Context, buf:ParseBuffer) => any {
         switch (node.type) {
             case "null":
-                return function(ctx, buf) {
+                return (ctx, buf) => {
                     return null;
                 }
             case "backref":
                 if (node.index == "0") {
-                    return function(ctx, buf) {
+                    return (ctx, buf) => {
                         return buf.substrExact(ctx.position, ctx.consumed);
                     }
                 } else {

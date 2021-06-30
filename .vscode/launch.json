@@ -5,11 +5,20 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "interactive debug",
+            "name": "interactive parser debug",
             "type": "node",
             "request": "launch",
             "cwd": "${workspaceRoot}",
-            "program": "test/Parser.interactive.test.js",
+            "program": "test/Parser.interactive-test.js",
+            "preLaunchTask": "compile debug",
+            "port": 5858
+        },
+        {
+            "name": "interactive interpreter debug",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceRoot}",
+            "program": "test/Interpreter.interactive-test.js",
             "preLaunchTask": "compile debug",
             "port": 5858
         }

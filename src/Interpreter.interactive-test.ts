@@ -22,35 +22,27 @@
  * SOFTWARE. 
  */
 
-import { Interpreter } from "./Interpreter";
-import { OpcodeCompiler } from "./OpcodeCompiler";
-import { ParseBuffer } from "./ParseBuffer";
-import { parseGrammar } from "./Parser";
 
-function parse(grammarText, text) {
-    let grammar = parseGrammar(grammarText);
-    let op = new OpcodeCompiler().compileGrammar(grammar);
-    return new Interpreter(op).execute(new ParseBuffer(text));
-}
- 
- test("basic execution", () => {
-     expect(parse("return . -> null;", "a")).toBe(null);
-     try {
-        expect(parse("return . -> null;", "aa")).toBe(null);
-        fail();
-     } catch(e) {}
-     expect(parse("return . . . . -> $0;", "abcd")).toBe("abcd");
- });
-
- test("string tokens", () => {
-    expect(parse("return 'foo' 'bar' -> $0;", "foobar")).toBe("foobar");
+global["test"] = async function(name, f, timeout) {
+    //if (!name.match(/chunked/)) return;
     try {
-        expect(parse("return 'foo' 'bar' -> $0;", "foobarz")).toBe("foobar");
-        fail();
-    } catch(e) {}
- });
+        await f();
+    } catch(e) {
+        console.error("EXCEPTION:", name);
+        console.error(e.stack);
+    }
+}
 
- test("repeat", () => {
-    expect(parse("return .* -> $0;", "abcd")).toBe("abcd");
-    expect(parse("return ('a' 'b' 'c')* -> $0;", "abcabcabc")).toBe("abcabcabc");
- });
+global["expect"] = function(actual) {
+    return {
+        toBe: (expected) => { if (actual !== expected) debugger },
+        toEqual: (expected) => { if (JSON.stringify(actual) != JSON.stringify(expected)) debugger },
+        toThrow: () => { 
+            let caught = false;
+            try { actual() } catch (e) { caught = true; }
+            if (!caught) debugger;
+        },
+    }
+}
+
+import "./Interpreter.test"
