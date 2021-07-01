@@ -31,7 +31,11 @@ import { ParseBuffer } from "./ParseBuffer";
 export type Operation = (ctx:Context, buf:ParseBuffer) => Operation|null;
 
 export class OpcodeCompiler {
-    constructor() {
+    grammar:Grammar;
+    rulesetOps:{ [key:string] : Operation } = {};
+
+    constructor(grammar:Grammar) {
+        this.grammar = grammar;
     }
 
     audit(node:Node, action:string, op:Operation):Operation {
@@ -49,9 +53,9 @@ export class OpcodeCompiler {
         }
     }
 
-    compileGrammar(grammar:Grammar):Operation {
+    compile():Operation {
         return this.compileRuleset(
-            grammar.rulesetLookup.return, 
+            this.grammar.rulesetLookup.return, 
             this.audit(null, "pass", (ctx, buf) => { ctx.status = Pass; return null; }), 
             this.audit(null, "fail", (ctx, buf) => { ctx.status = Fail; return null; }));
     }
@@ -72,11 +76,11 @@ export class OpcodeCompiler {
         if (node.patterns.length == 1) {
             let patternOp = this.compilePattern(
                 node.patterns[0],
-                this.audit(node, "pass", (ctx, buf) => { ctx.commit(); return pass; }),
-                this.audit(node, "fail", (ctx, buf) => { ctx.rollback(); return fail; }),
+                this.audit(node, "pass", (ctx, buf) => { ctx.commitScope(); return pass; }),
+                this.audit(node, "fail", (ctx, buf) => { ctx.rollbackScope(); return fail; }),
             );
             return this.audit(node, "run", (ctx, buf) => {
-                ctx.begin();
+                ctx.beginScope();
                 return patternOp;
             });
         } else {
@@ -118,6 +122,23 @@ export class OpcodeCompiler {
         switch (node.type) {
             case "group":
                 return this.compilePatterns(node, pass, fail);
+            case "ruleref":
+                let name = node.name;
+                let rulesetOps = this.rulesetOps;
+                if (rulesetOps[name] === undefined) {
+                    // set a null value so that we don't get infinite compilation recursion in 
+                    // the case where our rule calls itself
+                    rulesetOps[name] = null;
+                    rulesetOps[name] = this.compileRuleset(
+                        this.grammar.rulesetLookup[name],
+                        this.audit(node, "pass", (ctx, buf) => { return ctx.popFrame().pass }),
+                        this.audit(node, "fail", (ctx, buf) => { return ctx.popFrame().fail })
+                    )
+                }
+                return this.audit(node, "run", (ctx, buf) => { 
+                    ctx.pushFrame(pass, fail);
+                    return rulesetOps[name];
+                });
             case "string":
                 let matchStr = node.pattern;
                 return this.audit(node, "run", (ctx, buf) => {

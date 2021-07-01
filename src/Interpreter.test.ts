@@ -29,7 +29,7 @@ import { parseGrammar } from "./Parser";
 
 function parse(grammarText, text) {
     let grammar = parseGrammar(grammarText);
-    let op = new OpcodeCompiler().compileGrammar(grammar);
+    let op = new OpcodeCompiler(grammar).compile();
     return new Interpreter(op).execute(new ParseBuffer(text));
 }
  
@@ -62,4 +62,9 @@ test("basic execution", () => {
 
 test("optional tokens", () => {
     expect(parse("return 'a' 'b'? 'c'? 'd' -> $0;", "abd")).toBe("abd");
-})
+});
+
+test("rulesets", () => {
+    expect(parse("return rule -> $0; rule = 'a' 'b' 'c' -> null;", "abc")).toBe("abc");
+    expect(parse("return rule -> $0; rule = 'a' rule? -> null;", "aaa")).toBe("aaa");
+});

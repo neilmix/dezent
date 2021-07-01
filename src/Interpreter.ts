@@ -30,33 +30,47 @@ export const Pass = -1;
 export const Fail = -2;
 export const WaitInput = -3;
 
+export type Frame = {
+    pass:Operation;
+    fail:Operation;
+}
+
 export class Context {
     position:number = 0;
     consumed:number = 0;
     output:any;
     status:number;
     scopes = [];
+    frames = [];
     auditLog = [];
     constructor() {
     }
     
-    begin() {
+    beginScope() {
         this.scopes.push({ position: this.position, consumed: this.consumed })
         this.position += this.consumed;
         this.consumed = 0;
     }
 
-    commit() {
+    commitScope() {
         let scope = this.scopes.pop();
         assert(scope !== undefined);
         this.position = scope.position;
         this.consumed = scope.consumed + this.consumed;
     }
 
-    rollback() {
+    rollbackScope() {
         let scope = this.scopes.pop();
         this.position = scope.position;
         this.consumed = scope.consumed;
+    }
+
+    pushFrame(pass:Operation, fail:Operation) {
+        this.frames.push({ pass: pass, fail: fail });
+    }
+
+    popFrame() {
+        return this.frames.pop();
     }
 }
 
@@ -74,10 +88,12 @@ export class Interpreter {
             op = op(ctx, buf);
         } while(op !== null);
 
+        if (Interpreter.debug) {
+            console.log(ctx.auditLog.map((line) => line.join(' ')).join('\n'));
+            console.log("status: ", ctx.status);
+        }
         if (ctx.status == Pass) {
-            if (Interpreter.debug) {
-                console.log(ctx.auditLog.map((line) => line.join(' ')).join('\n'));
-            }
+            assert(ctx.position == 0);
             if (ctx.consumed < buf.length) {
                 parsingError(ErrorCode.TextParsingError, buf, ctx.consumed, ["<EOF>"]);
             }
