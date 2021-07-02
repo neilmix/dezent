@@ -27,6 +27,8 @@ import { OpcodeCompiler } from "./OpcodeCompiler";
 import { ParseBuffer } from "./ParseBuffer";
 import { parseGrammar } from "./Parser";
 
+afterEach(() => Interpreter.debug = false);
+
 function parse(grammarText, text) {
     let grammar = parseGrammar(grammarText);
     let op = new OpcodeCompiler(grammar).compile();
@@ -46,7 +48,12 @@ test("basic execution", () => {
     expect(parse("return . . . . -> $0;", "abcd")).toBe("abcd");
  });
 
- test("string tokens", () => {
+test("array output", () => {
+    expect(parse("return . -> [$0, $0];", "a")).toEqual(["a", "a"]);
+    expect(parse("return {.} {.} -> [$2, $1];", "ab")).toEqual(["b", "a"]);
+});
+
+test("string tokens", () => {
     expect(parse("return 'foo' 'bar' -> $0;", "foobar")).toBe("foobar");
     expectException("return 'foo' 'bar' -> $0;", "foobarz");
  });

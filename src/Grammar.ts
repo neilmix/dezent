@@ -82,7 +82,7 @@ export interface ReturnNode extends RulesetNode {
 export interface RuleNode extends SelectorNode { 
 	type: 'rule',
 	value: ValueNode, 
-	captures?: boolean[], 
+	captures?: boolean[], // booleans are true if the captureIndex yield an array, false if yields any
 	rulesetName?: string,
 	rulesetIndex?: number,
 	hasBackref0?: boolean,
@@ -102,7 +102,7 @@ export interface TokenNode extends Node {
 	not: boolean,
 	descriptor: DescriptorNode 
 }
-export interface CaptureNode      extends SelectorNode { type: 'capture',   index?: number }
+export interface CaptureNode      extends SelectorNode { type: 'capture',   index?: number, useOutput?: boolean }
 export interface GroupNode        extends SelectorNode { type: 'group' }
 export interface RuleRefNode      extends Node         { type: 'ruleref',   name: string }
 export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [RangeNode, RangeNode][] }

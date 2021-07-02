@@ -33,7 +33,7 @@ import {
 
 import { 
     Grammar, GrammarVersion, Node, SelectorNode, Meta, RulesetNode, RuleNode, TokenNode, PatternNode, 
-    RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode, BackRefNode,
+    RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode, BackRefNode, CaptureNode,
 } from './Grammar';
 
 import { buildString } from './Output';
@@ -95,6 +95,15 @@ export class GrammarCompiler {
                     }
                 }
                 node.canFail = false;
+            });
+            visitParseNodes(["capture"], ruleset, null, null, (node:CaptureNode) => {
+                for (let pattern of node.patterns) {
+                    if (pattern.tokens.length > 1 || pattern.tokens[0].repeat || pattern.tokens[0].descriptor.type != "ruleref") {
+                        node.useOutput = false;
+                        return;
+                    }
+                }
+                node.useOutput = true;
             });
             visitParseNodes(["capture","group","rule"], ruleset, null, null, (node:SelectorNode) => {
                 node.canFail = true;

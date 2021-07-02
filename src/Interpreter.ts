@@ -39,6 +39,7 @@ export class Context {
     position:number = 0;
     consumed:number = 0;
     output:any;
+    captures:any[] = [];
     status:number;
     scopes = [];
     frames = [];
@@ -66,11 +67,14 @@ export class Context {
     }
 
     pushFrame(pass:Operation, fail:Operation) {
-        this.frames.push({ pass: pass, fail: fail });
+        this.frames.push({ pass: pass, fail: fail, captures: this.captures });
+        this.captures = [];
     }
 
     popFrame() {
-        return this.frames.pop();
+        let frame = this.frames.pop();
+        this.captures = frame.captures;
+        return frame;
     }
 }
 
