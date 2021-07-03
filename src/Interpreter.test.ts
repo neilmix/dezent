@@ -83,3 +83,17 @@ test("rulesets", () => {
     expectParse("return rule -> $0; rule = 'a' 'b' 'c' -> null;", "abc").toBe("abc");
     expectParse("return rule -> $0; rule = 'a' rule? -> null;", "aaa").toBe("aaa");
 });
+
+test("multiple patterns", () => {
+    expectParse("return ('a' | 'b' | 'c') 'x' -> $0;", "ax").toBe("ax");
+    expectParse("return ('a' | 'b' | 'c') 'x' -> $0;", "bx").toBe("bx");
+    expectParse("return ('a' | 'b' | 'c') 'x' -> $0;", "cx").toBe("cx");
+    expectException("return ('a' | 'b' | 'c') 'x' -> $0;", "dx");
+});
+
+test("multiple rules", () => {
+    expectParse("return rule -> $0; rule = 'a' -> null, 'b' -> null, 'c' -> null;", "a").toBe("a");
+    expectParse("return rule -> $0; rule = 'a' -> null, 'b' -> null, 'c' -> null;", "b").toBe("b");
+    expectParse("return rule -> $0; rule = 'a' -> null, 'b' -> null, 'c' -> null;", "c").toBe("c");
+    expectException("return rule -> $0; rule = 'a' -> null, 'b' -> null, 'c' -> null;", "d");
+});

@@ -70,16 +70,21 @@ export class OpcodeCompiler {
     }
 
     compileRuleset(cctx:CompilerContext, node:RulesetNode, pass:Operation, fail:Operation):Operation {
-        if(node.rules.length == 1) {
-            return this.compileRule(cctx, node.rules[0], pass, fail);
-        } else {
-            throw new Error("Not implemented");
+        // this looks a little convoluted, but basically we're creating a chain of rule parsers
+        // that on fail go to the next prule parser and the final rule goes to the fail
+        // that was passed in. The convolution comes from the need to manage variable scoping carefully.
+        let nextOp = fail;
+        for (let i = node.rules.length - 1; i >= 0; i--) {
+            nextOp = ((failOp) => {
+                return this.compileRule(cctx, node.rules[i], pass, failOp);
+            })(nextOp);
         }
+        return nextOp;
     }
 
     compileRule(cctx:CompilerContext, node:RuleNode, pass:Operation, fail:Operation):Operation {
         cctx.currentRule = node;
-        let patterns = this.compilePatterns(cctx, node, this.compileValue(cctx, node.value, pass), pass);
+        let patterns = this.compilePatterns(cctx, node, this.compileValue(cctx, node.value, pass), fail);
         let captures = node.captures || [];
         return (ictx, buf) => {
             ictx.captures.length = captures.length;
@@ -89,17 +94,22 @@ export class OpcodeCompiler {
     }
 
     compilePatterns(cctx:CompilerContext, node:SelectorNode, pass: Operation, fail:Operation):Operation {
-        if (node.patterns.length == 1) {
-            let patternOp = this.compilePattern(
-                cctx,
-                node.patterns[0],
-                this.audit(node, "pass", (ictx, buf) => { ictx.commitScope(); return pass; }),
-                this.audit(node, "fail", (ictx, buf) => { ictx.rollbackScope(); return fail; }),
-            );
-            return this.audit(node, "run", (ictx, buf) => { ictx.beginScope(); return patternOp; });
-        } else {
-            throw new Error("Not implemented");
+        // this looks a little convoluted, but basically we're creating a chain of pattern parsers
+        // that on fail go to the next pattern parser and the final pattern goes to the fail
+        // that was passed in. The convolution comes from the need to manage variable scoping carefully.
+        let nextOp = fail;
+        for (let i = node.patterns.length - 1; i >= 0; i--) {
+            nextOp = ((failOp) => {
+                let patternOp = this.compilePattern(
+                    cctx,
+                    node.patterns[i],
+                    this.audit(node, "pass", (ictx, buf) => { ictx.commitScope(); return pass; }),
+                    this.audit(node, "fail", (ictx, buf) => { ictx.rollbackScope(); return failOp; })
+                );
+                return this.audit(node, "run", (ictx, buf) => { ictx.beginScope(); return patternOp; });
+            })(nextOp);
         }
+        return nextOp;
     }
 
     compilePattern(cctx:CompilerContext, node:PatternNode, pass:Operation, fail:Operation):Operation {
@@ -116,7 +126,7 @@ export class OpcodeCompiler {
             pass = fail;
             fail = tmp;
         }
-        
+
         let newPass;
         if (node.and || node.not) {
             newPass = this.audit(node, "pass", (ictx, buf) => {
