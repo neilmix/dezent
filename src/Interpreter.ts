@@ -56,8 +56,8 @@ export class Context {
     commitScope() {
         let scope = this.scopes.pop();
         assert(scope !== undefined);
+        this.consumed = (this.position + this.consumed) - scope.position;
         this.position = scope.position;
-        this.consumed = scope.consumed + this.consumed;
     }
 
     rollbackScope() {

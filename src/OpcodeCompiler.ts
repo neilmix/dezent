@@ -50,8 +50,10 @@ export class OpcodeCompiler {
         }
         if (Interpreter.debug) {
             return (ictx, buf) => {
-                ictx.auditLog.push([pad(node ? node.type : "", 10), pad(action, 10), pad(ictx.position, 8), pad(ictx.consumed, 8), pad(ictx.scopes.length,5)]);
-                return op(ictx, buf);
+                let entry = [pad(node ? node.type : "", 10), pad(action, 10), pad(ictx.position, 8), pad(ictx.consumed, 8), pad(ictx.scopes.length,5)];
+                let result = op(ictx, buf)
+                ictx.auditLog.push(entry.concat([" -> ", pad(ictx.position, 8), pad(ictx.consumed, 8), pad(ictx.scopes.length,5)]));
+                return result;
             };
         } else {
             return op;
@@ -86,13 +88,12 @@ export class OpcodeCompiler {
         };
     }
 
-    compilePatterns(cctx:CompilerContext, node:SelectorNode, pass: Operation, fail:Operation, commitHook?:Function):Operation {
-        if (!commitHook) commitHook = function() {};
+    compilePatterns(cctx:CompilerContext, node:SelectorNode, pass: Operation, fail:Operation):Operation {
         if (node.patterns.length == 1) {
             let patternOp = this.compilePattern(
                 cctx,
                 node.patterns[0],
-                this.audit(node, "pass", (ictx, buf) => { commitHook(ictx, buf); ictx.commitScope(); return pass; }),
+                this.audit(node, "pass", (ictx, buf) => { ictx.commitScope(); return pass; }),
                 this.audit(node, "fail", (ictx, buf) => { ictx.rollbackScope(); return fail; }),
             );
             return this.audit(node, "run", (ictx, buf) => { ictx.beginScope(); return patternOp; });
@@ -110,16 +111,32 @@ export class OpcodeCompiler {
     }
 
     compileToken(cctx:CompilerContext, node:TokenNode, pass:Operation, fail:Operation):Operation {
-        if (node.and || node.not) {
-            throw new Error("not implemented");
+        if (node.not) {
+            let tmp = pass;
+            pass = fail;
+            fail = tmp;
         }
         
+        let newPass;
+        if (node.and || node.not) {
+            newPass = this.audit(node, "pass", (ictx, buf) => {
+                ictx.consumed = 0;
+                return pass;
+            });
+        } else {
+            newPass = this.audit(node, "pass", (ictx, buf) => {
+                ictx.position += ictx.consumed;
+                ictx.consumed = 0;
+                return pass;
+            });
+        }
+
         if (node.repeat) {
             let repeat = this.compileDescriptor(
                 cctx,
                 node.descriptor, 
                 this.audit(node, "pass", () => { return repeat; }), 
-                pass);
+                newPass);
             if (node.required) {
                 // first time through must match, optionally thereafter
                 return this.compileDescriptor(cctx, node.descriptor, repeat, fail);
@@ -128,7 +145,7 @@ export class OpcodeCompiler {
                 return repeat;
             }
         } else {
-            return this.compileDescriptor(cctx, node.descriptor, pass, node.required ? fail : pass);
+            return this.compileDescriptor(cctx, node.descriptor, newPass, node.required ? fail : pass);
         }
     }
 
@@ -152,14 +169,10 @@ export class OpcodeCompiler {
                         ictx.captures[captureIndex] = value;
                     }
                 }
-                return this.compilePatterns(
-                    cctx,
-                    node, 
-                    pass,
-                    fail,
-                    useOutput ? 
-                        (ictx, buf) => setCapture(ictx, ictx.output)
-                        : (ictx, buf) => setCapture(ictx, buf.substr(ictx.position, ictx.consumed)));
+                let setCaptureHook = useOutput ? 
+                    (ictx, buf) => { setCapture(ictx, ictx.output); return pass; }
+                    : (ictx, buf) => { setCapture(ictx, buf.substr(ictx.position, ictx.consumed)); return pass; }
+                return this.compilePatterns(cctx, node, this.audit(node, "pass", setCaptureHook), fail);
             case "ruleref":
                 let name = node.name;
                 let rulesetOps = this.rulesetOps;

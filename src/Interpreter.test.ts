@@ -34,7 +34,10 @@ function parse(grammarText, text) {
     let op = new OpcodeCompiler(grammar).compile();
     return new Interpreter(op).execute(new ParseBuffer(text));
 }
- 
+
+function expectParse(grammar, text) {
+    return expect(parse(grammar, text));
+}
 function expectException(grammarText, text) {
     try {
         expect(parse(grammarText, text)).toBe(text);
@@ -43,35 +46,40 @@ function expectException(grammarText, text) {
 }
 
 test("basic execution", () => {
-    expect(parse("return . -> null;", "a")).toBe(null);
+    expectParse("return . -> null;", "a").toBe(null);
     expectException("return . -> null;", "aa");
-    expect(parse("return . . . . -> $0;", "abcd")).toBe("abcd");
+    expectParse("return . . . . -> $0;", "abcd").toBe("abcd");
  });
 
 test("array output", () => {
-    expect(parse("return . -> [$0, $0];", "a")).toEqual(["a", "a"]);
-    expect(parse("return {.} {.} -> [$2, $1];", "ab")).toEqual(["b", "a"]);
+    expectParse("return . -> [$0, $0];", "a").toEqual(["a", "a"]);
+    expectParse("return {.} {.} -> [$2, $1];", "ab").toEqual(["b", "a"]);
 });
 
 test("string tokens", () => {
-    expect(parse("return 'foo' 'bar' -> $0;", "foobar")).toBe("foobar");
+    expectParse("return 'foo' 'bar' -> $0;", "foobar").toBe("foobar");
     expectException("return 'foo' 'bar' -> $0;", "foobarz");
  });
 
  test("repeat", () => {
-    expect(parse("return .* -> $0;", "abcd")).toBe("abcd");
-    expect(parse("return ('a' 'b' 'c')* -> $0;", "abcabcabc")).toBe("abcabcabc");
-    expect(parse("return .+ -> $0;", "abcd")).toBe("abcd");
-    expect(parse("return ('a' 'b' 'c')+ -> $0;", "abcabcabc")).toBe("abcabcabc");
+    expectParse("return .* -> $0;", "abcd").toBe("abcd");
+    expectParse("return ('a' 'b' 'c')* -> $0;", "abcabcabc").toBe("abcabcabc");
+    expectParse("return .+ -> $0;", "abcd").toBe("abcd");
+    expectParse("return ('a' 'b' 'c')+ -> $0;", "abcabcabc").toBe("abcabcabc");
     expectException("return .+ -> $0;", "");
     expectException("return ('a' 'b' 'c')+ -> $0;", "ab");
 });
 
 test("optional tokens", () => {
-    expect(parse("return 'a' 'b'? 'c'? 'd' -> $0;", "abd")).toBe("abd");
+    expectParse("return 'a' 'b'? 'c'? 'd' -> $0;", "abd").toBe("abd");
+});
+
+test ("non-consuming tokens", () => {
+    expectParse("return 'a' &'b' 'b' 'c' -> $0;", "abc").toBe("abc");
+    expectParse("return 'a' !'c' 'b' 'c' -> $0;", "abc").toBe("abc");
 });
 
 test("rulesets", () => {
-    expect(parse("return rule -> $0; rule = 'a' 'b' 'c' -> null;", "abc")).toBe("abc");
-    expect(parse("return rule -> $0; rule = 'a' rule? -> null;", "aaa")).toBe("aaa");
+    expectParse("return rule -> $0; rule = 'a' 'b' 'c' -> null;", "abc").toBe("abc");
+    expectParse("return rule -> $0; rule = 'a' rule? -> null;", "aaa").toBe("aaa");
 });
