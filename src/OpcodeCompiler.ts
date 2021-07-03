@@ -22,7 +22,6 @@
  * SOFTWARE. 
  */
 
-import { notEqual } from "assert";
 import {
     Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode
 } from "./Grammar";
@@ -211,6 +210,25 @@ export class OpcodeCompiler {
                         } else {
                             return fail;
                         }
+                    } else if (buf.closed) {
+                        return fail;
+                    } else {
+                        ictx.status = WaitInput;
+                        return null;
+                    }
+                });
+            case "class":
+                let ranges = node.ranges;
+                return this.audit(node, "run", (ictx, buf) => {
+                    if (ictx.position + ictx.consumed < buf.length) {
+                        let c = buf.charAt(ictx.position + ictx.consumed);
+                        for (let range of ranges) {
+                            if (c >= range[0].match && c <= range[1].match) {
+                                ictx.consumed++;
+                                return pass;
+                            }
+                        }
+                        return fail;
                     } else if (buf.closed) {
                         return fail;
                     } else {

@@ -97,3 +97,14 @@ test("multiple rules", () => {
     expectParse("return rule -> $0; rule = 'a' -> null, 'b' -> null, 'c' -> null;", "c").toBe("c");
     expectException("return rule -> $0; rule = 'a' -> null, 'b' -> null, 'c' -> null;", "d");
 });
+
+test("character classes", () => {
+    expectParse("return {[x]} -> $1;", "x").toBe('x');
+    expectParse("return {[a-z]} -> $1;", "x").toBe('x');
+    expectParse("return {[0-9a-zA-Z]} -> $1;", "x").toBe('x');
+    expectParse("return {[x0-9]} -> $1;", "x").toBe('x');
+    expectParse("return {[qwertyx]} -> $1;", "x").toBe('x');
+    expectParse("return [\\t] -> $0;", "\t").toBe('\t');
+    expectParse("return [\\ua1b2] -> $0;", "\ua1b2").toBe('\ua1b2');
+    expect(parse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2")).toBe("\n\r\t\f\b\ua2a2");
+});
