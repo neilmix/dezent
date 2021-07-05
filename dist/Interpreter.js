@@ -32,8 +32,9 @@ exports.WaitInput = -4;
 class Context {
     constructor() {
         this.iteration = 0;
-        this.position = 0;
-        this.consumed = 0;
+        this.startPos = 0;
+        this.endPos = 0;
+        this.lastConsumed = 0;
         this.captures = [];
         this.status = exports.Run;
         this.scopes = [];
@@ -41,20 +42,16 @@ class Context {
         this.auditLog = [];
     }
     beginScope() {
-        this.scopes.push({ position: this.position, consumed: this.consumed });
-        this.position += this.consumed;
-        this.consumed = 0;
+        this.scopes.push({ startPos: this.startPos, endPos: this.endPos });
+        this.startPos = this.endPos;
     }
     commitScope() {
-        let scope = this.scopes.pop();
-        Parser_1.assert(scope !== undefined);
-        this.consumed = (this.position + this.consumed) - scope.position;
-        this.position = scope.position;
+        this.lastConsumed = this.endPos - (this.startPos = this.scopes.pop().startPos);
     }
     rollbackScope() {
         let scope = this.scopes.pop();
-        this.position = scope.position;
-        this.consumed = scope.consumed;
+        this.startPos = scope.startPos;
+        this.endPos = scope.endPos;
     }
     pushFrame(pass, fail) {
         this.frames.push({ pass: pass, fail: fail, captures: this.captures });
@@ -85,17 +82,17 @@ class Interpreter {
         if (Interpreter.debug) {
             console.log(ctx.auditLog.map((line) => line.join(' ')).join('\n'));
             console.log("status: ", ctx.status);
+            ctx.auditLog.length = 0;
         }
         switch (ctx.status) {
             case exports.Pass:
-                Parser_1.assert(ctx.position == 0);
                 if (!buf.closed) {
                     this.resumeOp = op;
-                    ctx.status = exports.Run;
+                    ctx.status = exports.WaitInput;
                     return;
                 }
-                if (ctx.consumed < buf.length) {
-                    Parser_1.parsingError(Parser_1.ErrorCode.TextParsingError, buf, ctx.consumed, ["<EOF>"]);
+                if (ctx.endPos < buf.length) {
+                    Parser_1.parsingError(Parser_1.ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
                 }
                 return ctx.output;
             case exports.Fail:

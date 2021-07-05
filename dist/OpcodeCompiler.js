@@ -41,9 +41,9 @@ class OpcodeCompiler {
         }
         if (Interpreter_1.Interpreter.debug) {
             return (ictx, buf) => {
-                let entry = [pad(node ? node.type : "", 10), pad(action, 10), pad(ictx.position, 8), pad(ictx.consumed, 8), pad(ictx.scopes.length, 5)];
-                let result = op(ictx, buf);
-                ictx.auditLog.push(entry.concat([" -> ", pad(ictx.position, 8), pad(ictx.consumed, 8), pad(ictx.scopes.length, 5)]));
+                const entry = [pad(node ? node.type : "", 10), pad(action, 10), pad(ictx.startPos, 6), pad(ictx.endPos, 6), pad(ictx.lastConsumed, 6), pad(ictx.scopes.length, 5)];
+                const result = op(ictx, buf);
+                ictx.auditLog.push(entry.concat([" -> ", pad(ictx.startPos, 6), pad(ictx.endPos, 6), pad(ictx.lastConsumed, 6), pad(ictx.scopes.length, 5)]));
                 return result;
             };
         }
@@ -52,8 +52,8 @@ class OpcodeCompiler {
         }
     }
     compile() {
-        let cctx = new CompilerContext();
-        let op = this.compileRuleset(cctx, this.grammar.rulesetLookup.return, this.audit(null, "pass", (ictx, buf) => { ictx.status = Interpreter_1.Pass; return null; }), this.audit(null, "fail", (ictx, buf) => { ictx.status = Interpreter_1.Fail; return null; }));
+        const cctx = new CompilerContext();
+        const op = this.compileRuleset(cctx, this.grammar.rulesetLookup.return, this.audit(null, "pass", (ictx, buf) => { ictx.status = Interpreter_1.Pass; return null; }), this.audit(null, "fail", (ictx, buf) => { ictx.status = Interpreter_1.Fail; return null; }));
         let iteration = 0;
         return (ctx, buf) => {
             ctx.iteration = ++iteration;
@@ -74,8 +74,8 @@ class OpcodeCompiler {
     }
     compileRule(cctx, node, pass, fail) {
         cctx.currentRule = node;
-        let patterns = this.compilePatterns(cctx, node, this.compileValue(cctx, node.value, pass), fail);
-        let captures = node.captures || [];
+        const patterns = this.compilePatterns(cctx, node, this.compileValue(cctx, node.value, pass), fail);
+        const captures = node.captures || [];
         return (ictx, buf) => {
             ictx.captures.length = captures.length;
             ictx.captures.fill(null);
@@ -89,7 +89,10 @@ class OpcodeCompiler {
         let nextOp = fail;
         for (let i = node.patterns.length - 1; i >= 0; i--) {
             nextOp = ((failOp) => {
-                let patternOp = this.compilePattern(cctx, node.patterns[i], this.audit(node, "pass", (ictx, buf) => { ictx.commitScope(); return pass; }), this.audit(node, "fail", (ictx, buf) => { ictx.rollbackScope(); return failOp; }));
+                const patternOp = this.compilePattern(cctx, node.patterns[i], this.audit(node, "pass", (ictx, buf) => {
+                    ictx.commitScope();
+                    return pass;
+                }), this.audit(node, "fail", (ictx, buf) => { ictx.rollbackScope(); return failOp; }));
                 return this.audit(node, "run", (ictx, buf) => { ictx.beginScope(); return patternOp; });
             })(nextOp);
         }
@@ -108,29 +111,25 @@ class OpcodeCompiler {
             pass = fail;
             fail = tmp;
         }
-        let newPass;
-        if (node.and || node.not) {
-            newPass = this.audit(node, "pass", (ictx, buf) => {
-                ictx.consumed = 0;
+        const newPass = (node.and || node.not)
+            ? this.audit(node, "pass", (ictx, buf) => {
+                ictx.endPos = ictx.startPos;
+                return pass;
+            })
+            : this.audit(node, "pass", (ictx, buf) => {
+                ictx.startPos = ictx.endPos;
                 return pass;
             });
-        }
-        else {
-            newPass = this.audit(node, "pass", (ictx, buf) => {
-                ictx.position += ictx.consumed;
-                ictx.consumed = 0;
-                return pass;
-            });
-        }
         if (node.repeat) {
-            let repeat = this.compileDescriptor(cctx, node.descriptor, this.audit(node, "pass", (ictx, buf) => {
-                ictx.position += ictx.consumed;
-                ictx.consumed = 0;
+            let repeat;
+            let repeatPass = this.audit(node, "repeat", (ictx, buf) => {
+                ictx.startPos = ictx.endPos;
                 return repeat;
-            }), newPass);
+            });
+            repeat = this.compileDescriptor(cctx, node.descriptor, repeatPass, newPass);
             if (node.required) {
                 // first time through must match, optionally thereafter
-                return this.compileDescriptor(cctx, node.descriptor, repeat, fail);
+                return this.compileDescriptor(cctx, node.descriptor, repeatPass, fail);
             }
             else {
                 // always passes
@@ -138,7 +137,20 @@ class OpcodeCompiler {
             }
         }
         else {
-            return this.compileDescriptor(cctx, node.descriptor, newPass, node.required ? fail : pass);
+            if (!node.required && node.descriptor.type == "capture" && cctx.currentRule.captures[node.descriptor.index]) {
+                // a non-required capture that fails should return null in a non-collapsed array
+                let index = node.descriptor.index;
+                return this.compileDescriptor(cctx, node.descriptor, newPass, this.audit(node, "pass", (ictx, buf) => {
+                    if (ictx.captures[index] === null) {
+                        ictx.captures[index] = [];
+                    }
+                    ictx.captures[index].push(null);
+                    return pass;
+                }));
+            }
+            else {
+                return this.compileDescriptor(cctx, node.descriptor, newPass, node.required ? fail : pass);
+            }
         }
     }
     compileDescriptor(cctx, node, pass, fail) {
@@ -146,29 +158,31 @@ class OpcodeCompiler {
             case "group":
                 return this.compilePatterns(cctx, node, pass, fail);
             case "capture":
-                let useOutput = node.useOutput;
-                let captureIndex = node.index;
-                let setCapture;
-                if (cctx.currentRule.captures[captureIndex]) {
-                    setCapture = (ictx, value) => {
+                const useOutput = node.useOutput;
+                const captureIndex = node.index;
+                const setCapture = cctx.currentRule.captures[captureIndex]
+                    ? (ictx, value) => {
                         if (ictx.captures[captureIndex] === null) {
                             ictx.captures[captureIndex] = [];
                         }
                         ictx.captures[captureIndex].push(value);
-                    };
-                }
-                else {
-                    setCapture = (ictx, value) => {
+                    }
+                    : (ictx, value) => {
                         ictx.captures[captureIndex] = value;
                     };
-                }
-                let setCaptureHook = useOutput ?
-                    (ictx, buf) => { setCapture(ictx, ictx.output); return pass; }
-                    : (ictx, buf) => { setCapture(ictx, buf.substr(ictx.position, ictx.consumed)); return pass; };
-                return this.compilePatterns(cctx, node, this.audit(node, "pass", setCaptureHook), fail);
+                const newPass = useOutput ?
+                    (ictx, buf) => {
+                        setCapture(ictx, ictx.output);
+                        return pass;
+                    }
+                    : (ictx, buf) => {
+                        setCapture(ictx, buf.substr(ictx.endPos - ictx.lastConsumed, ictx.lastConsumed));
+                        return pass;
+                    };
+                return this.compilePatterns(cctx, node, newPass, fail);
             case "ruleref":
-                let name = node.name;
-                let rulesetOps = this.rulesetOps;
+                const name = node.name;
+                const rulesetOps = this.rulesetOps;
                 if (rulesetOps[name] === undefined) {
                     // set a null value so that we don't get infinite compilation recursion in 
                     // the case where our rule calls itself
@@ -181,20 +195,20 @@ class OpcodeCompiler {
                 let prevIteration = -1;
                 let prevPos = -1;
                 return this.audit(node, "run", (ictx, buf) => {
-                    if (ictx.iteration == prevIteration && ictx.position == prevPos) {
+                    if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
                         throw "left recursion not yet implemented";
                     }
                     prevIteration = ictx.iteration;
-                    prevPos = ictx.position;
+                    prevPos = ictx.startPos;
                     ictx.pushFrame(pass, fail);
                     return rulesetOps[name];
                 });
             case "string":
-                let matchStr = node.pattern;
+                const matchStr = node.pattern;
                 return this.audit(node, "run", (ictx, buf) => {
-                    if (ictx.position + ictx.consumed + matchStr.length <= buf.length) {
-                        if (buf.containsAt(matchStr, ictx.position + ictx.consumed)) {
-                            ictx.consumed += matchStr.length;
+                    if (ictx.endPos + matchStr.length <= buf.length) {
+                        if (buf.containsAt(matchStr, ictx.endPos)) {
+                            ictx.endPos += matchStr.length;
                             return pass;
                         }
                         else {
@@ -210,13 +224,13 @@ class OpcodeCompiler {
                     }
                 });
             case "class":
-                let ranges = node.ranges;
+                const ranges = node.ranges;
                 return this.audit(node, "run", (ictx, buf) => {
-                    if (ictx.position + ictx.consumed < buf.length) {
-                        let c = buf.charAt(ictx.position + ictx.consumed);
-                        for (let range of ranges) {
+                    if (ictx.endPos < buf.length) {
+                        const c = buf.charAt(ictx.endPos);
+                        for (const range of ranges) {
                             if (c >= range[0].match && c <= range[1].match) {
-                                ictx.consumed++;
+                                ictx.endPos++;
                                 return pass;
                             }
                         }
@@ -232,8 +246,8 @@ class OpcodeCompiler {
                 });
             case "any":
                 return this.audit(node, "run", (ictx, buf) => {
-                    if (ictx.position + ictx.consumed < buf.length) {
-                        ictx.consumed++;
+                    if (ictx.endPos < buf.length) {
+                        ictx.endPos++;
                         return pass;
                     }
                     else if (buf.closed) {
@@ -249,7 +263,7 @@ class OpcodeCompiler {
         }
     }
     compileValue(cctx, node, pass) {
-        let builder = this.compileValueBuilder(cctx, node);
+        const builder = this.compileValueBuilder(cctx, node);
         return this.audit(node, "output", (ictx, buf) => {
             ictx.output = builder(ictx, buf);
             return pass;
@@ -262,18 +276,18 @@ class OpcodeCompiler {
                     return null;
                 };
             case "boolean":
-                let b = node.value;
+                const b = node.value;
                 return (ictx, buf) => {
                     return b;
                 };
             case "number":
-                let n = node.value;
+                const n = node.value;
                 return (ictx, buf) => {
                     return Number(n);
                 };
             case "string":
-                let strBuilders = node.tokens.map((node) => {
-                    let value = node.value;
+                const strBuilders = node.tokens.map((node) => {
+                    const value = node.value;
                     if (node.type == "text") {
                         return () => value;
                     }
@@ -293,11 +307,31 @@ class OpcodeCompiler {
                 return (ictx, buf) => {
                     return strBuilders.map((b) => b()).join('');
                 };
+            case "constref":
+                return this.compileValueBuilder(cctx, this.grammar.vars[node.name]);
+            case "metaref":
+                const metaName = node.name;
+                switch (metaName) {
+                    case "position": return (ictx, buf) => ictx.startPos;
+                    case "length": return (ictx, buf) => ictx.endPos - ictx.startPos;
+                    default:
+                        Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
+                        return null;
+                }
             case "array":
-                let elemBuilders = node.elements.map((item) => {
-                    let builder = this.compileValueBuilder(cctx, item);
+                const elemBuilders = node.elements.map((item) => {
+                    const builder = this.compileValueBuilder(cctx, item);
                     if (item.type == "spread") {
                         return (ictx, buf, array) => array.concat(builder(ictx, buf));
+                    }
+                    else if (item.type == "backref" && item.collapse) {
+                        return (ictx, buf, array) => {
+                            let value = builder(ictx, buf);
+                            if (value !== null) {
+                                array.push(value);
+                            }
+                            return array;
+                        };
                     }
                     else {
                         return (ictx, buf, array) => {
@@ -310,10 +344,10 @@ class OpcodeCompiler {
                     return elemBuilders.reduce((a, f) => f(ictx, buf, a), []);
                 };
             case "object":
-                let ret = {};
-                let objBuilders = node.members.map((member) => {
+                const ret = {};
+                const objBuilders = node.members.map((member) => {
                     if (member.type == "spread") {
-                        let tupleBuilder = this.compileValueBuilder(cctx, member);
+                        const tupleBuilder = this.compileValueBuilder(cctx, member);
                         return (ictx, buf, retval) => {
                             return tupleBuilder(ictx, buf).reduce((o, tuple) => {
                                 if (!Array.isArray(tuple) || tuple.length != 2) {
@@ -325,8 +359,8 @@ class OpcodeCompiler {
                         };
                     }
                     else {
-                        let keyOp = this.compileValueBuilder(cctx, member.name);
-                        let valueOp = this.compileValueBuilder(cctx, member.value);
+                        const keyOp = this.compileValueBuilder(cctx, member.name);
+                        const valueOp = this.compileValueBuilder(cctx, member.value);
                         return (ictx, buf, retval) => {
                             retval[keyOp(ictx, buf)] = valueOp(ictx, buf);
                             return retval;
@@ -335,17 +369,28 @@ class OpcodeCompiler {
                 });
                 return (ictx, buf) => objBuilders.reduce((o, f) => f(ictx, buf, o), {});
             case "backref":
-                let index = node.index;
+                const index = node.index;
                 if (index == "0") {
                     return (ictx, buf) => {
-                        return buf.substrExact(ictx.position, ictx.consumed);
+                        return buf.substrExact(ictx.startPos, ictx.endPos - ictx.startPos);
                     };
                 }
                 else {
                     if (cctx.currentRule.captures[index]) {
-                        return (ictx, buf) => {
-                            return ictx.captures[index] || [];
-                        };
+                        if (node.collapse) {
+                            return (ictx, buf) => {
+                                return (ictx.captures[index] || []).reduce((a, i) => {
+                                    if (i !== null)
+                                        a.push(i);
+                                    return a;
+                                }, []);
+                            };
+                        }
+                        else {
+                            return (ictx, buf) => {
+                                return ictx.captures[index] || [];
+                            };
+                        }
                     }
                     else {
                         return (ictx, buf) => {
@@ -354,8 +399,8 @@ class OpcodeCompiler {
                     }
                 }
             case "call":
-                let callback = this.grammar.callbacks[node.name];
-                let argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
+                const callback = this.grammar.callbacks[node.name];
+                const argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
                 if (!callback) {
                     GrammarCompiler_1.grammarError(Parser_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
                 }
@@ -368,9 +413,9 @@ class OpcodeCompiler {
                     }
                 };
             case "spread":
-                let spreader = this.compileValueBuilder(cctx, node.value);
+                const spreader = this.compileValueBuilder(cctx, node.value);
                 return (ictx, buf) => {
-                    let value = spreader(ictx, buf);
+                    const value = spreader(ictx, buf);
                     if (value === null || value === undefined || (typeof value != 'object' && typeof value != 'string')) {
                         GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
                     }

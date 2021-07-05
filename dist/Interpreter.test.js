@@ -50,6 +50,7 @@ test("basic execution", () => {
 });
 test("array output", () => {
     expectParse("return . -> [$0, $0];", "a").toEqual(["a", "a"]);
+    Interpreter_1.Interpreter.debug = true;
     expectParse("return {.} {.} -> [$2, $1];", "ab").toEqual(["b", "a"]);
 });
 test("string tokens", () => {

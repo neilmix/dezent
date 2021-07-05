@@ -334,6 +334,15 @@ export class OpcodeCompiler {
                 return (ictx, buf) => {
                     return strBuilders.map((b) => b()).join('');
                 }
+            case "constref":
+                return this.compileValueBuilder(cctx, this.grammar.vars[node.name]);
+            case "metaref":
+                const metaName = node.name;
+                switch (metaName) {
+                    case "position": return (ictx, buf) => ictx.startPos;
+                    case "length": return (ictx, buf) => ictx.endPos - ictx.startPos;
+                    default: parserError(ErrorCode.Unreachable); return null;
+                }
             case "array":
                 const elemBuilders = node.elements.map((item) => {
                     const builder = this.compileValueBuilder(cctx, item);
