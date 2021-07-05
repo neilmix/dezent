@@ -23,6 +23,7 @@
  */
 
 
+import { Callbacks } from "./Dezent";
 import { ParseBuffer } from "./ParseBuffer";
 
 export const GrammarVersion = 1;
@@ -32,6 +33,7 @@ export type Grammar = {
 	text?: string,
 	maxid?: number,
 	ruleset: RulesetNode[], 
+	callbacks?: Callbacks,
 	vars: { [key:string]: ValueNode }, 
 	pragmas: { [key:string]: boolean },
 	rulesetLookup?: { [key:string]: RulesetNode } 

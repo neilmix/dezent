@@ -24,11 +24,12 @@
 
 import { Operation } from "./OpcodeCompiler";
 import { ParseBuffer } from "./ParseBuffer";
-import { assert, ErrorCode, parsingError } from "./Parser";
+import { assert, ErrorCode, parserError, parsingError } from "./Parser";
 
-export const Pass = -1;
-export const Fail = -2;
-export const WaitInput = -3;
+export const Run = -1;
+export const Pass = -2;
+export const Fail = -3;
+export const WaitInput = -4;
 
 export type Frame = {
     pass:Operation;
@@ -36,11 +37,13 @@ export type Frame = {
 }
 
 export class Context {
-    position:number = 0;
-    consumed:number = 0;
+    iteration:number = 0;
+    startPos:number = 0;
+    endPos:number = 0;
+    lastConsumed:number = 0;
     output:any;
     captures:any[] = [];
-    status:number;
+    status:number = Run;
     scopes = [];
     frames = [];
     auditLog = [];
@@ -48,22 +51,18 @@ export class Context {
     }
     
     beginScope() {
-        this.scopes.push({ position: this.position, consumed: this.consumed })
-        this.position += this.consumed;
-        this.consumed = 0;
+        this.scopes.push({ startPos: this.startPos, endPos: this.endPos });
+        this.startPos = this.endPos;
     }
 
     commitScope() {
-        let scope = this.scopes.pop();
-        assert(scope !== undefined);
-        this.consumed = (this.position + this.consumed) - scope.position;
-        this.position = scope.position;
+        this.lastConsumed = this.endPos - (this.startPos = this.scopes.pop().startPos);
     }
 
     rollbackScope() {
         let scope = this.scopes.pop();
-        this.position = scope.position;
-        this.consumed = scope.consumed;
+        this.startPos = scope.startPos;
+        this.endPos = scope.endPos;
     }
 
     pushFrame(pass:Operation, fail:Operation) {
@@ -80,30 +79,48 @@ export class Context {
 
 export class Interpreter {
     public static debug = false;
-    rootOp:Operation;
-    constructor(op:Operation) {
-        this.rootOp = op;
+    resumeOp:Operation;
+    buffer:ParseBuffer;
+    context:Context = new Context();
+    constructor(op:Operation, buf:ParseBuffer) {
+        this.resumeOp = op;
+        this.buffer = buf;
     }
 
-    execute(buf:ParseBuffer) {
-        let ctx = new Context();
-        let op = this.rootOp;
+    resume() {
+        let ctx = this.context;
+        let result = this.resumeOp;
+        let op:Operation;
+        let buf = this.buffer;
         do {
-            op = op(ctx, buf);
-        } while(op !== null);
+            op = result;
+            result = op(ctx, buf);
+        } while(result !== null);
 
         if (Interpreter.debug) {
             console.log(ctx.auditLog.map((line) => line.join(' ')).join('\n'));
             console.log("status: ", ctx.status);
+            ctx.auditLog.length = 0;
         }
-        if (ctx.status == Pass) {
-            assert(ctx.position == 0);
-            if (ctx.consumed < buf.length) {
-                parsingError(ErrorCode.TextParsingError, buf, ctx.consumed, ["<EOF>"]);
-            }
-            return ctx.output;
-        } else {
-            throw new Error("not implemented");
+        
+        switch (ctx.status) {
+            case Pass:
+                if (!buf.closed) {
+                    this.resumeOp = op;
+                    ctx.status = WaitInput;
+                    return;
+                }
+                if (ctx.endPos < buf.length) {
+                    parsingError(ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
+                }
+                return ctx.output;
+            case Fail:
+                throw new Error("Parse Error");
+            case WaitInput:
+                this.resumeOp = op;
+                return;
+            default:
+                parserError(ErrorCode.Unreachable);
         }
     }
 }

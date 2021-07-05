@@ -23,25 +23,90 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Interpreter = exports.Context = exports.WaitInput = exports.Done = void 0;
-exports.Done = -1;
-exports.WaitInput = -2;
+exports.Interpreter = exports.Context = exports.WaitInput = exports.Fail = exports.Pass = exports.Run = void 0;
+const Parser_1 = require("./Parser");
+exports.Run = -1;
+exports.Pass = -2;
+exports.Fail = -3;
+exports.WaitInput = -4;
 class Context {
     constructor() {
-        this.consumed = 0;
+        this.iteration = 0;
         this.position = 0;
+        this.consumed = 0;
+        this.captures = [];
+        this.status = exports.Run;
+        this.scopes = [];
+        this.frames = [];
+        this.auditLog = [];
+    }
+    beginScope() {
+        this.scopes.push({ position: this.position, consumed: this.consumed });
+        this.position += this.consumed;
+        this.consumed = 0;
+    }
+    commitScope() {
+        let scope = this.scopes.pop();
+        Parser_1.assert(scope !== undefined);
+        this.consumed = (this.position + this.consumed) - scope.position;
+        this.position = scope.position;
+    }
+    rollbackScope() {
+        let scope = this.scopes.pop();
+        this.position = scope.position;
+        this.consumed = scope.consumed;
+    }
+    pushFrame(pass, fail) {
+        this.frames.push({ pass: pass, fail: fail, captures: this.captures });
+        this.captures = [];
+    }
+    popFrame() {
+        let frame = this.frames.pop();
+        this.captures = frame.captures;
+        return frame;
     }
 }
 exports.Context = Context;
 class Interpreter {
-    constructor() {
+    constructor(op, buf) {
+        this.context = new Context();
+        this.resumeOp = op;
+        this.buffer = buf;
     }
-    execute(opcode, buf) {
-        let address = 0;
-        let ctx = new Context();
+    resume() {
+        let ctx = this.context;
+        let result = this.resumeOp;
+        let op;
+        let buf = this.buffer;
         do {
-            address = opcode[address](ctx, buf);
-        } while (address >= 0);
+            op = result;
+            result = op(ctx, buf);
+        } while (result !== null);
+        if (Interpreter.debug) {
+            console.log(ctx.auditLog.map((line) => line.join(' ')).join('\n'));
+            console.log("status: ", ctx.status);
+        }
+        switch (ctx.status) {
+            case exports.Pass:
+                Parser_1.assert(ctx.position == 0);
+                if (!buf.closed) {
+                    this.resumeOp = op;
+                    ctx.status = exports.Run;
+                    return;
+                }
+                if (ctx.consumed < buf.length) {
+                    Parser_1.parsingError(Parser_1.ErrorCode.TextParsingError, buf, ctx.consumed, ["<EOF>"]);
+                }
+                return ctx.output;
+            case exports.Fail:
+                throw new Error("Parse Error");
+            case exports.WaitInput:
+                this.resumeOp = op;
+                return;
+            default:
+                Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
+        }
     }
 }
 exports.Interpreter = Interpreter;
+Interpreter.debug = false;

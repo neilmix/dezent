@@ -180,7 +180,7 @@ export function parseGrammar(text:string, options?:ParserOptions) : Grammar {
     let parser = new Parser(findDezentGrammar(), buf, options);
     try {
         let grammar = parser.parse();
-        GrammarCompiler.compileGrammar(grammar, text);
+        GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
         return grammar;
     } catch(e) {
         parser.dumpDebug();

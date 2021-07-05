@@ -34,7 +34,11 @@ function parse(grammar, text, options) {
     if (options && options.debugErrors === undefined)
         options.debugErrors = true;
     let d = new Dezent_1.Dezent(grammar, options);
-    return d.parse(text);
+    let ret = d.parse(text);
+    if (ret === undefined) {
+        throw d.error;
+    }
+    return ret;
 }
 function parseError(grammar, text, options) {
     try {

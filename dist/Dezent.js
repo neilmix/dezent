@@ -26,10 +26,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DezentStream = exports.Dezent = void 0;
 const Parser_1 = require("./Parser");
 const ParseBuffer_1 = require("./ParseBuffer");
+const OpcodeCompiler_1 = require("./OpcodeCompiler");
+const Interpreter_1 = require("./Interpreter");
 class Dezent {
     constructor(grammarStr, options) {
-        this.grammar = Parser_1.parseGrammar(grammarStr, grammarOptions(options));
-        this.options = options || {};
+        this.options = fillOptions(options);
+        this.grammar = Parser_1.parseGrammar(grammarStr, this.options);
         this.error = null;
     }
     parse(text) {
@@ -50,24 +52,26 @@ class Dezent {
 exports.Dezent = Dezent;
 class DezentStream {
     constructor(grammar, options) {
-        this.options = options || {};
+        this.options = fillOptions(options);
         this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSizeInMB);
-        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, grammarOptions(this.options)) : grammar;
-        this.parser = new Parser_1.Parser(grammar, this.buffer, this.options);
+        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, this.options) : grammar;
+        this.opcode = new OpcodeCompiler_1.OpcodeCompiler(grammar).compile();
+        this.interpreter = new Interpreter_1.Interpreter(this.opcode, this.buffer);
     }
     write(text) {
         this.buffer.addChunk(text);
-        this.parser.parse();
+        this.interpreter.resume();
     }
     close() {
         this.buffer.close();
-        return this.parser.parse();
+        return this.interpreter.resume();
     }
 }
 exports.DezentStream = DezentStream;
-function grammarOptions(opt) {
-    // don't dumpDebug when parsing the grammar
-    let gOpt = Object.assign({}, opt);
-    gOpt.dumpDebug = false;
-    return gOpt;
+function fillOptions(options) {
+    options = options || {};
+    return {
+        minBufferSizeInMB: options.minBufferSizeInMB || 1,
+        callbacks: options.callbacks || {},
+    };
 }

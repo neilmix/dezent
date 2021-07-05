@@ -37,10 +37,11 @@ import {
 } from './Grammar';
 
 import { buildString } from './Output';
+import { Callbacks } from './Dezent';
 
 export class GrammarCompiler {
 
-    static compileGrammar(grammar:Grammar, text?:string) {
+    static compileGrammar(grammar:Grammar, text?:string, callbacks?:Callbacks) {
         // compile and validate
         // - count the number of backrefs in each rule
         // - validate that all options contain that many backrefs
@@ -51,6 +52,32 @@ export class GrammarCompiler {
 
         grammar.version = GrammarVersion;
         grammar.text = text;
+        grammar.callbacks = {
+            pivot: (value) => {
+                if (!Array.isArray(value)) {
+                    throw new Error("Invalid pivot argment: " + value);
+                }
+                value.map((item) => {
+                    if (!Array.isArray(item)) {
+                        throw new Error("Invalid pivot argument: " + JSON.stringify(item));
+                    }
+                    if (item.length != value[0].length) {
+                        throw new Error("All subarrays in a pivot must be of the same length");
+                    }
+                })
+                let ret = [];
+                for (let item of value[0]) {
+                    ret.push([]);
+                }
+                for (let i = 0; i < value.length; i++) {
+                    for (let j = 0; j < value[0].length; j++) {
+                        ret[j][i] = value[i][j];
+                    }
+                }
+                return ret;            
+            },
+            ...callbacks
+        }
 
         let rulesetLookup = grammar.rulesetLookup = {};
         for (let ruleset of grammar.ruleset) {

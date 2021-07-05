@@ -106,7 +106,7 @@ function parseGrammar(text, options) {
     let parser = new Parser(findDezentGrammar(), buf, options);
     try {
         let grammar = parser.parse();
-        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text);
+        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
         return grammar;
     }
     catch (e) {

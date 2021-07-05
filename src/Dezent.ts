@@ -23,10 +23,12 @@
  */
 
 
-import { parseGrammar, Parser, ParserOptions } from './Parser';
+import { parseGrammar, ParserOptions } from './Parser';
 
 import { Grammar } from './Grammar';
 import { ParseBuffer } from './ParseBuffer';
+import { OpcodeCompiler, Operation } from './OpcodeCompiler';
+import { Interpreter } from './Interpreter';
 
 export interface DezentError extends Error {
     code: number
@@ -51,6 +53,15 @@ export interface ParseError extends DezentError {
     expected: string[]
 }
 
+export type Callbacks = {
+    [key:string]: Function
+}
+
+export interface DezentOptions {
+    minBufferSizeInMB?: number,
+    callbacks?: Callbacks,
+}
+
 export class Dezent {
     private grammar:Grammar;
     private options:ParserOptions;
@@ -58,8 +69,8 @@ export class Dezent {
     error:DezentError|GrammarError|ParseError;
 
     constructor(grammarStr:string, options?:ParserOptions) {
-        this.grammar = parseGrammar(grammarStr, grammarOptions(options));
-        this.options = options || {};
+        this.options = fillOptions(options);
+        this.grammar = parseGrammar(grammarStr, this.options);
         this.error = null;
     }
 
@@ -79,32 +90,34 @@ export class Dezent {
 }
 
 export class DezentStream {
+    private opcode:Operation;
+    private interpreter:Interpreter;
     private options:ParserOptions;
     private buffer:ParseBuffer;
-    private parser:Parser;
 
     constructor(grammar:string|Grammar, options?:ParserOptions) {
-        this.options = options || {};
+        this.options = fillOptions(options);
         this.buffer = new ParseBuffer(this.options.minBufferSizeInMB);
-        grammar = typeof grammar == "string" ? parseGrammar(grammar, grammarOptions(this.options)) : grammar;
-        this.parser = new Parser(grammar, this.buffer, this.options);
+        grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
+        this.opcode = new OpcodeCompiler(grammar).compile();
+        this.interpreter = new Interpreter(this.opcode, this.buffer);
     }
 
     write(text:string) {
         this.buffer.addChunk(text);
-        this.parser.parse();
+        this.interpreter.resume();
     }
 
     close() : any {
         this.buffer.close();
-        return this.parser.parse();
+        return this.interpreter.resume();
     }
 }
 
-function grammarOptions(opt:ParserOptions) {
-        // don't dumpDebug when parsing the grammar
-        let gOpt = Object.assign({}, opt);
-        gOpt.dumpDebug = false;
-        return gOpt;
+function fillOptions(options?:DezentOptions):DezentOptions {
+    options = options || {};
+    return {
+        minBufferSizeInMB: options.minBufferSizeInMB || 1,
+        callbacks: options.callbacks || {},
+    };
 }
-
