@@ -50,7 +50,6 @@ test("basic execution", () => {
 });
 test("array output", () => {
     expectParse("return . -> [$0, $0];", "a").toEqual(["a", "a"]);
-    Interpreter_1.Interpreter.debug = true;
     expectParse("return {.} {.} -> [$2, $1];", "ab").toEqual(["b", "a"]);
 });
 test("string tokens", () => {
@@ -97,4 +96,7 @@ test("character classes", () => {
     expectParse("return [\\t] -> $0;", "\t").toBe('\t');
     expectParse("return [\\ua1b2] -> $0;", "\ua1b2").toBe('\ua1b2');
     expect(parse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2")).toBe("\n\r\t\f\b\ua2a2");
+});
+test("capture", () => {
+    expectParse("return ( {'a'} ',' )* {'a'}? -> [$1, $2?];", "a").toEqual([[], "a"]);
 });

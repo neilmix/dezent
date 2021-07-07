@@ -32,6 +32,7 @@ import { createUncompiledDezentGrammar } from "./Grammar";
 import { readFileSync } from "fs";
 import { ParseBuffer } from "./ParseBuffer";
 import { Interpreter } from "./Interpreter";
+import { OpcodeCompiler } from "./OpcodeCompiler";
 
 function parse(grammar:string, text:string, options?:parser.ParserOptions) {
     if (options && options.debugErrors === undefined) options.debugErrors = true;
@@ -333,7 +334,7 @@ test("dezent grammar documentation", () => {
     let prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
     let buf = new ParseBuffer(textDezent);
-    let parsedDezent = new parser.Parser(hackedGrammar, buf, {debugErrors: true}).parse();
+    let parsedDezent = new Interpreter(new OpcodeCompiler(hackedGrammar).compile(), buf).resume();
     hackedGrammar.vars.meta = prevMeta;
 
     expect(parsedDezent).toEqual(uncompiledDezent);

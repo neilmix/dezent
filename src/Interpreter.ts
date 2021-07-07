@@ -42,7 +42,7 @@ export class Context {
     endPos:number = 0;
     lastConsumed:number = 0;
     output:any;
-    captures:any[] = [];
+    captures:{index: string, value: any}[] = [];
     status:number = Run;
     scopes = [];
     frames = [];
@@ -51,7 +51,7 @@ export class Context {
     }
     
     beginScope() {
-        this.scopes.push({ startPos: this.startPos, endPos: this.endPos });
+        this.scopes.push({ startPos: this.startPos, endPos: this.endPos, captureCount: this.captures.length });
         this.startPos = this.endPos;
     }
 
@@ -63,6 +63,7 @@ export class Context {
         let scope = this.scopes.pop();
         this.startPos = scope.startPos;
         this.endPos = scope.endPos;
+        this.captures.length = scope.captureCount;
     }
 
     pushFrame(pass:Operation, fail:Operation) {
@@ -92,10 +93,17 @@ export class Interpreter {
         let result = this.resumeOp;
         let op:Operation;
         let buf = this.buffer;
-        do {
-            op = result;
-            result = op(ctx, buf);
-        } while(result !== null);
+        try {
+            do {
+                op = result;
+                result = op(ctx, buf);
+            } while(result !== null);
+        } catch(e) {
+            if (Interpreter.debug) {
+                console.log(ctx.auditLog.map((line) => line.join(' ')).join('\n'));
+            }
+            throw e;
+        }
 
         if (Interpreter.debug) {
             console.log(ctx.auditLog.map((line) => line.join(' ')).join('\n'));

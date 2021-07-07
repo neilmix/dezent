@@ -30,6 +30,8 @@ const parser = require("./Parser");
 const Grammar_1 = require("./Grammar");
 const fs_1 = require("fs");
 const ParseBuffer_1 = require("./ParseBuffer");
+const Interpreter_1 = require("./Interpreter");
+const OpcodeCompiler_1 = require("./OpcodeCompiler");
 function parse(grammar, text, options) {
     if (options && options.debugErrors === undefined)
         options.debugErrors = true;
@@ -291,7 +293,7 @@ test("dezent grammar documentation", () => {
     let prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
     let buf = new ParseBuffer_1.ParseBuffer(textDezent);
-    let parsedDezent = new parser.Parser(hackedGrammar, buf, { debugErrors: true }).parse();
+    let parsedDezent = new Interpreter_1.Interpreter(new OpcodeCompiler_1.OpcodeCompiler(hackedGrammar).compile(), buf).resume();
     hackedGrammar.vars.meta = prevMeta;
     expect(parsedDezent).toEqual(uncompiledDezent);
 });

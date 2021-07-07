@@ -28,17 +28,30 @@ import {
 import { grammarError } from "./GrammarCompiler";
 import { Context as InterpreterContext, Pass, Fail, WaitInput, Interpreter } from "./Interpreter";
 import { ParseBuffer } from "./ParseBuffer";
-import { assert, ErrorCode, parserError } from "./Parser";
+import { ErrorCode, parserError } from "./Parser";
 
 export type Operation = (ictx:InterpreterContext, buf:ParseBuffer) => Operation|null;
 
 class CompilerContext {
+    activeRules:RuleNode[] = [];
     currentRule:RuleNode;
+
+    pushRule(rule:RuleNode) {
+        if (this.currentRule) {
+            this.activeRules.push(this.currentRule);
+        }
+        this.currentRule = rule;
+    }
+
+    popRule() {
+        this.currentRule = this.activeRules.pop();
+    }
 }
 
 export class OpcodeCompiler {
     grammar:Grammar;
     rulesetOps:{ [key:string] : Operation } = {};
+    rulerefOpFactories:{ [key:string] : (pass:Operation, fail:Operation) => Operation } = {};
 
     constructor(grammar:Grammar) {
         this.grammar = grammar;
@@ -51,9 +64,27 @@ export class OpcodeCompiler {
         }
         if (Interpreter.debug) {
             return (ictx, buf) => {
-                const entry = [pad(node ? node.type : "", 10), pad(action, 10), pad(ictx.startPos, 6), pad(ictx.endPos, 6), pad(ictx.lastConsumed, 6), pad(ictx.scopes.length,5)];
+                let desc = node ? node["name"] || node["pattern"] || "" : "";
+                const entry = [
+                    pad((node&&node.id)||'', 8), 
+                    pad(node ? node.type : "", 10), 
+                    pad(desc, 10), 
+                    pad(buf.substr(ictx.startPos, 10).replace(/\n/g, " "), 10),
+                    "  ",
+                    pad(action, 10), 
+                    pad(ictx.startPos, 6), 
+                    pad(ictx.endPos, 6), 
+                    pad(ictx.lastConsumed, 6), 
+                    pad(ictx.scopes.length,5)
+                ];
                 const result = op(ictx, buf)
-                ictx.auditLog.push(entry.concat([" -> ", pad(ictx.startPos, 6), pad(ictx.endPos, 6), pad(ictx.lastConsumed, 6), pad(ictx.scopes.length,5)]));
+                ictx.auditLog.push(entry.concat([
+                    " -> ", 
+                    pad(ictx.startPos, 6), 
+                    pad(ictx.endPos, 6), 
+                    pad(ictx.lastConsumed, 6), 
+                    pad(ictx.scopes.length,5)
+                ]));
                 return result;
             };
         } else {
@@ -89,12 +120,12 @@ export class OpcodeCompiler {
     }
 
     compileRule(cctx:CompilerContext, node:RuleNode, pass:Operation, fail:Operation):Operation {
-        cctx.currentRule = node;
+        cctx.pushRule(node);
         const patterns = this.compilePatterns(cctx, node, this.compileValue(cctx, node.value, pass), fail);
+        cctx.popRule();
         const captures = node.captures || [];
         return (ictx, buf) => {
-            ictx.captures.length = captures.length;
-            ictx.captures.fill(null);
+            ictx.captures.length = 0;
             return patterns;
         };
     }
@@ -110,7 +141,7 @@ export class OpcodeCompiler {
                     cctx,
                     node.patterns[i],
                     this.audit(node, "pass", (ictx, buf) => { 
-                        ictx.commitScope(); 
+                        ictx.commitScope();
                         return pass; 
                     }),
                     this.audit(node, "fail", (ictx, buf) => { ictx.rollbackScope(); return failOp; })
@@ -149,8 +180,13 @@ export class OpcodeCompiler {
         if (node.repeat) {
             let repeat;
             let repeatPass = this.audit(node, "repeat", (ictx, buf) => { 
-                ictx.startPos = ictx.endPos;
-                return repeat; 
+                // make sure we consumed so we don't get into an infinite loop
+                if (ictx.endPos > ictx.startPos) {
+                    ictx.startPos = ictx.endPos;
+                    return repeat;
+                } else {
+                    return newPass;
+                }
             });
             repeat = this.compileDescriptor(
                 cctx,
@@ -167,15 +203,12 @@ export class OpcodeCompiler {
         } else {
             if (!node.required && node.descriptor.type == "capture" && cctx.currentRule.captures[node.descriptor.index]) {
                 // a non-required capture that fails should return null in a non-collapsed array
-                let index = node.descriptor.index;
+                let index = String(node.descriptor.index);
                 return this.compileDescriptor(
                     cctx, 
                     node.descriptor, 
                     newPass, this.audit(node, "pass", (ictx, buf) => {
-                        if (ictx.captures[index] === null) {
-                            ictx.captures[index] = [];
-                        }
-                        ictx.captures[index].push(null);
+                        ictx.captures.push({index: index, value: null});
                         return pass;
                     }));
             } else {
@@ -191,29 +224,52 @@ export class OpcodeCompiler {
             case "capture":
                 const useOutput = node.useOutput;
                 const captureIndex = node.index;
-                const setCapture = cctx.currentRule.captures[captureIndex]
-                    ? (ictx, value) => {
-                        if (ictx.captures[captureIndex] === null) {
-                            ictx.captures[captureIndex] = [];
-                        }
-                        ictx.captures[captureIndex].push(value);
-                    }
-                    : (ictx, value) => {
-                        ictx.captures[captureIndex] = value;
-                    };
+                let id = cctx.currentRule.id;
+                const setCapture = (ictx, value) => {
+                    ictx.captures.push({index: captureIndex, value: value});
+                };
                 const newPass = useOutput ? 
                     (ictx, buf) => { 
-                        setCapture(ictx, ictx.output); 
+                        ictx.captures.push({index: captureIndex, value: ictx.output});
                         return pass; 
                     }
                     : (ictx, buf) => {
-                        setCapture(ictx, buf.substr(ictx.endPos - ictx.lastConsumed, ictx.lastConsumed)); 
+                        ictx.captures.push({index: captureIndex, value: buf.substr(ictx.endPos - ictx.lastConsumed, ictx.lastConsumed)});
                         return pass; 
                     }
                 return this.compilePatterns(cctx, node, newPass, fail);
             case "ruleref":
                 const name = node.name;
                 const rulesetOps = this.rulesetOps;
+                
+                // detect left recursion by checking the current position against the previous position
+                // when this ruleref is executed - if the position is unchanged, we have left recursion.
+                // But, double-check our context iteration so that we don't conflict across parses.
+                let prevIteration = -1;
+                let prevPos = -1;
+
+                // In order to detect left recursion we need access to prevPos (defined above) in our scope.
+                // But, pass and fail may be different for every invocation of a ruleref. So, we need to use
+                // factories to generator our op so that we retain prevPos in scope while generating a
+                // unique op for each invokation.
+                // Do this prior to creating the rulesetOp so that we're creating the factory at the first
+                // invokation and not a later invokation, that way all invokations share the same prevPos.
+                if (!this.rulerefOpFactories[name]) {
+                    this.rulerefOpFactories[name] = (pass, fail) => {
+                        return this.audit(node, "run", (ictx, buf) => { 
+                            if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
+                                throw `infinite loop detected / left recursion not yet implemented with ${node.name}:${ictx.startPos}`;
+                            }
+                            prevIteration = ictx.iteration;
+                            prevPos = ictx.startPos;
+                            ictx.pushFrame(pass, fail);
+                            return rulesetOps[name];
+                        });
+                    };
+                }
+
+                // a null rulesetOp indicates that we've been call recursively during ruleset compilation,
+                // so check specifically for undefined here
                 if (rulesetOps[name] === undefined) {
                     // set a null value so that we don't get infinite compilation recursion in 
                     // the case where our rule calls itself
@@ -221,24 +277,12 @@ export class OpcodeCompiler {
                     rulesetOps[name] = this.compileRuleset(
                         cctx,
                         this.grammar.rulesetLookup[name],
-                        this.audit(node, "pass", (ictx, buf) => { return ictx.popFrame().pass }),
-                        this.audit(node, "fail", (ictx, buf) => { return ictx.popFrame().fail })
+                        this.audit(node, "pass", (ictx, buf) => { prevPos = -1; return ictx.popFrame().pass }),
+                        this.audit(node, "fail", (ictx, buf) => { prevPos = -1; return ictx.popFrame().fail })
                     )
                 }
-                // detect left recursion by checking the current position against the previous position
-                // when this ruleref is executed - if the position is unchanged, we have left recursion.
-                // But, double-check our context iteration so that we don't conflict across parses.
-                let prevIteration = -1;
-                let prevPos = -1;
-                return this.audit(node, "run", (ictx, buf) => { 
-                    if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
-                        throw "left recursion not yet implemented";
-                    }
-                    prevIteration = ictx.iteration;
-                    prevPos = ictx.startPos;
-                    ictx.pushFrame(pass, fail);
-                    return rulesetOps[name];
-                });
+
+                return this.rulerefOpFactories[name](pass, fail);
             case "string":
                 const matchStr = node.pattern;
                 return this.audit(node, "run", (ictx, buf) => {
@@ -400,19 +444,23 @@ export class OpcodeCompiler {
                     if (cctx.currentRule.captures[index]) {
                         if (node.collapse) {
                             return (ictx, buf) => {
-                                return (ictx.captures[index] || []).reduce((a, i) => {
-                                    if (i !== null) a.push(i);
-                                    return a;
+                                return ictx.captures.reduce((ret, cap) => {
+                                    if (cap.index == index && cap.value !== null) ret.push(cap.value);
+                                    return ret;
                                 }, []);
                             }
                         } else {
                             return (ictx, buf) => {
-                                return ictx.captures[index] || [];
+                                return ictx.captures.reduce((ret, cap) => {
+                                    if (cap.index == index) ret.push(cap.value);
+                                    return ret;
+                                }, [])
                             }
                         }
                     } else {
                         return (ictx, buf) => {
-                            return ictx.captures[index];
+                            let cap = ictx.captures.find((cap) => cap.index == index);
+                            return cap ? cap.value : null;
                         }
                     }
                 }
