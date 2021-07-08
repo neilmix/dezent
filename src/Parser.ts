@@ -175,7 +175,7 @@ export interface ParserOptions {
     callbacks?: Callbacks,
 }
 
-export function parseGrammar(text:string, options?:ParserOptions) : Grammar {
+export function parseGrammar(text:string, options:ParserOptions) : Grammar {
     let buf = new ParseBuffer(text);
     let parser = new Parser(findDezentGrammar(), buf, options);
     try {

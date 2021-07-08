@@ -46,7 +46,7 @@ function parse(grammar:string, text:string, options?:parser.ParserOptions) {
 
 function parseError(grammar:string, text:string, options?:parser.ParserOptions) {
     try {
-        new parser.Parser(parser.parseGrammar(grammar), new ParseBuffer(text), options).parse();
+        new parser.Parser(parser.parseGrammar(grammar, options||{}), new ParseBuffer(text), options).parse();
         fail();
     } catch(e) {
         return e;
@@ -70,7 +70,7 @@ function expectParseFail(grammar:string, text?:string, options?) {
 
 function parseGrammarError(grammar:string, options?:parser.ParserOptions) {
     try {
-        parser.parseGrammar(grammar, options);
+        parser.parseGrammar(grammar, options||{});
         fail();
     } catch(e) {
         return e;
