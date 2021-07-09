@@ -50,6 +50,7 @@ test("basic execution", () => {
     expectParse("return . -> null;", "a").toBe(null);
     expectException("return . -> null;", "aa");
     expectParse("return . . . . -> $0;", "abcd").toBe("abcd");
+    expectException(" return 'a'* -> null;", "bb");
  });
 
 test("array output", () => {

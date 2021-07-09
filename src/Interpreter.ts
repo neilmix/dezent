@@ -113,13 +113,13 @@ export class Interpreter {
         
         switch (ctx.status) {
             case Pass:
+                if (ctx.endPos < buf.length) {
+                    parsingError(ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
+                }
                 if (!buf.closed) {
                     this.resumeOp = op;
                     ctx.status = WaitInput;
                     return;
-                }
-                if (ctx.endPos < buf.length) {
-                    parsingError(ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
                 }
                 return ctx.output;
             case Fail:

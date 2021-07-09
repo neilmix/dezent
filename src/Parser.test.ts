@@ -371,6 +371,7 @@ test("chunked parsing", () => {
     ds = new DezentStream(`return 'a'* -> null;`);
     try {
         ds.write('bb');
+        //ds.close();
         fail('the write should have failed due to parse error');
     } catch(e) {}
 });
