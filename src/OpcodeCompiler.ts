@@ -31,6 +31,7 @@ import { ParseBuffer } from "./ParseBuffer";
 import { ErrorCode, parserError } from "./Parser";
 
 export type Operation = (ictx:InterpreterContext, buf:ParseBuffer) => Operation|null;
+export type ValueBuilder = (ictx:InterpreterContext, buf:ParseBuffer) => any;
 
 class CompilerContext {
     activeRules:RuleNode[] = [];
@@ -386,7 +387,7 @@ export class OpcodeCompiler {
         });
     }
 
-    compileValueBuilder(cctx:CompilerContext, node:ValueNode):(ictx:InterpreterContext, buf:ParseBuffer) => any {
+    compileValueBuilder(cctx:CompilerContext, node:ValueNode):ValueBuilder {
         switch (node.type) {
             case "null":
                 return (ictx, buf) => {
@@ -421,7 +422,7 @@ export class OpcodeCompiler {
                     return strBuilders.map((b) => b()).join('');
                 }
             case "constref":
-                return this.compileValueBuilder(cctx, this.grammar.vars[node.name]);
+                return this.compileAccess(cctx, node, this.compileValueBuilder(cctx, this.grammar.vars[node.name]));
             case "metaref":
                 const metaName = node.name;
                 switch (metaName) {
@@ -449,9 +450,9 @@ export class OpcodeCompiler {
                         };
                     }
                 });
-                return (ictx, buf) => {
+                return this.compileAccess(cctx, node, (ictx, buf) => {
                     return elemBuilders.reduce((a,f) => f(ictx,buf,a), []);
-                }
+                });
             case "object":
                 const ret = {};
                 const objBuilders = node.members.map((member) => {
@@ -475,35 +476,35 @@ export class OpcodeCompiler {
                         }
                     }
                 });
-                return (ictx, buf) => objBuilders.reduce((o,f) => f(ictx,buf,o), {});        
+                return this.compileAccess(cctx, node, (ictx, buf) => objBuilders.reduce((o,f) => f(ictx,buf,o), {}));
             case "backref":
                 const index = node.index;
                 if (index == "0") {
-                    return (ictx, buf) => {
+                    return this.compileAccess(cctx, node, (ictx, buf) => {
                         return buf.substrExact(ictx.startPos, ictx.endPos - ictx.startPos);
-                    }
+                    });
                 } else {
                     if (cctx.currentRule.captures[index]) {
                         if (node.collapse) {
-                            return (ictx, buf) => {
+                            return this.compileAccess(cctx, node, (ictx, buf) => {
                                 return ictx.captures.reduce((ret, cap) => {
                                     if (cap.index == index && cap.value !== null) ret.push(cap.value);
                                     return ret;
                                 }, []);
-                            }
+                            });
                         } else {
-                            return (ictx, buf) => {
+                            return this.compileAccess(cctx, node, (ictx, buf) => {
                                 return ictx.captures.reduce((ret, cap) => {
                                     if (cap.index == index) ret.push(cap.value);
                                     return ret;
                                 }, [])
-                            }
+                            });
                         }
                     } else {
-                        return (ictx, buf) => {
+                        return this.compileAccess(cctx, node, (ictx, buf) => {
                             let cap = ictx.captures.find((cap) => cap.index == index);
                             return cap ? cap.value : null;
-                        }
+                        });
                     }
                 }
             case "call":
@@ -540,5 +541,42 @@ export class OpcodeCompiler {
             default:
                 throw new Error("not implemented");
         }
+    }
+
+    compileAccess(cctx:CompilerContext, node:ValueNode, builder:ValueBuilder):ValueBuilder {
+        if (node.access) for (let prop of node.access) {
+            builder = ((prevBuilder:ValueBuilder, prop) => {
+                if (prop.value) {
+                    let indexBuilder = this.compileValueBuilder(cctx, prop.value);
+                    return (ictx, buf) => {
+                        let out = prevBuilder(ictx, buf);
+                        if (out == null || (typeof out != 'object' && typeof out != 'string')) {
+                            grammarError(ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                        }
+                        let index = indexBuilder(ictx, buf);
+                        if (typeof index != 'string' && typeof index != 'number') {
+                            grammarError(ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
+                        }
+                        if (!out.hasOwnProperty(index)) {
+                            grammarError(ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                        }
+                        return out[index];
+                    }
+                } else {
+                    return (ictx, buf) => {
+                        let out = prevBuilder(ictx, buf);
+                        if (out == null || (typeof out != 'object' && typeof out != 'string')) {
+                            grammarError(ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                        }
+                        let index = prop.name;
+                        if (!out.hasOwnProperty(index)) {
+                            grammarError(ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                        }
+                        return out[index];
+                    }
+                }
+            })(builder, prop);
+        }
+        return builder;
     }
 }
