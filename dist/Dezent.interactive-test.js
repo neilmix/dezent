@@ -52,4 +52,4 @@ global["expect"] = function (actual) {
         },
     };
 };
-require("./Parser.test");
+require("./Dezent.test");

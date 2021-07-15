@@ -26,10 +26,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const Interpreter_1 = require("./Interpreter");
 const OpcodeCompiler_1 = require("./OpcodeCompiler");
 const ParseBuffer_1 = require("./ParseBuffer");
-const Parser_1 = require("./Parser");
+const Dezent_1 = require("./Dezent");
 afterEach(() => Interpreter_1.Interpreter.debug = false);
 function parse(grammarText, text) {
-    let grammar = Parser_1.parseGrammar(grammarText, {});
+    let grammar = Dezent_1.parseGrammar(grammarText, {});
     let op = new OpcodeCompiler_1.OpcodeCompiler(grammar).compile();
     return new Interpreter_1.Interpreter(op, new ParseBuffer_1.ParseBuffer(text)).resume();
 }
@@ -47,6 +47,7 @@ test("basic execution", () => {
     expectParse("return . -> null;", "a").toBe(null);
     expectException("return . -> null;", "aa");
     expectParse("return . . . . -> $0;", "abcd").toBe("abcd");
+    expectException(" return 'a'* -> null;", "bb");
 });
 test("array output", () => {
     expectParse("return . -> [$0, $0];", "a").toEqual(["a", "a"]);

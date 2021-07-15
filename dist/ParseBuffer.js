@@ -24,7 +24,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ParseBuffer = exports.ParseBufferExhaustedError = void 0;
-const Parser_1 = require("./Parser");
+const Error_1 = require("./Error");
 exports.ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
 class ParseBuffer {
     constructor(textOrSize) {
@@ -59,7 +59,7 @@ class ParseBuffer {
     substr(startIdx, length) {
         startIdx -= this.offset;
         if (startIdx < 0) {
-            Parser_1.parserError(Parser_1.ErrorCode.InputFreed);
+            Error_1.parserError(Error_1.ErrorCode.InputFreed);
         }
         return this.text.substr(startIdx, length);
     }
@@ -81,7 +81,7 @@ class ParseBuffer {
             throw exports.ParseBufferExhaustedError;
         }
         else if (idx < 0) {
-            Parser_1.parserError(Parser_1.ErrorCode.InputFreed);
+            Error_1.parserError(Error_1.ErrorCode.InputFreed);
         }
         else {
             return this.text[idx];

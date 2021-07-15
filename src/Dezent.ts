@@ -23,9 +23,9 @@
  */
 
 
-import { parseGrammar, ParserOptions } from './Parser';
-
+import { parsingError, ErrorCode } from './Error';
 import { Grammar } from './Grammar';
+import { GrammarCompiler, findDezentGrammar } from './GrammarCompiler';
 import { ParseBuffer } from './ParseBuffer';
 import { OpcodeCompiler, Operation } from './OpcodeCompiler';
 import { Interpreter } from './Interpreter';
@@ -60,15 +60,16 @@ export type Callbacks = {
 export interface DezentOptions {
     minBufferSizeInMB?: number,
     callbacks?: Callbacks,
+    debugErrors?: boolean,
 }
 
 export class Dezent {
     private grammar:Grammar;
-    private options:ParserOptions;
+    private options:DezentOptions;
 
     error:DezentError|GrammarError|ParseError;
 
-    constructor(grammarStr:string, options?:ParserOptions) {
+    constructor(grammarStr:string, options?:DezentOptions) {
         this.options = fillOptions(options);
         this.grammar = parseGrammar(grammarStr, this.options);
         this.error = null;
@@ -92,10 +93,10 @@ export class Dezent {
 export class DezentStream {
     private opcode:Operation;
     private interpreter:Interpreter;
-    private options:ParserOptions;
+    private options:DezentOptions;
     private buffer:ParseBuffer;
 
-    constructor(grammar:string|Grammar, options?:ParserOptions) {
+    constructor(grammar:string|Grammar, options?:DezentOptions) {
         this.options = fillOptions(options);
         this.buffer = new ParseBuffer(this.options.minBufferSizeInMB);
         grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
@@ -120,4 +121,27 @@ function fillOptions(options?:DezentOptions):DezentOptions {
         minBufferSizeInMB: options.minBufferSizeInMB || 1,
         callbacks: options.callbacks || {},
     };
+}
+
+
+
+let dezentOpcode:Operation;
+
+export function parseGrammar(text:string, options:DezentOptions) : Grammar {
+    if (!dezentOpcode) {
+        dezentOpcode = new OpcodeCompiler(findDezentGrammar()).compile();
+    }
+    let buf = new ParseBuffer(text);
+    let interpreter = new Interpreter(dezentOpcode, new ParseBuffer(text));
+    try {
+        let grammar = interpreter.resume();    
+        GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
+        return grammar;
+    } catch(e) {
+        if (e["code"] == ErrorCode.TextParsingError) {
+            parsingError(ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
+        } else {
+            throw e;
+        }
+    }
 }

@@ -24,7 +24,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Interpreter = exports.Context = exports.WaitInput = exports.Fail = exports.Pass = exports.Run = void 0;
-const Parser_1 = require("./Parser");
+const Error_1 = require("./Error");
 exports.Run = -1;
 exports.Pass = -2;
 exports.Fail = -3;
@@ -95,13 +95,13 @@ class Interpreter {
         }
         switch (ctx.status) {
             case exports.Pass:
+                if (ctx.endPos < buf.length) {
+                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
+                }
                 if (!buf.closed) {
                     this.resumeOp = op;
                     ctx.status = exports.WaitInput;
                     return;
-                }
-                if (ctx.endPos < buf.length) {
-                    Parser_1.parsingError(Parser_1.ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
                 }
                 return ctx.output;
             case exports.Fail:
@@ -110,7 +110,7 @@ class Interpreter {
                 this.resumeOp = op;
                 return;
             default:
-                Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
+                Error_1.parserError(Error_1.ErrorCode.Unreachable);
         }
     }
 }

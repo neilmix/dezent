@@ -24,19 +24,14 @@
 
 
 import { 
-    ErrorCode, errorMessages
-} from './Parser';
-
-import {
-    ParseBuffer
-} from './ParseBuffer';
-
-import { 
     Grammar, GrammarVersion, Node, SelectorNode, Meta, RulesetNode, RuleNode, TokenNode, PatternNode, 
-    RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode, BackRefNode, CaptureNode,
+    RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode, CaptureNode,
+    createUncompiledDezentGrammar,
+    StringTextNode,
+    EscapeNode
 } from './Grammar';
 
-import { buildString } from './Output';
+import { ErrorCode, grammarError, parserError } from './Error';
 import { Callbacks } from './Dezent';
 
 export class GrammarCompiler {
@@ -311,23 +306,30 @@ function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
     }
 }
 
-export function grammarError(code:ErrorCode, text?:string, meta?:Meta, ...args:string[]) {
-    let reason = errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index-1]);
-    let msg = `Grammar error ${code}: ${reason}`;
-    let info;
-    if (text && meta) {
-        info = new ParseBuffer(text).findLineAndChar(meta.pos);
-        msg = `${msg}\nAt line ${info.line} char ${info.char}:\n${info.lineText}\n${info.pointerText}\n`;
+export function buildString(node:StringNode) {
+    return node.tokens.map((node:StringTextNode|EscapeNode) => {
+        if (node.type == "text") {
+            return node.value;
+        } else if (node.value[0] == 'u') {
+            return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
+        } else if(node.value.length > 1) {
+            parserError(ErrorCode.Unreachable);
+        } else if ("bfnrt".indexOf(node.value) >= 0) {
+            return ({ b:'\b', f:'\f', n:'\n', r:'\r', t:'\t' })[node.value];
+        } else {
+            return node.value;
+        }
+    }).join("")
+}
+
+let dezentGrammar:Grammar;
+
+export function findDezentGrammar() : Grammar{
+    if (!dezentGrammar) {
+        dezentGrammar = createUncompiledDezentGrammar();
+        GrammarCompiler.compileGrammar(dezentGrammar);
     }
-    let e = new Error(msg);
-    e["code"] = code;
-    if (info) {
-        e["pos"] = meta.pos;
-        e["line"] = info.line;
-        e["char"] = info.char;
-        e["lineText"] = info.lineText;
-        e["pointerText"] = info.pointerText;
-        e["reason"] = reason;
-    }
-    throw e;
-}    
+    return dezentGrammar;
+}
+
+

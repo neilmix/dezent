@@ -23,15 +23,16 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DezentStream = exports.Dezent = void 0;
-const Parser_1 = require("./Parser");
+exports.parseGrammar = exports.DezentStream = exports.Dezent = void 0;
+const Error_1 = require("./Error");
+const GrammarCompiler_1 = require("./GrammarCompiler");
 const ParseBuffer_1 = require("./ParseBuffer");
 const OpcodeCompiler_1 = require("./OpcodeCompiler");
 const Interpreter_1 = require("./Interpreter");
 class Dezent {
     constructor(grammarStr, options) {
         this.options = fillOptions(options);
-        this.grammar = Parser_1.parseGrammar(grammarStr, this.options);
+        this.grammar = parseGrammar(grammarStr, this.options);
         this.error = null;
     }
     parse(text) {
@@ -54,7 +55,7 @@ class DezentStream {
     constructor(grammar, options) {
         this.options = fillOptions(options);
         this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSizeInMB);
-        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, this.options) : grammar;
+        grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
         this.opcode = new OpcodeCompiler_1.OpcodeCompiler(grammar).compile();
         this.interpreter = new Interpreter_1.Interpreter(this.opcode, this.buffer);
     }
@@ -75,3 +76,25 @@ function fillOptions(options) {
         callbacks: options.callbacks || {},
     };
 }
+let dezentOpcode;
+function parseGrammar(text, options) {
+    if (!dezentOpcode) {
+        dezentOpcode = new OpcodeCompiler_1.OpcodeCompiler(GrammarCompiler_1.findDezentGrammar()).compile();
+    }
+    let buf = new ParseBuffer_1.ParseBuffer(text);
+    let interpreter = new Interpreter_1.Interpreter(dezentOpcode, new ParseBuffer_1.ParseBuffer(text));
+    try {
+        let grammar = interpreter.resume();
+        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
+        return grammar;
+    }
+    catch (e) {
+        if (e["code"] == Error_1.ErrorCode.TextParsingError) {
+            Error_1.parsingError(Error_1.ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
+        }
+        else {
+            throw e;
+        }
+    }
+}
+exports.parseGrammar = parseGrammar;

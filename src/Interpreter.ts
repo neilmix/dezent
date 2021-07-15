@@ -24,7 +24,7 @@
 
 import { Operation } from "./OpcodeCompiler";
 import { ParseBuffer } from "./ParseBuffer";
-import { assert, ErrorCode, parserError, parsingError } from "./Parser";
+import { assert, ErrorCode, parserError, parsingError } from "./Error";
 
 export const Run = -1;
 export const Pass = -2;

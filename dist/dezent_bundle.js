@@ -24,15 +24,16 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DezentStream = exports.Dezent = void 0;
-const Parser_1 = require("./Parser");
+exports.parseGrammar = exports.DezentStream = exports.Dezent = void 0;
+const Error_1 = require("./Error");
+const GrammarCompiler_1 = require("./GrammarCompiler");
 const ParseBuffer_1 = require("./ParseBuffer");
 const OpcodeCompiler_1 = require("./OpcodeCompiler");
 const Interpreter_1 = require("./Interpreter");
 class Dezent {
     constructor(grammarStr, options) {
         this.options = fillOptions(options);
-        this.grammar = Parser_1.parseGrammar(grammarStr, this.options);
+        this.grammar = parseGrammar(grammarStr, this.options);
         this.error = null;
     }
     parse(text) {
@@ -55,7 +56,7 @@ class DezentStream {
     constructor(grammar, options) {
         this.options = fillOptions(options);
         this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSizeInMB);
-        grammar = typeof grammar == "string" ? Parser_1.parseGrammar(grammar, this.options) : grammar;
+        grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
         this.opcode = new OpcodeCompiler_1.OpcodeCompiler(grammar).compile();
         this.interpreter = new Interpreter_1.Interpreter(this.opcode, this.buffer);
     }
@@ -76,8 +77,176 @@ function fillOptions(options) {
         callbacks: options.callbacks || {},
     };
 }
+let dezentOpcode;
+function parseGrammar(text, options) {
+    if (!dezentOpcode) {
+        dezentOpcode = new OpcodeCompiler_1.OpcodeCompiler(GrammarCompiler_1.findDezentGrammar()).compile();
+    }
+    let buf = new ParseBuffer_1.ParseBuffer(text);
+    let interpreter = new Interpreter_1.Interpreter(dezentOpcode, new ParseBuffer_1.ParseBuffer(text));
+    try {
+        let grammar = interpreter.resume();
+        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
+        return grammar;
+    }
+    catch (e) {
+        if (e["code"] == Error_1.ErrorCode.TextParsingError) {
+            Error_1.parsingError(Error_1.ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
+        }
+        else {
+            throw e;
+        }
+    }
+}
+exports.parseGrammar = parseGrammar;
 
-},{"./Interpreter":4,"./OpcodeCompiler":5,"./ParseBuffer":7,"./Parser":8}],2:[function(require,module,exports){
+},{"./Error":2,"./GrammarCompiler":4,"./Interpreter":5,"./OpcodeCompiler":6,"./ParseBuffer":7}],2:[function(require,module,exports){
+"use strict";
+/*
+ * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
+ *
+ * Copyright (c) 2021 Neil Mix <neilmix@gmail.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.parsingError = exports.grammarError = exports.assert = exports.parserError = exports.errorMessages = exports.ErrorCode = void 0;
+const ParseBuffer_1 = require("./ParseBuffer");
+var ErrorCode;
+(function (ErrorCode) {
+    ErrorCode[ErrorCode["TextParsingError"] = 1] = "TextParsingError";
+    ErrorCode[ErrorCode["GrammarParsingError"] = 2] = "GrammarParsingError";
+    ErrorCode[ErrorCode["DuplicateDefine"] = 1001] = "DuplicateDefine";
+    ErrorCode[ErrorCode["MultipleReturn"] = 1002] = "MultipleReturn";
+    ErrorCode[ErrorCode["RuleNotFound"] = 1003] = "RuleNotFound";
+    ErrorCode[ErrorCode["InvalidSpread"] = 1004] = "InvalidSpread";
+    ErrorCode[ErrorCode["ReturnNotFound"] = 1005] = "ReturnNotFound";
+    ErrorCode[ErrorCode["CaptureCountMismatch"] = 1006] = "CaptureCountMismatch";
+    ErrorCode[ErrorCode["InvalidBackRef"] = 1007] = "InvalidBackRef";
+    ErrorCode[ErrorCode["InvalidConstRef"] = 1008] = "InvalidConstRef";
+    ErrorCode[ErrorCode["FunctionNotFound"] = 1009] = "FunctionNotFound";
+    ErrorCode[ErrorCode["CallbackError"] = 1010] = "CallbackError";
+    ErrorCode[ErrorCode["InvalidObjectTuple"] = 1011] = "InvalidObjectTuple";
+    ErrorCode[ErrorCode["InvalidAccessRoot"] = 1012] = "InvalidAccessRoot";
+    ErrorCode[ErrorCode["InvalidAccessIndex"] = 1013] = "InvalidAccessIndex";
+    ErrorCode[ErrorCode["InvalidAccessProperty"] = 1014] = "InvalidAccessProperty";
+    ErrorCode[ErrorCode["UnknownPragma"] = 1015] = "UnknownPragma";
+    ErrorCode[ErrorCode["ArrayOverrun"] = 2001] = "ArrayOverrun";
+    ErrorCode[ErrorCode["MismatchOutputFrames"] = 2002] = "MismatchOutputFrames";
+    ErrorCode[ErrorCode["CaptureAlreadyInProgress"] = 2003] = "CaptureAlreadyInProgress";
+    ErrorCode[ErrorCode["MismatchEndCapture"] = 2004] = "MismatchEndCapture";
+    ErrorCode[ErrorCode["EmptyOutput"] = 2005] = "EmptyOutput";
+    ErrorCode[ErrorCode["Unreachable"] = 2006] = "Unreachable";
+    ErrorCode[ErrorCode["BackRefNotFound"] = 2007] = "BackRefNotFound";
+    ErrorCode[ErrorCode["CaptureOutputNotFound"] = 2008] = "CaptureOutputNotFound";
+    ErrorCode[ErrorCode["InputConsumedBeforeResult"] = 2009] = "InputConsumedBeforeResult";
+    ErrorCode[ErrorCode["MultipleOutputsForCapture"] = 2010] = "MultipleOutputsForCapture";
+    ErrorCode[ErrorCode["AssertionFailure"] = 2011] = "AssertionFailure";
+    ErrorCode[ErrorCode["InputFreed"] = 2012] = "InputFreed";
+})(ErrorCode = exports.ErrorCode || (exports.ErrorCode = {}));
+exports.errorMessages = {
+    1: "Parse failed: $3\nAt line $1 char $2:\n$4\n$5",
+    2: "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5",
+    1001: "Multiple rules defined with the same name: $1",
+    1002: "Grammars are only allowed to have one return statement",
+    1003: "Grammar does not contain a rule named '$1'",
+    1004: "Spread argument is neither an array nor object: $1",
+    1005: "Grammar does not contain a return rule",
+    1006: "All options within a rule must have the same number of captures",
+    1007: "Invalid back reference: $$1",
+    1008: "Invalid variable reference: $$1",
+    1009: "Function not found: $1",
+    1010: "Error executing callback: $1",
+    1011: "When spreading an array into an object, array elements must be arrays of length 2 but instead received: $1",
+    1012: "Attempted to access property of non-object value: $1",
+    1013: "Attempted to access property using a key that was not a string or number: $1",
+    1014: "Attempted to access a property that doesn't exist: $1",
+    1015: "Unknown pragma: $1",
+    2001: "Array overrun",
+    2002: "Mismatched output frames",
+    2003: "Capture already in progress",
+    2004: "Mismatched ending capture",
+    2005: "Output frame did not contain an output token",
+    2006: "Should not be possible to reach this code",
+    2007: "Back reference does not exist",
+    2008: "No output was found during capture",
+    2009: "The result does not start at input index 0",
+    2010: "Multiple outputs were found for a non-repeating capture",
+    2011: "Assertion failed",
+    2012: "Input text was referenced (perhaps via $0?) but has already released to free memory. Try increasing minBufferSizeInMB.",
+};
+function parserError(code) {
+    let msg = exports.errorMessages[code];
+    let e = new Error(`Internal parser error ${code}: ${msg}`);
+    e["code"] = code;
+    throw e;
+}
+exports.parserError = parserError;
+function assert(condition) {
+    if (!condition) {
+        debugger;
+        parserError(ErrorCode.AssertionFailure);
+    }
+}
+exports.assert = assert;
+function grammarError(code, text, meta, ...args) {
+    let reason = exports.errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index - 1]);
+    let msg = `Grammar error ${code}: ${reason}`;
+    let info;
+    if (text && meta) {
+        info = new ParseBuffer_1.ParseBuffer(text).findLineAndChar(meta.pos);
+        msg = `${msg}\nAt line ${info.line} char ${info.char}:\n${info.lineText}\n${info.pointerText}\n`;
+    }
+    let e = new Error(msg);
+    e["code"] = code;
+    if (info) {
+        e["pos"] = meta.pos;
+        e["line"] = info.line;
+        e["char"] = info.char;
+        e["lineText"] = info.lineText;
+        e["pointerText"] = info.pointerText;
+        e["reason"] = reason;
+    }
+    throw e;
+}
+exports.grammarError = grammarError;
+function parsingError(code, buf, pos, expected) {
+    expected = expected.map((i) => i.replace(/\n/g, '\\n'));
+    let list = [].join.call(expected, '\n\t');
+    let reason = expected.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;
+    let info = buf.findLineAndChar(pos);
+    let backrefs = [null, info.line, info.char, reason, info.lineText, info.pointerText];
+    let msg = exports.errorMessages[code].replace(/\$([0-9])/g, (match, index) => String(backrefs[index]));
+    let e = new Error(msg);
+    e["code"] = code;
+    e["pos"] = pos;
+    e["line"] = info.line;
+    e["char"] = info.char;
+    e["lineText"] = info.lineText;
+    e["pointerText"] = info.pointerText;
+    e["reason"] = reason;
+    e["expected"] = expected;
+    throw e;
+}
+exports.parsingError = parsingError;
+
+},{"./ParseBuffer":7}],3:[function(require,module,exports){
 "use strict";
 /*
  * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
@@ -449,7 +618,7 @@ function output(value) {
     }
 }
 
-},{}],3:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 "use strict";
 /*
  * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
@@ -475,11 +644,9 @@ function output(value) {
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.grammarError = exports.GrammarCompiler = void 0;
-const Parser_1 = require("./Parser");
-const ParseBuffer_1 = require("./ParseBuffer");
+exports.findDezentGrammar = exports.buildString = exports.GrammarCompiler = void 0;
 const Grammar_1 = require("./Grammar");
-const Output_1 = require("./Output");
+const Error_1 = require("./Error");
 class GrammarCompiler {
     static compileGrammar(grammar, text, callbacks) {
         // compile and validate
@@ -518,10 +685,10 @@ class GrammarCompiler {
         for (let ruleset of grammar.ruleset) {
             if (rulesetLookup[ruleset.name]) {
                 if (ruleset.name == 'return') {
-                    grammarError(Parser_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
+                    Error_1.grammarError(Error_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
                 }
                 else {
-                    grammarError(Parser_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
+                    Error_1.grammarError(Error_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
                 }
             }
             rulesetLookup[ruleset.name] = ruleset;
@@ -541,7 +708,7 @@ class GrammarCompiler {
             // perform sanity checks
             visitParseNodes("ruleref", ruleset, null, null, (node) => {
                 if (!rulesetLookup[node.name]) {
-                    grammarError(Parser_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
+                    Error_1.grammarError(Error_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
                 }
             });
             // figure out if our selectors are capable of failing, which helps in
@@ -609,13 +776,13 @@ class GrammarCompiler {
                     info.repeats--;
             });
             if (lastCount > -1 && lastCount != info.captures.length) {
-                grammarError(Parser_1.ErrorCode.CaptureCountMismatch, text, rule.meta);
+                Error_1.grammarError(Error_1.ErrorCode.CaptureCountMismatch, text, rule.meta);
             }
             lastCount = info.captures.length;
             i++;
         } while (i < rule.patterns.length);
         visitParseNodes("string", rule, null, null, (node) => {
-            let matchString = Output_1.buildString(node);
+            let matchString = buildString(node);
             node.pattern = matchString;
             node.match = (buf, idx) => buf.containsAt(matchString, idx) ? [true, matchString.length] : [false, 0];
         });
@@ -674,13 +841,13 @@ class GrammarCompiler {
             }
             if (node.type == "constref") {
                 if (!vars[node.name]) {
-                    grammarError(Parser_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
+                    Error_1.grammarError(Error_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
         });
         for (let i = 1; i < info.backrefs.length; i++) {
             if (info.backrefs[i].index >= info.captures.length) {
-                grammarError(Parser_1.ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
+                Error_1.grammarError(Error_1.ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
             }
         }
         return info.captures;
@@ -741,29 +908,37 @@ function visitOutputNodes(node, data, f) {
         }
     }
 }
-function grammarError(code, text, meta, ...args) {
-    let reason = Parser_1.errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index - 1]);
-    let msg = `Grammar error ${code}: ${reason}`;
-    let info;
-    if (text && meta) {
-        info = new ParseBuffer_1.ParseBuffer(text).findLineAndChar(meta.pos);
-        msg = `${msg}\nAt line ${info.line} char ${info.char}:\n${info.lineText}\n${info.pointerText}\n`;
-    }
-    let e = new Error(msg);
-    e["code"] = code;
-    if (info) {
-        e["pos"] = meta.pos;
-        e["line"] = info.line;
-        e["char"] = info.char;
-        e["lineText"] = info.lineText;
-        e["pointerText"] = info.pointerText;
-        e["reason"] = reason;
-    }
-    throw e;
+function buildString(node) {
+    return node.tokens.map((node) => {
+        if (node.type == "text") {
+            return node.value;
+        }
+        else if (node.value[0] == 'u') {
+            return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
+        }
+        else if (node.value.length > 1) {
+            Error_1.parserError(Error_1.ErrorCode.Unreachable);
+        }
+        else if ("bfnrt".indexOf(node.value) >= 0) {
+            return ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[node.value];
+        }
+        else {
+            return node.value;
+        }
+    }).join("");
 }
-exports.grammarError = grammarError;
+exports.buildString = buildString;
+let dezentGrammar;
+function findDezentGrammar() {
+    if (!dezentGrammar) {
+        dezentGrammar = Grammar_1.createUncompiledDezentGrammar();
+        GrammarCompiler.compileGrammar(dezentGrammar);
+    }
+    return dezentGrammar;
+}
+exports.findDezentGrammar = findDezentGrammar;
 
-},{"./Grammar":2,"./Output":6,"./ParseBuffer":7,"./Parser":8}],4:[function(require,module,exports){
+},{"./Error":2,"./Grammar":3}],5:[function(require,module,exports){
 "use strict";
 /*
  * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
@@ -790,7 +965,7 @@ exports.grammarError = grammarError;
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Interpreter = exports.Context = exports.WaitInput = exports.Fail = exports.Pass = exports.Run = void 0;
-const Parser_1 = require("./Parser");
+const Error_1 = require("./Error");
 exports.Run = -1;
 exports.Pass = -2;
 exports.Fail = -3;
@@ -861,13 +1036,13 @@ class Interpreter {
         }
         switch (ctx.status) {
             case exports.Pass:
+                if (ctx.endPos < buf.length) {
+                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
+                }
                 if (!buf.closed) {
                     this.resumeOp = op;
                     ctx.status = exports.WaitInput;
                     return;
-                }
-                if (ctx.endPos < buf.length) {
-                    Parser_1.parsingError(Parser_1.ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
                 }
                 return ctx.output;
             case exports.Fail:
@@ -876,14 +1051,14 @@ class Interpreter {
                 this.resumeOp = op;
                 return;
             default:
-                Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
+                Error_1.parserError(Error_1.ErrorCode.Unreachable);
         }
     }
 }
 exports.Interpreter = Interpreter;
 Interpreter.debug = false;
 
-},{"./Parser":8}],5:[function(require,module,exports){
+},{"./Error":2}],6:[function(require,module,exports){
 "use strict";
 /*
  * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
@@ -910,9 +1085,8 @@ Interpreter.debug = false;
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpcodeCompiler = void 0;
-const GrammarCompiler_1 = require("./GrammarCompiler");
+const Error_1 = require("./Error");
 const Interpreter_1 = require("./Interpreter");
-const Parser_1 = require("./Parser");
 class CompilerContext {
     constructor() {
         this.activeRules = [];
@@ -1102,6 +1276,10 @@ class OpcodeCompiler {
                 // But, double-check our context iteration so that we don't conflict across parses.
                 let prevIteration = -1;
                 let prevPos = -1;
+                let leftRecursing = false;
+                let leftOutput = undefined;
+                let leftEndPos = 0;
+                let leftConsumed = 0;
                 // In order to detect left recursion we need access to prevPos (defined above) in our scope.
                 // But, pass and fail may be different for every invocation of a ruleref. So, we need to use
                 // factories to generator our op so that we retain prevPos in scope while generating a
@@ -1111,8 +1289,18 @@ class OpcodeCompiler {
                 if (!this.rulerefOpFactories[name]) {
                     this.rulerefOpFactories[name] = (pass, fail) => {
                         return this.audit(node, "run", (ictx, buf) => {
-                            if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
-                                throw `infinite loop detected / left recursion not yet implemented with ${node.name}:${ictx.startPos}`;
+                            if (leftRecursing) {
+                                ictx.output = leftOutput;
+                                ictx.endPos = leftEndPos;
+                                ictx.lastConsumed = leftConsumed;
+                                return pass;
+                            }
+                            else if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
+                                leftRecursing = true;
+                                leftOutput = undefined;
+                                leftEndPos = 0;
+                                leftConsumed = 0;
+                                return fail;
                             }
                             prevIteration = ictx.iteration;
                             prevPos = ictx.startPos;
@@ -1127,7 +1315,38 @@ class OpcodeCompiler {
                     // set a null value so that we don't get infinite compilation recursion in 
                     // the case where our rule calls itself
                     rulesetOps[name] = null;
-                    rulesetOps[name] = this.compileRuleset(cctx, this.grammar.rulesetLookup[name], this.audit(node, "pass", (ictx, buf) => { prevPos = -1; return ictx.popFrame().pass; }), this.audit(node, "fail", (ictx, buf) => { prevPos = -1; return ictx.popFrame().fail; }));
+                    rulesetOps[name] = this.compileRuleset(cctx, this.grammar.rulesetLookup[name], this.audit(node, "pass", (ictx, buf) => {
+                        if (leftRecursing) {
+                            if (ictx.lastConsumed > leftConsumed) {
+                                leftOutput = ictx.output;
+                                leftEndPos = ictx.endPos;
+                                leftConsumed = ictx.lastConsumed;
+                                return rulesetOps[name];
+                            }
+                            else {
+                                ictx.output = leftOutput;
+                                ictx.endPos = leftEndPos;
+                                ictx.lastConsumed = leftConsumed;
+                                leftRecursing = false;
+                                // fall through
+                            }
+                        }
+                        prevPos = -1;
+                        return ictx.popFrame().pass;
+                    }), this.audit(node, "fail", (ictx, buf) => {
+                        if (leftRecursing) {
+                            leftRecursing = false;
+                            ictx.output = leftOutput;
+                            ictx.endPos = leftEndPos;
+                            ictx.lastConsumed = leftConsumed;
+                            prevPos = -1;
+                            return ictx.popFrame().pass;
+                        }
+                        else {
+                            prevPos = -1;
+                            return ictx.popFrame().fail;
+                        }
+                    }));
                 }
                 return this.rulerefOpFactories[name](pass, fail);
             case "string":
@@ -1222,7 +1441,7 @@ class OpcodeCompiler {
                         return () => String.fromCharCode(Number(`0x${value.substr(1)}`));
                     }
                     else if (node.value.length > 1) {
-                        Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
+                        Error_1.parserError(Error_1.ErrorCode.Unreachable);
                     }
                     else if ("bfnrt".indexOf(value) >= 0) {
                         return () => ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[value];
@@ -1235,14 +1454,14 @@ class OpcodeCompiler {
                     return strBuilders.map((b) => b()).join('');
                 };
             case "constref":
-                return this.compileValueBuilder(cctx, this.grammar.vars[node.name]);
+                return this.compileAccess(cctx, node, this.compileValueBuilder(cctx, this.grammar.vars[node.name]));
             case "metaref":
                 const metaName = node.name;
                 switch (metaName) {
                     case "position": return (ictx, buf) => ictx.startPos;
                     case "length": return (ictx, buf) => ictx.endPos - ictx.startPos;
                     default:
-                        Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
+                        Error_1.parserError(Error_1.ErrorCode.Unreachable);
                         return null;
                 }
             case "array":
@@ -1267,9 +1486,9 @@ class OpcodeCompiler {
                         };
                     }
                 });
-                return (ictx, buf) => {
+                return this.compileAccess(cctx, node, (ictx, buf) => {
                     return elemBuilders.reduce((a, f) => f(ictx, buf, a), []);
-                };
+                });
             case "object":
                 const ret = {};
                 const objBuilders = node.members.map((member) => {
@@ -1278,7 +1497,7 @@ class OpcodeCompiler {
                         return (ictx, buf, retval) => {
                             return tupleBuilder(ictx, buf).reduce((o, tuple) => {
                                 if (!Array.isArray(tuple) || tuple.length != 2) {
-                                    GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
+                                    Error_1.grammarError(Error_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
                                 }
                                 o[tuple[0]] = tuple[1];
                                 return o;
@@ -1294,54 +1513,54 @@ class OpcodeCompiler {
                         };
                     }
                 });
-                return (ictx, buf) => objBuilders.reduce((o, f) => f(ictx, buf, o), {});
+                return this.compileAccess(cctx, node, (ictx, buf) => objBuilders.reduce((o, f) => f(ictx, buf, o), {}));
             case "backref":
                 const index = node.index;
                 if (index == "0") {
-                    return (ictx, buf) => {
+                    return this.compileAccess(cctx, node, (ictx, buf) => {
                         return buf.substrExact(ictx.startPos, ictx.endPos - ictx.startPos);
-                    };
+                    });
                 }
                 else {
                     if (cctx.currentRule.captures[index]) {
                         if (node.collapse) {
-                            return (ictx, buf) => {
+                            return this.compileAccess(cctx, node, (ictx, buf) => {
                                 return ictx.captures.reduce((ret, cap) => {
                                     if (cap.index == index && cap.value !== null)
                                         ret.push(cap.value);
                                     return ret;
                                 }, []);
-                            };
+                            });
                         }
                         else {
-                            return (ictx, buf) => {
+                            return this.compileAccess(cctx, node, (ictx, buf) => {
                                 return ictx.captures.reduce((ret, cap) => {
                                     if (cap.index == index)
                                         ret.push(cap.value);
                                     return ret;
                                 }, []);
-                            };
+                            });
                         }
                     }
                     else {
-                        return (ictx, buf) => {
+                        return this.compileAccess(cctx, node, (ictx, buf) => {
                             let cap = ictx.captures.find((cap) => cap.index == index);
                             return cap ? cap.value : null;
-                        };
+                        });
                     }
                 }
             case "call":
                 const callback = this.grammar.callbacks[node.name];
                 const argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
                 if (!callback) {
-                    GrammarCompiler_1.grammarError(Parser_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
+                    Error_1.grammarError(Error_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
                 }
                 return (ictx, buf) => {
                     try {
                         return callback.apply(null, argBuilders.map((arg) => arg(ictx, buf)));
                     }
                     catch (e) {
-                        GrammarCompiler_1.grammarError(Parser_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
+                        Error_1.grammarError(Error_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
                     }
                 };
             case "spread":
@@ -1349,7 +1568,7 @@ class OpcodeCompiler {
                 return (ictx, buf) => {
                     const value = spreader(ictx, buf);
                     if (value === null || value === undefined || (typeof value != 'object' && typeof value != 'string')) {
-                        GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
+                        Error_1.grammarError(Error_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
                     }
                     if (Array.isArray(value)) {
                         return value;
@@ -1365,249 +1584,48 @@ class OpcodeCompiler {
                 throw new Error("not implemented");
         }
     }
+    compileAccess(cctx, node, builder) {
+        if (node.access)
+            for (let prop of node.access) {
+                builder = ((prevBuilder, prop) => {
+                    if (prop.value) {
+                        let indexBuilder = this.compileValueBuilder(cctx, prop.value);
+                        return (ictx, buf) => {
+                            let out = prevBuilder(ictx, buf);
+                            if (out == null || (typeof out != 'object' && typeof out != 'string')) {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                            }
+                            let index = indexBuilder(ictx, buf);
+                            if (typeof index != 'string' && typeof index != 'number') {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
+                            }
+                            if (!out.hasOwnProperty(index)) {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                            }
+                            return out[index];
+                        };
+                    }
+                    else {
+                        return (ictx, buf) => {
+                            let out = prevBuilder(ictx, buf);
+                            if (out == null || (typeof out != 'object' && typeof out != 'string')) {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                            }
+                            let index = prop.name;
+                            if (!out.hasOwnProperty(index)) {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                            }
+                            return out[index];
+                        };
+                    }
+                })(builder, prop);
+            }
+        return builder;
+    }
 }
 exports.OpcodeCompiler = OpcodeCompiler;
 
-},{"./GrammarCompiler":3,"./Interpreter":4,"./Parser":8}],6:[function(require,module,exports){
-"use strict";
-/*
- * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
- *
- * Copyright (c) 2021 Neil Mix <neilmix@gmail.com>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildString = exports.ValueBuilder = void 0;
-const Parser_1 = require("./Parser");
-const GrammarCompiler_1 = require("./GrammarCompiler");
-let defaultCallbacks = {
-    pivot: (value) => {
-        if (!Array.isArray(value)) {
-            throw new Error("Invalid pivot argment: " + value);
-        }
-        value.map((item) => {
-            if (!Array.isArray(item)) {
-                throw new Error("Invalid pivot argument: " + JSON.stringify(item));
-            }
-            if (item.length != value[0].length) {
-                throw new Error("All subarrays in a pivot must be of the same length");
-            }
-        });
-        let ret = [];
-        for (let item of value[0]) {
-            ret.push([]);
-        }
-        for (let i = 0; i < value.length; i++) {
-            for (let j = 0; j < value[0].length; j++) {
-                ret[j][i] = value[i][j];
-            }
-        }
-        return ret;
-    }
-};
-class ValueBuilder {
-    constructor(grammar, callbacks) {
-        this.grammar = grammar;
-        this.callbacks = callbacks || {};
-    }
-    buildValue(frame) {
-        let rule = frame.ruleset.rules[frame.ruleIndex];
-        let captureValues = rule.captures.map((b) => b === true ? [] : null);
-        if (frame.captures)
-            for (let capture of frame.captures) {
-                Parser_1.assert(capture.captureIndex !== undefined);
-                Parser_1.assert(capture.captureIndex < rule.captures.length);
-                if (rule.captures[capture.captureIndex]) {
-                    // the capture is an array due to token repetition
-                    if (!captureValues[capture.captureIndex]) {
-                        captureValues[capture.captureIndex] = [];
-                    }
-                    captureValues[capture.captureIndex].push(capture.value);
-                    // This is a hack. A backref that is configured to collapse
-                    // empty results (e.g. $1?) is unable to distinguish between
-                    // an array generated via token repetition vs an array returned
-                    // as output from a rule. So we bolt on a little info here to
-                    // help out the backref processing later. We'll make this non-enumerable 
-                    // so that our tests don't freak out about this extra property.
-                    Object.defineProperty(captureValues[capture.captureIndex], "repeated", { configurable: true, enumerable: false, value: true });
-                }
-                else {
-                    // this is a solo capture
-                    Parser_1.assert(captureValues[capture.captureIndex] === null);
-                    captureValues[capture.captureIndex] = capture.value;
-                }
-            }
-        return this.value(rule.value, captureValues, { position: frame.pos, length: frame.consumed });
-    }
-    value(node, captureValues, metas) {
-        let out = this[node.type](node, captureValues, metas);
-        if (node.access)
-            for (let prop of node.access) {
-                if (out == null || (typeof out != 'object' && typeof out != 'string')) {
-                    GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
-                }
-                let index;
-                if (prop.value) {
-                    index = this.value(prop.value, captureValues, metas);
-                    if (typeof index != 'string' && typeof index != 'number') {
-                        GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
-                    }
-                }
-                else {
-                    index = prop.name;
-                }
-                if (!out.hasOwnProperty(index)) {
-                    GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
-                }
-                out = out[index];
-            }
-        return out;
-    }
-    backref(node, captures) {
-        let cap = captures[node.index];
-        // n.b. the "repeated" property is added dynamically above
-        if (node.collapse && Array.isArray(cap) && cap["repeated"]) {
-            let ret = [];
-            for (let item of cap) {
-                if (item != null) {
-                    ret.push(item);
-                }
-            }
-            return ret;
-        }
-        else {
-            return cap;
-        }
-    }
-    constref(node, captures, metas) {
-        let resolved = this.grammar.vars[node.name];
-        return this.value(resolved, captures, metas);
-    }
-    metaref(node, captures, metas) {
-        return metas[node.name];
-    }
-    spread(node, captures, metas) {
-        let value = this.value(node.value, captures, metas);
-        if (!value || (typeof value != 'object' && typeof value != 'string')) {
-            GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
-        }
-        if (typeof value == "string") {
-            return value.split('');
-        }
-        else if (Array.isArray(value)) {
-            return value;
-        }
-        else {
-            return Object.entries(value);
-        }
-    }
-    object(node, captures, metas) {
-        let ret = {};
-        for (let member of node.members) {
-            if (member.type == "spread") {
-                let tuples = this.value(member, captures, metas);
-                for (let tuple of tuples) {
-                    if (!Array.isArray(tuple) || tuple.length != 2) {
-                        GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
-                    }
-                    ret[tuple[0]] = tuple[1];
-                }
-            }
-            else {
-                ret[this.value(member.name, captures, metas)]
-                    = this.value(member.value, captures, metas);
-            }
-        }
-        return ret;
-    }
-    array(node, captures, metas) {
-        let ret = [];
-        for (let elem of node.elements) {
-            if (elem.type == "spread") {
-                ret = ret.concat(this.value(elem, captures, metas));
-            }
-            else {
-                let val = this.value(elem, captures, metas);
-                if (elem.type != "backref" || !elem.collapse || val !== null) {
-                    ret.push(val);
-                }
-            }
-        }
-        return ret;
-    }
-    call(node, captures, metas) {
-        let argVals = [];
-        for (let arg of node.args) {
-            argVals.push(this.value(arg, captures, metas));
-        }
-        let caller = this.callbacks[node.name];
-        if (!caller)
-            caller = defaultCallbacks[node.name];
-        if (!caller) {
-            GrammarCompiler_1.grammarError(Parser_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
-        }
-        else {
-            try {
-                return caller.apply(null, argVals);
-            }
-            catch (e) {
-                GrammarCompiler_1.grammarError(Parser_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
-            }
-        }
-    }
-    string(node) {
-        return buildString(node);
-    }
-    number(node) {
-        return Number(node.value);
-    }
-    boolean(node) {
-        return node.value;
-    }
-    null() {
-        return null;
-    }
-}
-exports.ValueBuilder = ValueBuilder;
-function buildString(node) {
-    return node.tokens.map((node) => {
-        if (node.type == "text") {
-            return node.value;
-        }
-        else if (node.value[0] == 'u') {
-            return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
-        }
-        else if (node.value.length > 1) {
-            Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
-        }
-        else if ("bfnrt".indexOf(node.value) >= 0) {
-            return ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[node.value];
-        }
-        else {
-            return node.value;
-        }
-    }).join("");
-}
-exports.buildString = buildString;
-
-},{"./GrammarCompiler":3,"./Parser":8}],7:[function(require,module,exports){
+},{"./Error":2,"./Interpreter":5}],7:[function(require,module,exports){
 "use strict";
 /*
  * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
@@ -1634,7 +1652,7 @@ exports.buildString = buildString;
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ParseBuffer = exports.ParseBufferExhaustedError = void 0;
-const Parser_1 = require("./Parser");
+const Error_1 = require("./Error");
 exports.ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
 class ParseBuffer {
     constructor(textOrSize) {
@@ -1669,7 +1687,7 @@ class ParseBuffer {
     substr(startIdx, length) {
         startIdx -= this.offset;
         if (startIdx < 0) {
-            Parser_1.parserError(Parser_1.ErrorCode.InputFreed);
+            Error_1.parserError(Error_1.ErrorCode.InputFreed);
         }
         return this.text.substr(startIdx, length);
     }
@@ -1691,7 +1709,7 @@ class ParseBuffer {
             throw exports.ParseBufferExhaustedError;
         }
         else if (idx < 0) {
-            Parser_1.parserError(Parser_1.ErrorCode.InputFreed);
+            Error_1.parserError(Error_1.ErrorCode.InputFreed);
         }
         else {
             return this.text[idx];
@@ -1738,587 +1756,10 @@ class ParseBuffer {
 }
 exports.ParseBuffer = ParseBuffer;
 
-},{"./Parser":8}],8:[function(require,module,exports){
-"use strict";
-/*
- * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.
- *
- * Copyright (c) 2021 Neil Mix <neilmix@gmail.com>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.parsingError = exports.assert = exports.parserError = exports.Parser = exports.lastParser = exports.parseGrammar = exports.findDezentGrammar = exports.BufferEmpty = exports.errorMessages = exports.ErrorCode = void 0;
-const Grammar_1 = require("./Grammar");
-const ParseBuffer_1 = require("./ParseBuffer");
-const GrammarCompiler_1 = require("./GrammarCompiler");
-const Output_1 = require("./Output");
-var ErrorCode;
-(function (ErrorCode) {
-    ErrorCode[ErrorCode["TextParsingError"] = 1] = "TextParsingError";
-    ErrorCode[ErrorCode["GrammarParsingError"] = 2] = "GrammarParsingError";
-    ErrorCode[ErrorCode["DuplicateDefine"] = 1001] = "DuplicateDefine";
-    ErrorCode[ErrorCode["MultipleReturn"] = 1002] = "MultipleReturn";
-    ErrorCode[ErrorCode["RuleNotFound"] = 1003] = "RuleNotFound";
-    ErrorCode[ErrorCode["InvalidSpread"] = 1004] = "InvalidSpread";
-    ErrorCode[ErrorCode["ReturnNotFound"] = 1005] = "ReturnNotFound";
-    ErrorCode[ErrorCode["CaptureCountMismatch"] = 1006] = "CaptureCountMismatch";
-    ErrorCode[ErrorCode["InvalidBackRef"] = 1007] = "InvalidBackRef";
-    ErrorCode[ErrorCode["InvalidConstRef"] = 1008] = "InvalidConstRef";
-    ErrorCode[ErrorCode["FunctionNotFound"] = 1009] = "FunctionNotFound";
-    ErrorCode[ErrorCode["CallbackError"] = 1010] = "CallbackError";
-    ErrorCode[ErrorCode["InvalidObjectTuple"] = 1011] = "InvalidObjectTuple";
-    ErrorCode[ErrorCode["InvalidAccessRoot"] = 1012] = "InvalidAccessRoot";
-    ErrorCode[ErrorCode["InvalidAccessIndex"] = 1013] = "InvalidAccessIndex";
-    ErrorCode[ErrorCode["InvalidAccessProperty"] = 1014] = "InvalidAccessProperty";
-    ErrorCode[ErrorCode["UnknownPragma"] = 1015] = "UnknownPragma";
-    ErrorCode[ErrorCode["ArrayOverrun"] = 2001] = "ArrayOverrun";
-    ErrorCode[ErrorCode["MismatchOutputFrames"] = 2002] = "MismatchOutputFrames";
-    ErrorCode[ErrorCode["CaptureAlreadyInProgress"] = 2003] = "CaptureAlreadyInProgress";
-    ErrorCode[ErrorCode["MismatchEndCapture"] = 2004] = "MismatchEndCapture";
-    ErrorCode[ErrorCode["EmptyOutput"] = 2005] = "EmptyOutput";
-    ErrorCode[ErrorCode["Unreachable"] = 2006] = "Unreachable";
-    ErrorCode[ErrorCode["BackRefNotFound"] = 2007] = "BackRefNotFound";
-    ErrorCode[ErrorCode["CaptureOutputNotFound"] = 2008] = "CaptureOutputNotFound";
-    ErrorCode[ErrorCode["InputConsumedBeforeResult"] = 2009] = "InputConsumedBeforeResult";
-    ErrorCode[ErrorCode["MultipleOutputsForCapture"] = 2010] = "MultipleOutputsForCapture";
-    ErrorCode[ErrorCode["AssertionFailure"] = 2011] = "AssertionFailure";
-    ErrorCode[ErrorCode["InputFreed"] = 2012] = "InputFreed";
-})(ErrorCode = exports.ErrorCode || (exports.ErrorCode = {}));
-exports.errorMessages = {
-    1: "Parse failed: $3\nAt line $1 char $2:\n$4\n$5",
-    2: "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5",
-    1001: "Multiple rules defined with the same name: $1",
-    1002: "Grammars are only allowed to have one return statement",
-    1003: "Grammar does not contain a rule named '$1'",
-    1004: "Spread argument is neither an array nor object: $1",
-    1005: "Grammar does not contain a return rule",
-    1006: "All options within a rule must have the same number of captures",
-    1007: "Invalid back reference: $$1",
-    1008: "Invalid variable reference: $$1",
-    1009: "Function not found: $1",
-    1010: "Error executing callback: $1",
-    1011: "When spreading an array into an object, array elements must be arrays of length 2 but instead received: $1",
-    1012: "Attempted to access property of non-object value: $1",
-    1013: "Attempted to access property using a key that was not a string or number: $1",
-    1014: "Attempted to access a property that doesn't exist: $1",
-    1015: "Unknown pragma: $1",
-    2001: "Array overrun",
-    2002: "Mismatched output frames",
-    2003: "Capture already in progress",
-    2004: "Mismatched ending capture",
-    2005: "Output frame did not contain an output token",
-    2006: "Should not be possible to reach this code",
-    2007: "Back reference does not exist",
-    2008: "No output was found during capture",
-    2009: "The result does not start at input index 0",
-    2010: "Multiple outputs were found for a non-repeating capture",
-    2011: "Assertion failed",
-    2012: "Input text was referenced (perhaps via $0?) but has already released to free memory. Try increasing minBufferSizeInMB.",
-};
-exports.BufferEmpty = { toString: () => "BufferEmpty" };
-let dezentGrammar;
-function findDezentGrammar() {
-    if (!dezentGrammar) {
-        dezentGrammar = Grammar_1.createUncompiledDezentGrammar();
-        GrammarCompiler_1.GrammarCompiler.compileGrammar(dezentGrammar);
-    }
-    return dezentGrammar;
-}
-exports.findDezentGrammar = findDezentGrammar;
-function parseGrammar(text, options) {
-    let buf = new ParseBuffer_1.ParseBuffer(text);
-    let parser = new Parser(findDezentGrammar(), buf, options);
-    try {
-        let grammar = parser.parse();
-        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
-        return grammar;
-    }
-    catch (e) {
-        parser.dumpDebug();
-        if (e["code"] == ErrorCode.TextParsingError) {
-            parsingError(ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
-        }
-        else {
-            throw e;
-        }
-    }
-}
-exports.parseGrammar = parseGrammar;
-exports.lastParser = null; // for testing purposes
-class Parser {
-    constructor(grammar, buffer, options) {
-        this.omitFails = 0;
-        this.debugLog = [];
-        this.errorPos = 0;
-        this.failedPatterns = [];
-        this.frameStack = [];
-        exports.lastParser = this;
-        this.grammar = grammar;
-        let root;
-        for (let ruleset of grammar.ruleset) {
-            if (ruleset.name == 'return') {
-                root = ruleset;
-            }
-        }
-        if (!root) {
-            GrammarCompiler_1.grammarError(ErrorCode.ReturnNotFound, grammar.text);
-        }
-        this.root = root;
-        this.buffer = buffer;
-        this.rulesets = grammar.rulesetLookup;
-        this.options = {};
-        for (let pragma in grammar.pragmas) {
-            GrammarCompiler_1.grammarError(ErrorCode.UnknownPragma, pragma);
-            this.options[pragma] = grammar.pragmas[pragma];
-        }
-        for (let option in options) {
-            this.options[option] = options[option];
-        }
-        this.valueBuilder = new Output_1.ValueBuilder(grammar, this.options.callbacks);
-        this.callFrame(null, root);
-    }
-    run() {
-        CURRENT: while (true) {
-            let current = this.frameStack[this.frameStack.length - 1];
-            if (current.complete) {
-                if (this.frameStack.length == 1) {
-                    // our parsing is complete
-                    // in the case of streaming, if we get a parse error we want to bail
-                    // before close, i.e. as soon as the parse error happens. So do this
-                    // check prior to checking for BufferEmpty.
-                    if (!current.matched) {
-                        parsingError(ErrorCode.TextParsingError, this.buffer, this.errorPos, this.expectedTerminals());
-                    }
-                    if (!this.buffer.closed) {
-                        if (current.consumed == this.buffer.length) {
-                            // give our upstream caller a chance to close() the buffer
-                            return exports.BufferEmpty;
-                        }
-                        else {
-                            parsingError(ErrorCode.TextParsingError, this.buffer, this.errorPos, this.expectedTerminals());
-                        }
-                    }
-                    if (current.pos != 0) {
-                        parserError(ErrorCode.InputConsumedBeforeResult);
-                    }
-                    if (!current.output) {
-                        parserError(ErrorCode.EmptyOutput);
-                    }
-                    if (current.output.length < this.buffer.length) {
-                        parsingError(ErrorCode.TextParsingError, this.buffer, this.errorPos, this.expectedTerminals());
-                    }
-                    if (current.output.length > this.buffer.length) {
-                        parsingError(ErrorCode.TextParsingError, this.buffer, this.errorPos, ["<EOF>"]);
-                    }
-                    if (this.options.dumpDebug) {
-                        this.dumpDebug();
-                    }
-                    return current.output.value;
-                }
-                if (this.options.debugErrors) {
-                    this.debugLog.push([
-                        current.matched ? 'PASS ' : 'FAIL ',
-                        this.buffer.substr(current.pos, 20),
-                        current.ruleset ? current.ruleset.name : current.selector.type,
-                        JSON.stringify(current.ruleset ? current.output : current.captures)
-                    ]);
-                }
-                this.frameStack.pop();
-                continue CURRENT;
-            }
-            let matched = false, consumed = 0;
-            do {
-                let callee;
-                let consumedPos = current.pos + current.consumed;
-                let descriptor = current.token.descriptor;
-                if (descriptor.match) {
-                    try {
-                        [matched, consumed] = descriptor.match(this.buffer, consumedPos);
-                    }
-                    catch (e) {
-                        if (this.buffer.closed && e == ParseBuffer_1.ParseBufferExhaustedError) {
-                            [matched, consumed] = [false, 0];
-                        }
-                        else if (e == ParseBuffer_1.ParseBufferExhaustedError) {
-                            return exports.BufferEmpty;
-                        }
-                        else {
-                            throw e;
-                        }
-                    }
-                }
-                else if (!current.callee) {
-                    let calleeNode = (descriptor.type == "ruleref" ? this.rulesets[descriptor.name] : descriptor);
-                    this.callFrame(current, calleeNode);
-                    if (!calleeNode.canFail) {
-                        this.omitFails++;
-                    }
-                    continue CURRENT;
-                }
-                else {
-                    callee = current.callee;
-                    current.callee = null;
-                    matched = callee.matched;
-                    consumed = callee.consumed;
-                    if ((callee.ruleset && !callee.ruleset.canFail) || (callee.selector && !callee.selector.canFail)) {
-                        this.omitFails--;
-                    }
-                }
-                // see notes on left recursion toward the beginning of this file
-                if (current.leftRecursing) {
-                    // it's possible to get a match without consuming more input than previous
-                    // recursion attempts, so make sure there's increased consumption, too.
-                    if (matched && (current.leftReturn == null || consumed > current.leftReturn.consumed)) {
-                        // stow away our returning callee for later use in the next recursion iteration
-                        current.leftReturn = callee;
-                    }
-                    else {
-                        // at this point our left recursion is failing to consume more input,
-                        // time to wrap things up
-                        current.complete = true;
-                        if (current.leftReturn) {
-                            // we found the largest match for this recursing rule on a previous iteration.
-                            // use that as the return value for this frame.
-                            current.matched = true;
-                            current.consumed = current.leftReturn.consumed;
-                            current.output = current.leftReturn.output;
-                        }
-                    }
-                    continue CURRENT;
-                }
-                if (current.token.and || current.token.not) {
-                    matched = (current.token.and && matched) || (current.token.not && !matched);
-                    consumed = 0;
-                }
-                if (this.options.debugErrors && !callee) {
-                    this.debugLog.push([
-                        matched ? 'PASS ' : 'FAIL ',
-                        this.buffer.substr(consumedPos, 20),
-                        descriptor["pattern"]
-                    ]);
-                }
-                if (current.token.required && !matched
-                    // + modifiers repeat and are required, so we only fail when we haven't consumed...
-                    && consumedPos - current.tokenPos == 0) {
-                    // our token failed, therefore the pattern fails
-                    if (consumedPos >= this.errorPos && !this.omitFails && descriptor.pattern) {
-                        if (consumedPos > this.errorPos) {
-                            this.failedPatterns.length = 0;
-                            this.errorPos = consumedPos;
-                        }
-                        let pattern = descriptor.pattern;
-                        if (current.token.not)
-                            pattern = 'not: ' + pattern;
-                        this.failedPatterns.push(pattern);
-                    }
-                    current.consumed = 0;
-                    if (++current.patternIndex >= current.selector.patterns.length) {
-                        // no matching pattern - go to next rule if applicable, or fail if not
-                        if (current.ruleset) {
-                            this.nextRule(current);
-                        }
-                        else {
-                            current.complete = true;
-                        }
-                    }
-                    else {
-                        current.pattern = current.selector.patterns[current.patternIndex];
-                        current.tokenIndex = 0;
-                        current.token = current.pattern.tokens[0];
-                    }
-                    continue CURRENT;
-                }
-                if (matched) {
-                    current.consumed += consumed;
-                    if (current.selector.type == "capture") {
-                        if (callee && callee.output && callee.ruleset && current.pattern.tokens.length == 1) {
-                            // output has descended the stack to our capture - capture it
-                            // but only if it's the only node in this capture
-                            current.output = callee.output;
-                        }
-                    }
-                    else if (callee && callee.captures) {
-                        // captures need to descend the stack
-                        if (current.captures) {
-                            current.captures = current.captures.concat(callee.captures);
-                        }
-                        else {
-                            current.captures = callee.captures;
-                        }
-                    }
-                }
-                else if (descriptor.type == "capture" && !current.token.required && !current.token.repeat) {
-                    // a failed non-required non-repeating capture should yield null
-                    let output = {
-                        captureIndex: descriptor.index,
-                        position: consumedPos,
-                        length: 0,
-                        value: null
-                    };
-                    if (current.captures) {
-                        current.captures.push(output);
-                    }
-                    else {
-                        current.captures = [output];
-                    }
-                }
-                // don't continue STACK here because a) we may be a repeating token
-                // and b) we need to increment tokenIndex below.
-            } while (matched && current.token.repeat && consumed > 0); // make sure we consumed to avoid infinite loops
-            if (++current.tokenIndex < current.pattern.tokens.length) {
-                current.token = current.pattern.tokens[current.tokenIndex];
-                current.tokenPos = current.pos + current.consumed;
-            }
-            else {
-                // we got through all tokens successfully - pass!
-                current.matched = true;
-                current.complete = true;
-                if (current.ruleset) {
-                    if (current.selector.hasBackref0) {
-                        // create a capture for $0 backref
-                        if (!current.captures)
-                            current.captures = [];
-                        current.captures.push({
-                            captureIndex: 0,
-                            position: current.pos,
-                            length: current.consumed,
-                            value: this.buffer.substr(current.pos, current.consumed),
-                        });
-                    }
-                    // always build the value so that output callbacks can be called
-                    // even if the grammar returns null
-                    let value = this.valueBuilder.buildValue(current);
-                    // prevent captures from continuing to descend
-                    current.captures = null;
-                    if (current.wantOutput || (current.ruleset && current.ruleset.name == "return")) {
-                        // our ruleset was called up the stack by a capture - create an output (which will descend the stack)
-                        current.output = {
-                            position: current.pos,
-                            length: current.consumed,
-                            value: value
-                        };
-                    }
-                }
-                else if (current.selector.type == "capture") {
-                    let output = current.output;
-                    if (!output) {
-                        // create a capture text segment - based on our current node, not the callee
-                        output = {
-                            position: current.pos,
-                            length: current.consumed,
-                            value: this.buffer.substr(current.pos, current.consumed),
-                        };
-                    }
-                    output.captureIndex = current.selector.index;
-                    if (current.captures) {
-                        current.captures.push(output);
-                    }
-                    else {
-                        current.captures = [output];
-                    }
-                }
-            }
-            continue CURRENT; // redundant; for clarity
-        }
-    }
-    expectedTerminals() {
-        let lookup = {};
-        let out = [];
-        for (let terminal of this.failedPatterns) {
-            if (!lookup[terminal]) {
-                out.push(terminal);
-                lookup[terminal] = true;
-            }
-        }
-        return out;
-    }
-    nextRule(frame) {
-        frame.ruleIndex++;
-        frame.selector = frame.ruleset.rules[frame.ruleIndex];
-        frame.callee = null;
-        if (!frame.selector) {
-            frame.complete = true;
-        }
-        else {
-            frame.patternIndex = 0;
-            frame.pattern = frame.selector.patterns[0];
-            frame.tokenIndex = 0;
-            frame.token = frame.pattern.tokens[0];
-            if (frame.captures)
-                frame.captures.length = 0;
-        }
-    }
-    parse() {
-        if (this.error) {
-            throw this.error;
-        }
-        try {
-            let result = this.run();
-            if (result == exports.BufferEmpty) {
-                assert(!this.buffer.closed);
-                return undefined;
-            }
-            else {
-                return result;
-            }
-        }
-        catch (e) {
-            assert(e != ParseBuffer_1.ParseBufferExhaustedError);
-            this.dumpDebug();
-            this.error = e;
-            throw e;
-        }
-    }
-    callFrame(current, callee) {
-        let pos = current ? current.pos + current.consumed : 0;
-        let recursed;
-        if (current && callee.type == "ruleset") {
-            for (let i = this.frameStack.length - 1; i >= 0; i--) {
-                let check = this.frameStack[i];
-                if (check.pos != current.pos) {
-                    break;
-                }
-                if (check.ruleset && check.ruleset.name == callee.name) {
-                    recursed = check;
-                    break;
-                }
-            }
-        }
-        let frame;
-        let secondFrame;
-        if (recursed) {
-            // left recursion detected - see notes near the top of this file
-            frame = Object.assign({}, recursed);
-            if (recursed.leftRecursing) {
-                // this is the second or later recursion iteration.
-                // set up the base frame's previous returning callee
-                // as our callee now so it can properly recurse.
-                frame.leftRecursing = false;
-                frame.callee = frame.leftReturn;
-                frame.leftReturn = null;
-                current.callee = frame;
-                this.frameStack.push(frame);
-                this.frameStack.push(secondFrame = frame.callee);
-            }
-            else {
-                // this is the first recursion iteration - get ourselves ready
-                // to work through multiple recursion iterations by marking our
-                // base frame as left recursing and advancing our new frame to
-                // avoid infinite loop.
-                this.nextRule(frame);
-                recursed.leftRecursing = true;
-                current.callee = frame;
-                this.frameStack.push(frame);
-            }
-        }
-        else if (!frame) {
-            let selector = callee.type == "ruleset" ? callee.rules[0] : callee;
-            let pattern = selector.patterns[0];
-            frame = {
-                matched: false,
-                complete: false,
-                ruleset: callee.type == "ruleset" ? callee : null,
-                ruleIndex: 0,
-                selector: selector,
-                patternIndex: 0,
-                pattern: pattern,
-                tokenIndex: 0,
-                token: pattern.tokens[0],
-                pos: pos,
-                tokenPos: pos,
-                consumed: 0,
-                callee: null,
-                wantOutput: current && (current.selector.type == "capture" || current.wantOutput),
-                output: null,
-                captures: null,
-                leftRecursing: false,
-                leftReturn: null,
-            };
-            if (current)
-                current.callee = frame;
-            this.frameStack.push(frame);
-        }
-        if (this.options.debugErrors) {
-            this.debugLog.push([
-                'enter',
-                this.buffer.substr(frame.pos, 20),
-                frame.ruleset ? frame.ruleset.name : frame.selector.type
-            ]);
-            if (secondFrame) {
-                this.debugLog.push([
-                    'enter',
-                    this.buffer.substr(secondFrame.pos, 20),
-                    secondFrame.ruleset ? secondFrame.ruleset.name : secondFrame.selector.type
-                ]);
-            }
-        }
-    }
-    dumpDebug() {
-        if (this.options.debugErrors) {
-            let lines = [];
-            for (let msg of this.debugLog) {
-                lines.push(msg.join('\t').replace(/\n/g, '\\n'));
-            }
-            console.log("Debug log:\n", lines.join("\n"));
-        }
-    }
-}
-exports.Parser = Parser;
-function parserError(code) {
-    let msg = exports.errorMessages[code];
-    let e = new Error(`Internal parser error ${code}: ${msg}`);
-    e["code"] = code;
-    throw e;
-}
-exports.parserError = parserError;
-function assert(condition) {
-    if (!condition) {
-        debugger;
-        parserError(ErrorCode.AssertionFailure);
-    }
-}
-exports.assert = assert;
-function parsingError(code, buf, pos, expected) {
-    expected = expected.map((i) => i.replace(/\n/g, '\\n'));
-    let list = [].join.call(expected, '\n\t');
-    let reason = expected.length == 1 ? `expected: ${list}` : `expected one of the following: \n\t${list}`;
-    let info = buf.findLineAndChar(pos);
-    let backrefs = [null, info.line, info.char, reason, info.lineText, info.pointerText];
-    let msg = exports.errorMessages[code].replace(/\$([0-9])/g, (match, index) => String(backrefs[index]));
-    let e = new Error(msg);
-    e["code"] = code;
-    e["pos"] = pos;
-    e["line"] = info.line;
-    e["char"] = info.char;
-    e["lineText"] = info.lineText;
-    e["pointerText"] = info.pointerText;
-    e["reason"] = reason;
-    e["expected"] = expected;
-    throw e;
-}
-exports.parsingError = parsingError;
-
-},{"./Grammar":2,"./GrammarCompiler":3,"./Output":6,"./ParseBuffer":7}],9:[function(require,module,exports){
+},{"./Error":2}],8:[function(require,module,exports){
 
 let mod = require("./Dezent");
 window.Dezent = mod.Dezent;
 window.DezentStream = mod.DezentStream;
 
-},{"./Dezent":1}]},{},[9]);
+},{"./Dezent":1}]},{},[8]);

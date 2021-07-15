@@ -24,9 +24,8 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpcodeCompiler = void 0;
-const GrammarCompiler_1 = require("./GrammarCompiler");
+const Error_1 = require("./Error");
 const Interpreter_1 = require("./Interpreter");
-const Parser_1 = require("./Parser");
 class CompilerContext {
     constructor() {
         this.activeRules = [];
@@ -216,6 +215,10 @@ class OpcodeCompiler {
                 // But, double-check our context iteration so that we don't conflict across parses.
                 let prevIteration = -1;
                 let prevPos = -1;
+                let leftRecursing = false;
+                let leftOutput = undefined;
+                let leftEndPos = 0;
+                let leftConsumed = 0;
                 // In order to detect left recursion we need access to prevPos (defined above) in our scope.
                 // But, pass and fail may be different for every invocation of a ruleref. So, we need to use
                 // factories to generator our op so that we retain prevPos in scope while generating a
@@ -225,8 +228,18 @@ class OpcodeCompiler {
                 if (!this.rulerefOpFactories[name]) {
                     this.rulerefOpFactories[name] = (pass, fail) => {
                         return this.audit(node, "run", (ictx, buf) => {
-                            if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
-                                throw `infinite loop detected / left recursion not yet implemented with ${node.name}:${ictx.startPos}`;
+                            if (leftRecursing) {
+                                ictx.output = leftOutput;
+                                ictx.endPos = leftEndPos;
+                                ictx.lastConsumed = leftConsumed;
+                                return pass;
+                            }
+                            else if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
+                                leftRecursing = true;
+                                leftOutput = undefined;
+                                leftEndPos = 0;
+                                leftConsumed = 0;
+                                return fail;
                             }
                             prevIteration = ictx.iteration;
                             prevPos = ictx.startPos;
@@ -241,7 +254,38 @@ class OpcodeCompiler {
                     // set a null value so that we don't get infinite compilation recursion in 
                     // the case where our rule calls itself
                     rulesetOps[name] = null;
-                    rulesetOps[name] = this.compileRuleset(cctx, this.grammar.rulesetLookup[name], this.audit(node, "pass", (ictx, buf) => { prevPos = -1; return ictx.popFrame().pass; }), this.audit(node, "fail", (ictx, buf) => { prevPos = -1; return ictx.popFrame().fail; }));
+                    rulesetOps[name] = this.compileRuleset(cctx, this.grammar.rulesetLookup[name], this.audit(node, "pass", (ictx, buf) => {
+                        if (leftRecursing) {
+                            if (ictx.lastConsumed > leftConsumed) {
+                                leftOutput = ictx.output;
+                                leftEndPos = ictx.endPos;
+                                leftConsumed = ictx.lastConsumed;
+                                return rulesetOps[name];
+                            }
+                            else {
+                                ictx.output = leftOutput;
+                                ictx.endPos = leftEndPos;
+                                ictx.lastConsumed = leftConsumed;
+                                leftRecursing = false;
+                                // fall through
+                            }
+                        }
+                        prevPos = -1;
+                        return ictx.popFrame().pass;
+                    }), this.audit(node, "fail", (ictx, buf) => {
+                        if (leftRecursing) {
+                            leftRecursing = false;
+                            ictx.output = leftOutput;
+                            ictx.endPos = leftEndPos;
+                            ictx.lastConsumed = leftConsumed;
+                            prevPos = -1;
+                            return ictx.popFrame().pass;
+                        }
+                        else {
+                            prevPos = -1;
+                            return ictx.popFrame().fail;
+                        }
+                    }));
                 }
                 return this.rulerefOpFactories[name](pass, fail);
             case "string":
@@ -336,7 +380,7 @@ class OpcodeCompiler {
                         return () => String.fromCharCode(Number(`0x${value.substr(1)}`));
                     }
                     else if (node.value.length > 1) {
-                        Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
+                        Error_1.parserError(Error_1.ErrorCode.Unreachable);
                     }
                     else if ("bfnrt".indexOf(value) >= 0) {
                         return () => ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[value];
@@ -349,14 +393,14 @@ class OpcodeCompiler {
                     return strBuilders.map((b) => b()).join('');
                 };
             case "constref":
-                return this.compileValueBuilder(cctx, this.grammar.vars[node.name]);
+                return this.compileAccess(cctx, node, this.compileValueBuilder(cctx, this.grammar.vars[node.name]));
             case "metaref":
                 const metaName = node.name;
                 switch (metaName) {
                     case "position": return (ictx, buf) => ictx.startPos;
                     case "length": return (ictx, buf) => ictx.endPos - ictx.startPos;
                     default:
-                        Parser_1.parserError(Parser_1.ErrorCode.Unreachable);
+                        Error_1.parserError(Error_1.ErrorCode.Unreachable);
                         return null;
                 }
             case "array":
@@ -381,9 +425,9 @@ class OpcodeCompiler {
                         };
                     }
                 });
-                return (ictx, buf) => {
+                return this.compileAccess(cctx, node, (ictx, buf) => {
                     return elemBuilders.reduce((a, f) => f(ictx, buf, a), []);
-                };
+                });
             case "object":
                 const ret = {};
                 const objBuilders = node.members.map((member) => {
@@ -392,7 +436,7 @@ class OpcodeCompiler {
                         return (ictx, buf, retval) => {
                             return tupleBuilder(ictx, buf).reduce((o, tuple) => {
                                 if (!Array.isArray(tuple) || tuple.length != 2) {
-                                    GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
+                                    Error_1.grammarError(Error_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
                                 }
                                 o[tuple[0]] = tuple[1];
                                 return o;
@@ -408,54 +452,54 @@ class OpcodeCompiler {
                         };
                     }
                 });
-                return (ictx, buf) => objBuilders.reduce((o, f) => f(ictx, buf, o), {});
+                return this.compileAccess(cctx, node, (ictx, buf) => objBuilders.reduce((o, f) => f(ictx, buf, o), {}));
             case "backref":
                 const index = node.index;
                 if (index == "0") {
-                    return (ictx, buf) => {
+                    return this.compileAccess(cctx, node, (ictx, buf) => {
                         return buf.substrExact(ictx.startPos, ictx.endPos - ictx.startPos);
-                    };
+                    });
                 }
                 else {
                     if (cctx.currentRule.captures[index]) {
                         if (node.collapse) {
-                            return (ictx, buf) => {
+                            return this.compileAccess(cctx, node, (ictx, buf) => {
                                 return ictx.captures.reduce((ret, cap) => {
                                     if (cap.index == index && cap.value !== null)
                                         ret.push(cap.value);
                                     return ret;
                                 }, []);
-                            };
+                            });
                         }
                         else {
-                            return (ictx, buf) => {
+                            return this.compileAccess(cctx, node, (ictx, buf) => {
                                 return ictx.captures.reduce((ret, cap) => {
                                     if (cap.index == index)
                                         ret.push(cap.value);
                                     return ret;
                                 }, []);
-                            };
+                            });
                         }
                     }
                     else {
-                        return (ictx, buf) => {
+                        return this.compileAccess(cctx, node, (ictx, buf) => {
                             let cap = ictx.captures.find((cap) => cap.index == index);
                             return cap ? cap.value : null;
-                        };
+                        });
                     }
                 }
             case "call":
                 const callback = this.grammar.callbacks[node.name];
                 const argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
                 if (!callback) {
-                    GrammarCompiler_1.grammarError(Parser_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
+                    Error_1.grammarError(Error_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
                 }
                 return (ictx, buf) => {
                     try {
                         return callback.apply(null, argBuilders.map((arg) => arg(ictx, buf)));
                     }
                     catch (e) {
-                        GrammarCompiler_1.grammarError(Parser_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
+                        Error_1.grammarError(Error_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
                     }
                 };
             case "spread":
@@ -463,7 +507,7 @@ class OpcodeCompiler {
                 return (ictx, buf) => {
                     const value = spreader(ictx, buf);
                     if (value === null || value === undefined || (typeof value != 'object' && typeof value != 'string')) {
-                        GrammarCompiler_1.grammarError(Parser_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
+                        Error_1.grammarError(Error_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
                     }
                     if (Array.isArray(value)) {
                         return value;
@@ -478,6 +522,44 @@ class OpcodeCompiler {
             default:
                 throw new Error("not implemented");
         }
+    }
+    compileAccess(cctx, node, builder) {
+        if (node.access)
+            for (let prop of node.access) {
+                builder = ((prevBuilder, prop) => {
+                    if (prop.value) {
+                        let indexBuilder = this.compileValueBuilder(cctx, prop.value);
+                        return (ictx, buf) => {
+                            let out = prevBuilder(ictx, buf);
+                            if (out == null || (typeof out != 'object' && typeof out != 'string')) {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                            }
+                            let index = indexBuilder(ictx, buf);
+                            if (typeof index != 'string' && typeof index != 'number') {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
+                            }
+                            if (!out.hasOwnProperty(index)) {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                            }
+                            return out[index];
+                        };
+                    }
+                    else {
+                        return (ictx, buf) => {
+                            let out = prevBuilder(ictx, buf);
+                            if (out == null || (typeof out != 'object' && typeof out != 'string')) {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                            }
+                            let index = prop.name;
+                            if (!out.hasOwnProperty(index)) {
+                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                            }
+                            return out[index];
+                        };
+                    }
+                })(builder, prop);
+            }
+        return builder;
     }
 }
 exports.OpcodeCompiler = OpcodeCompiler;

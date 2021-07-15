@@ -22,11 +22,10 @@
  * SOFTWARE. 
  */
 
-import { readFileSync } from "fs";
 import { Interpreter } from "./Interpreter";
 import { OpcodeCompiler } from "./OpcodeCompiler";
 import { ParseBuffer } from "./ParseBuffer";
-import { parseGrammar } from "./Parser";
+import { parseGrammar } from "./Dezent";
 
 afterEach(() => Interpreter.debug = false);
 

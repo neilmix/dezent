@@ -23,11 +23,9 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.grammarError = exports.GrammarCompiler = void 0;
-const Parser_1 = require("./Parser");
-const ParseBuffer_1 = require("./ParseBuffer");
+exports.findDezentGrammar = exports.buildString = exports.GrammarCompiler = void 0;
 const Grammar_1 = require("./Grammar");
-const Output_1 = require("./Output");
+const Error_1 = require("./Error");
 class GrammarCompiler {
     static compileGrammar(grammar, text, callbacks) {
         // compile and validate
@@ -66,10 +64,10 @@ class GrammarCompiler {
         for (let ruleset of grammar.ruleset) {
             if (rulesetLookup[ruleset.name]) {
                 if (ruleset.name == 'return') {
-                    grammarError(Parser_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
+                    Error_1.grammarError(Error_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
                 }
                 else {
-                    grammarError(Parser_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
+                    Error_1.grammarError(Error_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
                 }
             }
             rulesetLookup[ruleset.name] = ruleset;
@@ -89,7 +87,7 @@ class GrammarCompiler {
             // perform sanity checks
             visitParseNodes("ruleref", ruleset, null, null, (node) => {
                 if (!rulesetLookup[node.name]) {
-                    grammarError(Parser_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
+                    Error_1.grammarError(Error_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
                 }
             });
             // figure out if our selectors are capable of failing, which helps in
@@ -157,13 +155,13 @@ class GrammarCompiler {
                     info.repeats--;
             });
             if (lastCount > -1 && lastCount != info.captures.length) {
-                grammarError(Parser_1.ErrorCode.CaptureCountMismatch, text, rule.meta);
+                Error_1.grammarError(Error_1.ErrorCode.CaptureCountMismatch, text, rule.meta);
             }
             lastCount = info.captures.length;
             i++;
         } while (i < rule.patterns.length);
         visitParseNodes("string", rule, null, null, (node) => {
-            let matchString = Output_1.buildString(node);
+            let matchString = buildString(node);
             node.pattern = matchString;
             node.match = (buf, idx) => buf.containsAt(matchString, idx) ? [true, matchString.length] : [false, 0];
         });
@@ -222,13 +220,13 @@ class GrammarCompiler {
             }
             if (node.type == "constref") {
                 if (!vars[node.name]) {
-                    grammarError(Parser_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
+                    Error_1.grammarError(Error_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
         });
         for (let i = 1; i < info.backrefs.length; i++) {
             if (info.backrefs[i].index >= info.captures.length) {
-                grammarError(Parser_1.ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
+                Error_1.grammarError(Error_1.ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
             }
         }
         return info.captures;
@@ -289,24 +287,32 @@ function visitOutputNodes(node, data, f) {
         }
     }
 }
-function grammarError(code, text, meta, ...args) {
-    let reason = Parser_1.errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index - 1]);
-    let msg = `Grammar error ${code}: ${reason}`;
-    let info;
-    if (text && meta) {
-        info = new ParseBuffer_1.ParseBuffer(text).findLineAndChar(meta.pos);
-        msg = `${msg}\nAt line ${info.line} char ${info.char}:\n${info.lineText}\n${info.pointerText}\n`;
-    }
-    let e = new Error(msg);
-    e["code"] = code;
-    if (info) {
-        e["pos"] = meta.pos;
-        e["line"] = info.line;
-        e["char"] = info.char;
-        e["lineText"] = info.lineText;
-        e["pointerText"] = info.pointerText;
-        e["reason"] = reason;
-    }
-    throw e;
+function buildString(node) {
+    return node.tokens.map((node) => {
+        if (node.type == "text") {
+            return node.value;
+        }
+        else if (node.value[0] == 'u') {
+            return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
+        }
+        else if (node.value.length > 1) {
+            Error_1.parserError(Error_1.ErrorCode.Unreachable);
+        }
+        else if ("bfnrt".indexOf(node.value) >= 0) {
+            return ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[node.value];
+        }
+        else {
+            return node.value;
+        }
+    }).join("");
 }
-exports.grammarError = grammarError;
+exports.buildString = buildString;
+let dezentGrammar;
+function findDezentGrammar() {
+    if (!dezentGrammar) {
+        dezentGrammar = Grammar_1.createUncompiledDezentGrammar();
+        GrammarCompiler.compileGrammar(dezentGrammar);
+    }
+    return dezentGrammar;
+}
+exports.findDezentGrammar = findDezentGrammar;

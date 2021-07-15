@@ -23,7 +23,7 @@
  */
 
 
- import { parserError, ErrorCode } from "./Parser";
+ import { parserError, ErrorCode } from "./Error";
 
  export const ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
 

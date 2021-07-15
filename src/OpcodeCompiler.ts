@@ -25,10 +25,9 @@
 import {
     Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode, StringTextNode, EscapeNode
 } from "./Grammar";
-import { grammarError } from "./GrammarCompiler";
+import { ErrorCode, parserError, grammarError } from "./Error";
 import { Context as InterpreterContext, Pass, Fail, WaitInput, Interpreter } from "./Interpreter";
 import { ParseBuffer } from "./ParseBuffer";
-import { ErrorCode, parserError } from "./Parser";
 
 export type Operation = (ictx:InterpreterContext, buf:ParseBuffer) => Operation|null;
 export type ValueBuilder = (ictx:InterpreterContext, buf:ParseBuffer) => any;
