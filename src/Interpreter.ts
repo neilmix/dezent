@@ -40,12 +40,15 @@ export class Context {
     iteration:number = 0;
     startPos:number = 0;
     endPos:number = 0;
+    errorPos:number = 0;
     lastConsumed:number = 0;
     output:any;
     captures:{index: string, value: any}[] = [];
     status:number = Run;
+    disableFailedPatternLevel = 0;
     scopes = [];
     frames = [];
+    failedPatterns = [];
     auditLog = [];
     constructor() {
     }
@@ -114,7 +117,7 @@ export class Interpreter {
         switch (ctx.status) {
             case Pass:
                 if (ctx.endPos < buf.length) {
-                    parsingError(ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
+                    parsingError(ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
                 }
                 if (!buf.closed) {
                     this.resumeOp = op;
@@ -123,7 +126,7 @@ export class Interpreter {
                 }
                 return ctx.output;
             case Fail:
-                throw new Error("Parse Error");
+                parsingError(ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
             case WaitInput:
                 this.resumeOp = op;
                 return;
@@ -131,4 +134,17 @@ export class Interpreter {
                 parserError(ErrorCode.Unreachable);
         }
     }
+}
+
+
+function buildExpectedTerminals(failedPatterns) {
+    let lookup = {};
+    let out = [];
+    for (let terminal of failedPatterns) {
+        if (!lookup[terminal]) {
+            out.push(terminal);
+            lookup[terminal] = true;
+        }
+    }
+    return out;
 }
