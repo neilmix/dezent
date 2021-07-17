@@ -754,6 +754,9 @@ class GrammarCompiler {
             }
         }
         grammar.maxid = nodeSequence;
+        if (!grammar.rulesetLookup["return"]) {
+            Error_1.grammarError(Error_1.ErrorCode.ReturnNotFound, grammar.text);
+        }
         return grammar;
     }
     static compileRule(rule, vars, text) {
@@ -809,10 +812,10 @@ class GrammarCompiler {
                 });
             }
             node.pattern = node.ranges.map((i) => {
-                let ret = (i[0].type == 'escape' ? '\\' : '') + i[0].value;
+                let ret = (i[0].type == 'escape' && i[0].value != '\\' ? '\\' : '') + i[0].value;
                 if (i[0].value != i[1].value) {
                     ret += '-';
-                    ret += (i[1].type == 'escape' ? '\\' : '') + i[1].value;
+                    ret += (i[1].type == 'escape' && i[0].value != '\\' ? '\\' : '') + i[1].value;
                 }
                 return ret;
             }).join(' ');
@@ -975,11 +978,14 @@ class Context {
         this.iteration = 0;
         this.startPos = 0;
         this.endPos = 0;
+        this.errorPos = 0;
         this.lastConsumed = 0;
         this.captures = [];
         this.status = exports.Run;
+        this.disableFailedPatternLevel = 0;
         this.scopes = [];
         this.frames = [];
+        this.failedPatterns = [];
         this.auditLog = [];
     }
     beginScope() {
@@ -1037,7 +1043,7 @@ class Interpreter {
         switch (ctx.status) {
             case exports.Pass:
                 if (ctx.endPos < buf.length) {
-                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
+                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
                 }
                 if (!buf.closed) {
                     this.resumeOp = op;
@@ -1046,7 +1052,7 @@ class Interpreter {
                 }
                 return ctx.output;
             case exports.Fail:
-                throw new Error("Parse Error");
+                Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
             case exports.WaitInput:
                 this.resumeOp = op;
                 return;
@@ -1057,6 +1063,17 @@ class Interpreter {
 }
 exports.Interpreter = Interpreter;
 Interpreter.debug = false;
+function buildExpectedTerminals(failedPatterns) {
+    let lookup = {};
+    let out = [];
+    for (let terminal of failedPatterns) {
+        if (!lookup[terminal]) {
+            out.push(terminal);
+            lookup[terminal] = true;
+        }
+    }
+    return out;
+}
 
 },{"./Error":2}],6:[function(require,module,exports){
 "use strict";
@@ -1197,6 +1214,25 @@ class OpcodeCompiler {
         return prev;
     }
     compileToken(cctx, node, pass, fail) {
+        let pattern = node.descriptor["pattern"];
+        if (node.not && pattern)
+            pattern = "not: " + pattern;
+        // do this *before* swapping pass and fail (in the case of node.not) or otherwise
+        // failed tokens will get mapped opposite their actual meaning.
+        if (node.required && node.descriptor["pattern"]) {
+            fail = ((failOp) => {
+                return (ictx, buf) => {
+                    if (ictx.disableFailedPatternLevel == 0 && ictx.endPos >= ictx.errorPos) {
+                        if (ictx.endPos > ictx.errorPos) {
+                            ictx.failedPatterns.length = 0;
+                            ictx.errorPos = ictx.endPos;
+                        }
+                        ictx.failedPatterns.push(pattern);
+                    }
+                    return failOp;
+                };
+            })(fail);
+        }
         if (node.not) {
             let tmp = pass;
             pass = fail;
@@ -1250,105 +1286,134 @@ class OpcodeCompiler {
     compileDescriptor(cctx, node, pass, fail) {
         switch (node.type) {
             case "group":
-                return this.compilePatterns(cctx, node, pass, fail);
-            case "capture":
-                const useOutput = node.useOutput;
-                const captureIndex = node.index;
-                let id = cctx.currentRule.id;
-                const setCapture = (ictx, value) => {
-                    ictx.captures.push({ index: captureIndex, value: value });
-                };
-                const newPass = useOutput ?
-                    (ictx, buf) => {
-                        ictx.captures.push({ index: captureIndex, value: ictx.output });
-                        return pass;
-                    }
-                    : (ictx, buf) => {
-                        ictx.captures.push({ index: captureIndex, value: buf.substr(ictx.endPos - ictx.lastConsumed, ictx.lastConsumed) });
-                        return pass;
+                if (node.canFail) {
+                    return this.compilePatterns(cctx, node, pass, fail);
+                }
+                else {
+                    const runOps = this.compilePatterns(cctx, node, (ictx, buf) => { ictx.disableFailedPatternLevel--; return pass; }, (ictx, buf) => { ictx.disableFailedPatternLevel--; return fail; });
+                    return (ictx, buf) => {
+                        ictx.disableFailedPatternLevel++;
+                        return runOps;
                     };
-                return this.compilePatterns(cctx, node, newPass, fail);
+                }
+            case "capture":
+                { // new scope
+                    const useOutput = node.useOutput;
+                    const captureIndex = node.index;
+                    let id = cctx.currentRule.id;
+                    const newPass = useOutput ?
+                        (ictx, buf) => {
+                            ictx.captures.push({ index: captureIndex, value: ictx.output });
+                            return pass;
+                        }
+                        : (ictx, buf) => {
+                            ictx.captures.push({ index: captureIndex, value: buf.substr(ictx.endPos - ictx.lastConsumed, ictx.lastConsumed) });
+                            return pass;
+                        };
+                    if (node.canFail) {
+                        return this.compilePatterns(cctx, node, newPass, fail);
+                    }
+                    else {
+                        const runOps = this.compilePatterns(cctx, node, (ictx, buf) => { ictx.disableFailedPatternLevel--; return newPass; }, (ictx, buf) => { ictx.disableFailedPatternLevel--; return fail; });
+                        return (ictx, buf) => {
+                            ictx.disableFailedPatternLevel++;
+                            return runOps;
+                        };
+                    }
+                }
             case "ruleref":
-                const name = node.name;
-                const rulesetOps = this.rulesetOps;
-                // detect left recursion by checking the current position against the previous position
-                // when this ruleref is executed - if the position is unchanged, we have left recursion.
-                // But, double-check our context iteration so that we don't conflict across parses.
-                let prevIteration = -1;
-                let prevPos = -1;
-                let leftRecursing = false;
-                let leftOutput = undefined;
-                let leftEndPos = 0;
-                let leftConsumed = 0;
-                // In order to detect left recursion we need access to prevPos (defined above) in our scope.
-                // But, pass and fail may be different for every invocation of a ruleref. So, we need to use
-                // factories to generator our op so that we retain prevPos in scope while generating a
-                // unique op for each invokation.
-                // Do this prior to creating the rulesetOp so that we're creating the factory at the first
-                // invokation and not a later invokation, that way all invokations share the same prevPos.
-                if (!this.rulerefOpFactories[name]) {
-                    this.rulerefOpFactories[name] = (pass, fail) => {
-                        return this.audit(node, "run", (ictx, buf) => {
+                { // new scope
+                    const name = node.name;
+                    const rulesetOps = this.rulesetOps;
+                    const ruleset = this.grammar.rulesetLookup[name];
+                    const disableFailedPatternTracking = !ruleset.canFail;
+                    // detect left recursion by checking the current position against the previous position
+                    // when this ruleref is executed - if the position is unchanged, we have left recursion.
+                    // But, double-check our context iteration so that we don't conflict across parses.
+                    let prevIteration = -1;
+                    let prevPos = -1;
+                    let leftRecursing = false;
+                    let leftOutput = undefined;
+                    let leftEndPos = 0;
+                    let leftConsumed = 0;
+                    // In order to detect left recursion we need access to prevPos (defined above) in our scope.
+                    // But, pass and fail may be different for every invocation of a ruleref. So, we need to use
+                    // factories to generator our op so that we retain prevPos in scope while generating a
+                    // unique op for each invokation.
+                    // Do this prior to creating the rulesetOp so that we're creating the factory at the first
+                    // invokation and not a later invokation, that way all invokations share the same prevPos.
+                    if (!this.rulerefOpFactories[name]) {
+                        this.rulerefOpFactories[name] = (pass, fail) => {
+                            return this.audit(node, "run", (ictx, buf) => {
+                                if (leftRecursing) {
+                                    ictx.output = leftOutput;
+                                    ictx.endPos = leftEndPos;
+                                    ictx.lastConsumed = leftConsumed;
+                                    return pass;
+                                }
+                                else if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
+                                    leftRecursing = true;
+                                    leftOutput = undefined;
+                                    leftEndPos = 0;
+                                    leftConsumed = 0;
+                                    return fail;
+                                }
+                                prevIteration = ictx.iteration;
+                                prevPos = ictx.startPos;
+                                ictx.pushFrame(pass, fail);
+                                if (disableFailedPatternTracking)
+                                    ictx.disableFailedPatternLevel++;
+                                return rulesetOps[name];
+                            });
+                        };
+                    }
+                    // a null rulesetOp indicates that we've been call recursively during ruleset compilation,
+                    // so check specifically for undefined here
+                    if (rulesetOps[name] === undefined) {
+                        // set a null value so that we don't get infinite compilation recursion in 
+                        // the case where our rule calls itself
+                        rulesetOps[name] = null;
+                        rulesetOps[name] = this.compileRuleset(cctx, ruleset, this.audit(node, "pass", (ictx, buf) => {
                             if (leftRecursing) {
+                                if (ictx.lastConsumed > leftConsumed) {
+                                    leftOutput = ictx.output;
+                                    leftEndPos = ictx.endPos;
+                                    leftConsumed = ictx.lastConsumed;
+                                    return rulesetOps[name];
+                                }
+                                else {
+                                    ictx.output = leftOutput;
+                                    ictx.endPos = leftEndPos;
+                                    ictx.lastConsumed = leftConsumed;
+                                    leftRecursing = false;
+                                    // fall through
+                                }
+                            }
+                            prevPos = -1;
+                            if (disableFailedPatternTracking)
+                                ictx.disableFailedPatternLevel--;
+                            return ictx.popFrame().pass;
+                        }), this.audit(node, "fail", (ictx, buf) => {
+                            if (leftRecursing) {
+                                leftRecursing = false;
                                 ictx.output = leftOutput;
                                 ictx.endPos = leftEndPos;
                                 ictx.lastConsumed = leftConsumed;
-                                return pass;
-                            }
-                            else if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
-                                leftRecursing = true;
-                                leftOutput = undefined;
-                                leftEndPos = 0;
-                                leftConsumed = 0;
-                                return fail;
-                            }
-                            prevIteration = ictx.iteration;
-                            prevPos = ictx.startPos;
-                            ictx.pushFrame(pass, fail);
-                            return rulesetOps[name];
-                        });
-                    };
-                }
-                // a null rulesetOp indicates that we've been call recursively during ruleset compilation,
-                // so check specifically for undefined here
-                if (rulesetOps[name] === undefined) {
-                    // set a null value so that we don't get infinite compilation recursion in 
-                    // the case where our rule calls itself
-                    rulesetOps[name] = null;
-                    rulesetOps[name] = this.compileRuleset(cctx, this.grammar.rulesetLookup[name], this.audit(node, "pass", (ictx, buf) => {
-                        if (leftRecursing) {
-                            if (ictx.lastConsumed > leftConsumed) {
-                                leftOutput = ictx.output;
-                                leftEndPos = ictx.endPos;
-                                leftConsumed = ictx.lastConsumed;
-                                return rulesetOps[name];
+                                prevPos = -1;
+                                if (disableFailedPatternTracking)
+                                    ictx.disableFailedPatternLevel--;
+                                return ictx.popFrame().pass;
                             }
                             else {
-                                ictx.output = leftOutput;
-                                ictx.endPos = leftEndPos;
-                                ictx.lastConsumed = leftConsumed;
-                                leftRecursing = false;
-                                // fall through
+                                prevPos = -1;
+                                if (disableFailedPatternTracking)
+                                    ictx.disableFailedPatternLevel--;
+                                return ictx.popFrame().fail;
                             }
-                        }
-                        prevPos = -1;
-                        return ictx.popFrame().pass;
-                    }), this.audit(node, "fail", (ictx, buf) => {
-                        if (leftRecursing) {
-                            leftRecursing = false;
-                            ictx.output = leftOutput;
-                            ictx.endPos = leftEndPos;
-                            ictx.lastConsumed = leftConsumed;
-                            prevPos = -1;
-                            return ictx.popFrame().pass;
-                        }
-                        else {
-                            prevPos = -1;
-                            return ictx.popFrame().fail;
-                        }
-                    }));
+                        }));
+                    }
+                    return this.rulerefOpFactories[name](pass, fail);
                 }
-                return this.rulerefOpFactories[name](pass, fail);
             case "string":
                 const matchStr = node.pattern;
                 return this.audit(node, "run", (ictx, buf) => {

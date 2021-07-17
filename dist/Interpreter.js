@@ -34,11 +34,14 @@ class Context {
         this.iteration = 0;
         this.startPos = 0;
         this.endPos = 0;
+        this.errorPos = 0;
         this.lastConsumed = 0;
         this.captures = [];
         this.status = exports.Run;
+        this.disableFailedPatternLevel = 0;
         this.scopes = [];
         this.frames = [];
+        this.failedPatterns = [];
         this.auditLog = [];
     }
     beginScope() {
@@ -96,7 +99,7 @@ class Interpreter {
         switch (ctx.status) {
             case exports.Pass:
                 if (ctx.endPos < buf.length) {
-                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, ["<EOF>"]);
+                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
                 }
                 if (!buf.closed) {
                     this.resumeOp = op;
@@ -105,7 +108,7 @@ class Interpreter {
                 }
                 return ctx.output;
             case exports.Fail:
-                throw new Error("Parse Error");
+                Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
             case exports.WaitInput:
                 this.resumeOp = op;
                 return;
@@ -116,3 +119,14 @@ class Interpreter {
 }
 exports.Interpreter = Interpreter;
 Interpreter.debug = false;
+function buildExpectedTerminals(failedPatterns) {
+    let lookup = {};
+    let out = [];
+    for (let terminal of failedPatterns) {
+        if (!lookup[terminal]) {
+            out.push(terminal);
+            lookup[terminal] = true;
+        }
+    }
+    return out;
+}

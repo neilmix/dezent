@@ -133,6 +133,9 @@ class GrammarCompiler {
             }
         }
         grammar.maxid = nodeSequence;
+        if (!grammar.rulesetLookup["return"]) {
+            Error_1.grammarError(Error_1.ErrorCode.ReturnNotFound, grammar.text);
+        }
         return grammar;
     }
     static compileRule(rule, vars, text) {
@@ -188,10 +191,10 @@ class GrammarCompiler {
                 });
             }
             node.pattern = node.ranges.map((i) => {
-                let ret = (i[0].type == 'escape' ? '\\' : '') + i[0].value;
+                let ret = (i[0].type == 'escape' && i[0].value != '\\' ? '\\' : '') + i[0].value;
                 if (i[0].value != i[1].value) {
                     ret += '-';
-                    ret += (i[1].type == 'escape' ? '\\' : '') + i[1].value;
+                    ret += (i[1].type == 'escape' && i[0].value != '\\' ? '\\' : '') + i[1].value;
                 }
                 return ret;
             }).join(' ');
