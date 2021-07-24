@@ -334,7 +334,7 @@ test("dezent grammar documentation", () => {
     let prevMeta = hackedGrammar.vars.meta;
     hackedGrammar.vars.meta = { type: 'object', members: [] };
     let buf = new ParseBuffer(textDezent);
-    let parsedDezent = new Interpreter(new OpcodeCompiler(hackedGrammar).compile(), buf).resume();
+    let parsedDezent = new Interpreter(new OpcodeCompiler(hackedGrammar, false).compile(), buf).resume();
     hackedGrammar.vars.meta = prevMeta;
 
     expect(parsedDezent).toEqual(uncompiledDezent);
@@ -451,4 +451,14 @@ test("comments", () => {
         */
         return .* -> 3;
     `).toEqual(3);
+});
+
+test("profile", () => {
+    let log = console.log;
+    try {
+        console.log = function() {};
+        parse("return foo -> null; foo = .* -> null;", "a", { enableProfiling: true });
+    } finally {
+        console.log = log;
+    }
 });

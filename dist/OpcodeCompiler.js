@@ -41,18 +41,21 @@ class CompilerContext {
     }
 }
 class OpcodeCompiler {
-    constructor(grammar) {
+    constructor(grammar, enableProfiling) {
+        this.enableProfiling = false;
         this.rulesetOps = {};
         this.rulerefOpFactories = {};
         this.grammar = grammar;
+        this.enableProfiling = enableProfiling;
     }
     audit(node, action, op) {
         function pad(s, len) {
             s = String(s).substr(0, len);
             return s + ' '.repeat(len - s.length);
         }
+        let debugOp = op;
         if (Interpreter_1.Interpreter.debug) {
-            return (ictx, buf) => {
+            debugOp = (ictx, buf) => {
                 let desc = node ? node["name"] || node["pattern"] || "" : "";
                 const entry = [
                     pad((node && node.id) || '', 8),
@@ -77,9 +80,17 @@ class OpcodeCompiler {
                 return result;
             };
         }
-        else {
-            return op;
+        let profileOp = debugOp;
+        if (this.enableProfiling && node && node.type == "ruleref") {
+            profileOp = (ictx, buf) => {
+                ictx.profileRules.push(node.name);
+                ictx.profileActions.push(action);
+                ictx.profileTimes.push(Date.now());
+                ictx.profilePositions.push(ictx.startPos);
+                return op(ictx, buf);
+            };
         }
+        return profileOp;
     }
     compile() {
         const cctx = new CompilerContext();

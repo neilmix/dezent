@@ -23,7 +23,7 @@
  */
 
 import {
-    Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode, StringTextNode, EscapeNode
+    Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode, StringTextNode, EscapeNode, RuleRefNode
 } from "./Grammar";
 import { ErrorCode, parserError, grammarError } from "./Error";
 import { Context as InterpreterContext, Pass, Fail, WaitInput, Interpreter } from "./Interpreter";
@@ -50,11 +50,13 @@ class CompilerContext {
 
 export class OpcodeCompiler {
     grammar:Grammar;
+    enableProfiling:boolean = false;
     rulesetOps:{ [key:string] : Operation } = {};
     rulerefOpFactories:{ [key:string] : (pass:Operation, fail:Operation) => Operation } = {};
 
-    constructor(grammar:Grammar) {
+    constructor(grammar:Grammar, enableProfiling:boolean) {
         this.grammar = grammar;
+        this.enableProfiling = enableProfiling;
     }
 
     audit(node:Node, action:string, op:Operation):Operation {
@@ -62,8 +64,10 @@ export class OpcodeCompiler {
             s = String(s).substr(0,len);
             return s + ' '.repeat(len - s.length);
         }
+
+        let debugOp = op;
         if (Interpreter.debug) {
-            return (ictx, buf) => {
+            debugOp = (ictx, buf) => {
                 let desc = node ? node["name"] || node["pattern"] || "" : "";
                 const entry = [
                     pad((node&&node.id)||'', 8), 
@@ -87,9 +91,20 @@ export class OpcodeCompiler {
                 ]));
                 return result;
             };
-        } else {
-            return op;
+        } 
+        
+        let profileOp = debugOp;
+        if (this.enableProfiling && node && node.type == "ruleref") {
+            profileOp = (ictx, buf) => {
+                ictx.profileRules.push((<RuleRefNode>node).name);
+                ictx.profileActions.push(action);
+                ictx.profileTimes.push(Date.now());
+                ictx.profilePositions.push(ictx.startPos);
+                return op(ictx, buf);
+            }
         }
+
+        return profileOp;
     }
 
     compile():Operation {

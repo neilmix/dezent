@@ -37,7 +37,7 @@ let grammar = `
     object = '{' ( {member} ( ',' {member} )* )? '}' -> { ...[$1?, ...$2?] };
     member = {string} ':' {atom} -> [$1, $2];
     array = '[' ( {atom} ( ',' {atom} )* )? ']' -> [$1?, $2?];
-    string = '"' {escape|stringText}* '"' -> join($1);
+    string = '"' {stringText|escape}* '"' -> join($1);
     stringText = ( !["\\\\] . )+ -> $0;
     escape = '\\\\' { unicodeChar | escapeChar } -> $1;
     unicodeChar = 'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] -> unicodeChar($0);
@@ -66,13 +66,17 @@ let callbacks = {
     number: Number,
 };
 
-let ds = new DezentStream(grammar, { callbacks: callbacks });
+let ds = new DezentStream(grammar, { callbacks: callbacks, enableProfiling: process.argv[2] == "--profile" });
 
 process.stdout.write("calculating...");
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', function(data){
     bytes += data.length;
     ds.write(data);
+});
+process.stdin.on('end', function() {
+    console.log("");
+    ds.close();
 });
 
 function epoch() {

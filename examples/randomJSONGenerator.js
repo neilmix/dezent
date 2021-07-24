@@ -22,8 +22,22 @@
  * SOFTWARE. 
  */
 
+const { exit } = require("process");
+
+let duration = 0;
+if (!isNaN(Number(process.argv[2]))) {
+    duration = Number(process.argv[2]) * 1000;
+}
+
+let start = Date.now();
+
 function write() {
-    while (process.stdout.write(`[${new Date().toISOString()}] ${JSON.stringify(obj())}\n`));
+    while (!duration || Date.now() - start <= duration) {
+        if (!process.stdout.write(`[${new Date().toISOString()}] ${JSON.stringify(obj())}\n`)) {
+            return;
+        }
+    }
+    exit();
 }
 process.stdout.on("drain", write);
 write();

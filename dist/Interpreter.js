@@ -43,6 +43,10 @@ class Context {
         this.frames = [];
         this.failedPatterns = [];
         this.auditLog = [];
+        this.profileRules = [];
+        this.profileActions = [];
+        this.profileTimes = [];
+        this.profilePositions = [];
     }
     beginScope() {
         this.scopes.push({ startPos: this.startPos, endPos: this.endPos, captureCount: this.captures.length });
@@ -65,6 +69,96 @@ class Context {
         let frame = this.frames.pop();
         this.captures = frame.captures;
         return frame;
+    }
+    dumpDebug() {
+        console.log(this.auditLog.map((line) => line.join(' ')).join('\n'));
+        console.log("status: ", this.status);
+        this.auditLog.length = 0;
+    }
+    dumpProfile() {
+        if (this.profileActions.length == 0) {
+            return;
+        }
+        let stack = [];
+        let calls = [];
+        for (let i = 0; i < this.profileRules.length; i++) {
+            if (this.profileActions[i] == "run") {
+                stack.push({
+                    name: this.profileRules[i],
+                    startTime: this.profileTimes[i],
+                    endTime: 0,
+                    position: this.profilePositions[i],
+                    duration: 0,
+                    result: ""
+                });
+            }
+            else {
+                let out = stack.pop();
+                Error_1.assert(!!out);
+                Error_1.assert(out.name == this.profileRules[i]);
+                Error_1.assert(out.position == this.profilePositions[i]);
+                out.endTime = this.profileTimes[i];
+                out.duration = out.endTime - out.startTime;
+                out.result = this.profileActions[i];
+                calls.push(out);
+            }
+        }
+        let summaries = {};
+        let callPositions = {};
+        for (let call of calls) {
+            let summary = summaries[call.name];
+            if (!summary) {
+                summary = summaries[call.name] = {
+                    name: call.name,
+                    callCount: 0,
+                    callTime: 0,
+                    passCount: 0,
+                    passTime: 0,
+                    failCount: 0,
+                    failTime: 0,
+                    redundantCalls: 0,
+                };
+            }
+            summary.callCount++;
+            summary.callTime += call.duration;
+            if (call.result == "pass") {
+                summary.passCount++;
+                summary.passTime += call.duration;
+            }
+            else {
+                Error_1.assert(call.result == "fail");
+                summary.failCount++;
+                summary.failTime += call.duration;
+            }
+            let key = `${call.name}-${call.position}`;
+            if (callPositions[key]) {
+                summary.redundantCalls++;
+            }
+            else {
+                callPositions[key] = true;
+            }
+        }
+        let atoms = [];
+        function w(s, padding) {
+            padding = padding || 10;
+            s = String(s).substr(0, padding);
+            atoms.push(' '.repeat(padding - s.length));
+            atoms.push(s);
+            atoms.push("  ");
+        }
+        function nl() {
+            atoms.push("\n");
+        }
+        w("rule name", 15), w("call count"), w("call time"), w("pass count"), w("pass time"), w("fail count"), w("fail time"), w("redundant"), nl();
+        w("---------", 15), w("----------"), w("---------"), w("----------"), w("---------"), w("----------"), w("---------"), w("---------"), nl();
+        for (let name of Object.keys(summaries).sort()) {
+            let s = summaries[name];
+            w(s.name, 15), w(s.callCount), w(s.callTime), w(s.passCount), w(s.passTime), w(s.failCount), w(s.failTime), w(s.redundantCalls), nl();
+        }
+        console.log(atoms.join(""));
+        this.profileRules.length = 0;
+        this.profileActions.length = 0;
+        this.profileTimes.length = 0;
     }
 }
 exports.Context = Context;
@@ -92,9 +186,7 @@ class Interpreter {
             throw e;
         }
         if (Interpreter.debug) {
-            console.log(ctx.auditLog.map((line) => line.join(' ')).join('\n'));
-            console.log("status: ", ctx.status);
-            ctx.auditLog.length = 0;
+            ctx.dumpDebug();
         }
         switch (ctx.status) {
             case exports.Pass:
@@ -106,6 +198,7 @@ class Interpreter {
                     ctx.status = exports.WaitInput;
                     return;
                 }
+                ctx.dumpProfile();
                 return ctx.output;
             case exports.Fail:
                 Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));

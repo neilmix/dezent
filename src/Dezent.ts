@@ -61,6 +61,7 @@ export interface DezentOptions {
     minBufferSizeInMB?: number,
     callbacks?: Callbacks,
     debugErrors?: boolean,
+    enableProfiling?: boolean,
 }
 
 export class Dezent {
@@ -100,7 +101,7 @@ export class DezentStream {
         this.options = fillOptions(options);
         this.buffer = new ParseBuffer(this.options.minBufferSizeInMB);
         grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
-        this.opcode = new OpcodeCompiler(grammar).compile();
+        this.opcode = new OpcodeCompiler(grammar, this.options.enableProfiling).compile();
         this.interpreter = new Interpreter(this.opcode, this.buffer);
     }
 
@@ -120,6 +121,7 @@ function fillOptions(options?:DezentOptions):DezentOptions {
     return {
         minBufferSizeInMB: options.minBufferSizeInMB || 1,
         callbacks: options.callbacks || {},
+        enableProfiling: options.enableProfiling || false,
     };
 }
 
@@ -129,7 +131,7 @@ let dezentOpcode:Operation;
 
 export function parseGrammar(text:string, options:DezentOptions) : Grammar {
     if (!dezentOpcode) {
-        dezentOpcode = new OpcodeCompiler(findDezentGrammar()).compile();
+        dezentOpcode = new OpcodeCompiler(findDezentGrammar(), false).compile();
     }
     let buf = new ParseBuffer(text);
     let interpreter = new Interpreter(dezentOpcode, new ParseBuffer(text));

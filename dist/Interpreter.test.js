@@ -30,7 +30,7 @@ const Dezent_1 = require("./Dezent");
 afterEach(() => Interpreter_1.Interpreter.debug = false);
 function parse(grammarText, text) {
     let grammar = Dezent_1.parseGrammar(grammarText, {});
-    let op = new OpcodeCompiler_1.OpcodeCompiler(grammar).compile();
+    let op = new OpcodeCompiler_1.OpcodeCompiler(grammar, false).compile();
     return new Interpreter_1.Interpreter(op, new ParseBuffer_1.ParseBuffer(text)).resume();
 }
 function expectParse(grammar, text) {

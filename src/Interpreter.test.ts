@@ -31,7 +31,7 @@ afterEach(() => Interpreter.debug = false);
 
 function parse(grammarText, text) {
     let grammar = parseGrammar(grammarText, {});
-    let op = new OpcodeCompiler(grammar).compile();
+    let op = new OpcodeCompiler(grammar, false).compile();
     return new Interpreter(op, new ParseBuffer(text)).resume();
 }
 
