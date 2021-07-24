@@ -4,6 +4,7 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
 
 # Table of contents
 * [Introduction](#Introduction)
+* [Motivation](#Motivation)
 * [Status](#Status)
 * [License](#License)
 * [Quick Start](#Quick-Start)
@@ -37,24 +38,30 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
   * [`.` or `[]` property access](#-or--property-access)
   * [`?` collapse](-collapse)
   * [callbacks](#-callbacks)
-
+* [Epilogue](#Epilogue)
 
 # Introduction
 
-Dezent is a parser that makes complex pattern matching easier to build, maintain, and use. Think of it as pattern matching similar to regular expressions - plus reusable rules that can be nested recursively, plus whitespace-friendly syntax containing comments, plus malleable JSON output yielding data structures perfectly suited to your specific use-case.
+Dezent is an alternative to regular expressions for difficult use-cases, providing complex pattern matching that's easier to build, maintain, and use. It is a pattern matching engine similar to regular expressions, plus reusable rules that can be nested recursively, with whitespace-friendly syntax containing comments, plus malleable JSON output yielding data structures perfectly suited to your specific use-case. As an added bonus, Dezent is capable of partial parsing, making it great for situations where you are reading data in asynchronous chunks.
 
 Dezent is ideal for:
 * Complex nested pattern matching
 * Converting text data into hierarchical data structures
 * Extracting text segments into structured output
-* Parsing large data files, especially containing non-standard data formats
 * Recursive descent parsing
+* Parsing asynchronously delivered input
+
+<div align="right"><a href="#table-of-contents">table of contents</a></div>
+
+# Motivation
+
+I built Dezent as a side-project to a side-project I was working on. I desired a custom configuration syntax that happened to be a small subset of Typescript - something that could be parsed into a simple JSON data structure (aka abstract syntax tree) while still being valid, compilable Typescript. This is a task that's too complex for regular expressions, but it wasn't really worth hand-crafting a recursive descent parser. All the parsing frameworks I'd seen were a bit complex, and I thought "why can't there be a regular-expression-like syntax that parses recursively and yields simple JSON data structures?" And thus Dezent was born.
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 # Status
 
-Dezent is currently in _beta_. Please try it out! We'd love your feedback.
+Dezent is fully functional - please try it out! I'd love your feedback. I am awaiting feedback to consider where to take it next.
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
@@ -72,12 +79,12 @@ The Dezent javascript library and the dezent command-line tool are included in t
 
 The following examples are included in this distribution:
 * [URLparser.js](examples/URLparser.js): A utility to interactively read and parse URLs. This example demonstrates general-purpose complex pattern matching.
-* [randomJSONGenerator.js](examples/randomJSONGenerator.js) and [randomJSONParser.js](examples/randomJSONParser.js): a hypothentical advanced example of streamed log file parsing. This example demonstrates how Dezent can be used to parse large files or streams of data. The ```randomJSONGenerator.js``` script generates log files consisting of timestamps followed by
+* [randomJSONGenerator.js](examples/randomJSONGenerator.js) and [randomJSONParser.js](examples/randomJSONParser.js): a hypothentical advanced example of streamed log file parsing. This example demonstrates how Dezent can be used to parse asynchronous streams of data. The ```randomJSONGenerator.js``` script generates log files consisting of timestamps followed by
 a JSON object. The ```randomJSONParser.js``` parses and processes the JSON object on each line
  and displays how quickly the parser is able to consume data. To try out the example, run<br>
  ```    node examples/randomJSONGenerator.js | node examples/randomJSONParser.js```<br>
  from your command line.
-* [calculator.js](examples/calculator.js): A utility that interactively parses and calculates simple math expressions follow proper order of operations including left-associativity. This example demonstrates a powerful parsing concept called left recursion.
+* [calculator.js](examples/calculator.js): A utility that interactively parses and calculates simple math expressions follow proper order of operations including left-associativity. This example demonstrates a powerful parsing concept called left recursion that's useful for parsing arithmentic expressions.
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
