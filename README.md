@@ -166,7 +166,7 @@ the following silly grammar that performs very poorly:
     return { letter+ '-' | number | letter }+ -> $1[0];
     letter = [a-zA-Z] -> $0;
     number = [0-9] -> $0;`, { enableProfiling: true });
-d.parse('abcdefghijklmnopqrstuvwxyz0123456789');
+> d.parse('abcdefghijklmnopqrstuvwxyz0123456789');
       rule name  call count   call time  pass count   pass time  fail count   fail time   redundant  
       ---------  ----------   ---------  ----------   ---------  ----------   ---------   ---------  
          letter         415           1         377           1          38           0         378  
