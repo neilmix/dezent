@@ -21,7 +21,7 @@
   },
   "type": "module",
   "scripts": {
-    "compile": "tsc -b tsc-config-dist.json",
+    "compile": "tsc -b tsc-config-dist.json && cp src/*.js dist/",
     "dist": "npm run compile && browserify dist/main.js -o dist/dezent_bundle.js && chmod +x dist/dezent_cli.js && jest dist/Dezent.test.js",
     "compile-debug": "tsc -b tsc-config-test.json && cp src/*.dezent ./test",
     "test": "npm run compile-debug && jest test/",
