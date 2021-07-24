@@ -29,7 +29,7 @@
     "test-interpreter": "npm run compile-debug && jest test/Interpreter.test.js",
     "clean": "rm -f *.js && rm -fr test && rm -fr dist",
     "prepublishOnly": "npm run clean && npm run dist && git remote update && echo 'Verifying local repo is same as remote...' && git diff --no-ext-diff --quiet --exit-code",
-    "postpublish": "git tag v`./getversion` && git push --tags"
+    "postpublish": "git tag v`node ./getversion` && git push --tags"
   },
   "author": "Neil Mix <neilmix@gmail.com>",
   "license": "MIT",
