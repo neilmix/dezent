@@ -153,6 +153,28 @@ input text that's already been released (for example, referencing a $0 value tha
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
+# Reference - performance profiling
+
+If you're curious about the performance profile of your grammar, use the ```enableProfiling```
+configuration flag to output a profiling summary of your parse to console.log. Consider
+the following silly grammar that performs very poorly:
+
+```javascript
+> Dezent = require('dezent').Dezent;
+[Function: Dezent]
+> let d = new Dezent(`
+    return { letter+ '-' | number | letter }+ -> $1[0];
+    letter = [a-zA-Z] -> $0;
+    number = [0-9] -> $0;`, { enableProfiling: true });
+d.parse('abcdefghijklmnopqrstuvwxyz0123456789');
+      rule name  call count   call time  pass count   pass time  fail count   fail time   redundant  
+      ---------  ----------   ---------  ----------   ---------  ----------   ---------   ---------  
+         letter         415           1         377           1          38           0         378  
+         number          37           0          10           0          27           0           0  
+
+'a'
+```
+
 # Reference - command-line util
 
 ```bash
