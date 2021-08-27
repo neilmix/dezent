@@ -35,9 +35,9 @@ class Dezent {
         this.grammar = parseGrammar(grammarStr, this.options);
         this.error = null;
     }
-    parse(text) {
+    parse(text, callbacks) {
         try {
-            let stream = new DezentStream(this.grammar, this.options);
+            let stream = new DezentStream(this.grammar, Object.assign(Object.assign({}, this.options), { callbacks: callbacks || this.options.callbacks }));
             stream.write(text);
             return stream.close();
         }
@@ -56,7 +56,7 @@ class DezentStream {
         this.options = fillOptions(options);
         this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSizeInMB);
         grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
-        this.opcode = new OpcodeCompiler_1.OpcodeCompiler(grammar, this.options.enableProfiling).compile();
+        this.opcode = new OpcodeCompiler_1.OpcodeCompiler(grammar, this.options.enableProfiling).compile(this.options.callbacks);
         this.interpreter = new Interpreter_1.Interpreter(this.opcode, this.buffer);
     }
     write(text) {
@@ -86,7 +86,7 @@ function parseGrammar(text, options) {
     let interpreter = new Interpreter_1.Interpreter(dezentOpcode, new ParseBuffer_1.ParseBuffer(text));
     try {
         let grammar = interpreter.resume();
-        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
+        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text);
         return grammar;
     }
     catch (e) {

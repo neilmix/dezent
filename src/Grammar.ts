@@ -23,7 +23,6 @@
  */
 
 
-import { Callbacks } from "./Dezent";
 import { ParseBuffer } from "./ParseBuffer";
 
 export const GrammarVersion = 1;
@@ -33,10 +32,35 @@ export type Grammar = {
 	text?: string,
 	maxid?: number,
 	ruleset: RulesetNode[], 
-	callbacks?: Callbacks,
 	vars: { [key:string]: ValueNode }, 
 	pragmas: { [key:string]: boolean },
-	rulesetLookup?: { [key:string]: RulesetNode } 
+	rulesetLookup?: { [key:string]: RulesetNode }
+};
+
+export let GrammarDefaultCallbacks = {
+	pivot: (value) => {
+		if (!Array.isArray(value)) {
+			throw new Error("Invalid pivot argment: " + value);
+		}
+		value.map((item) => {
+			if (!Array.isArray(item)) {
+				throw new Error("Invalid pivot argument: " + JSON.stringify(item));
+			}
+			if (item.length != value[0].length) {
+				throw new Error("All subarrays in a pivot must be of the same length");
+			}
+		})
+		let ret = [];
+		for (let item of value[0]) {
+			ret.push([]);
+		}
+		for (let i = 0; i < value.length; i++) {
+			for (let j = 0; j < value[0].length; j++) {
+				ret[j][i] = value[i][j];
+			}
+		}
+		return ret;            
+	}
 };
 
 export interface Meta {

@@ -36,9 +36,9 @@ class Dezent {
         this.grammar = parseGrammar(grammarStr, this.options);
         this.error = null;
     }
-    parse(text) {
+    parse(text, callbacks) {
         try {
-            let stream = new DezentStream(this.grammar, this.options);
+            let stream = new DezentStream(this.grammar, Object.assign(Object.assign({}, this.options), { callbacks: callbacks || this.options.callbacks }));
             stream.write(text);
             return stream.close();
         }
@@ -57,7 +57,7 @@ class DezentStream {
         this.options = fillOptions(options);
         this.buffer = new ParseBuffer_1.ParseBuffer(this.options.minBufferSizeInMB);
         grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
-        this.opcode = new OpcodeCompiler_1.OpcodeCompiler(grammar, this.options.enableProfiling).compile();
+        this.opcode = new OpcodeCompiler_1.OpcodeCompiler(grammar, this.options.enableProfiling).compile(this.options.callbacks);
         this.interpreter = new Interpreter_1.Interpreter(this.opcode, this.buffer);
     }
     write(text) {
@@ -87,7 +87,7 @@ function parseGrammar(text, options) {
     let interpreter = new Interpreter_1.Interpreter(dezentOpcode, new ParseBuffer_1.ParseBuffer(text));
     try {
         let grammar = interpreter.resume();
-        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
+        GrammarCompiler_1.GrammarCompiler.compileGrammar(grammar, text);
         return grammar;
     }
     catch (e) {
@@ -273,8 +273,33 @@ exports.parsingError = parsingError;
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createUncompiledDezentGrammar = exports.GrammarVersion = void 0;
+exports.createUncompiledDezentGrammar = exports.GrammarDefaultCallbacks = exports.GrammarVersion = void 0;
 exports.GrammarVersion = 1;
+exports.GrammarDefaultCallbacks = {
+    pivot: (value) => {
+        if (!Array.isArray(value)) {
+            throw new Error("Invalid pivot argment: " + value);
+        }
+        value.map((item) => {
+            if (!Array.isArray(item)) {
+                throw new Error("Invalid pivot argument: " + JSON.stringify(item));
+            }
+            if (item.length != value[0].length) {
+                throw new Error("All subarrays in a pivot must be of the same length");
+            }
+        });
+        let ret = [];
+        for (let item of value[0]) {
+            ret.push([]);
+        }
+        for (let i = 0; i < value.length; i++) {
+            for (let j = 0; j < value[0].length; j++) {
+                ret[j][i] = value[i][j];
+            }
+        }
+        return ret;
+    }
+};
 function createUncompiledDezentGrammar() {
     // This is a mini DSL that allows us to build an AST
     // that our parser uses to parse grammar files.
@@ -649,7 +674,7 @@ exports.findDezentGrammar = exports.buildString = exports.GrammarCompiler = void
 const Grammar_1 = require("./Grammar");
 const Error_1 = require("./Error");
 class GrammarCompiler {
-    static compileGrammar(grammar, text, callbacks) {
+    static compileGrammar(grammar, text) {
         // compile and validate
         // - count the number of backrefs in each rule
         // - validate that all options contain that many backrefs
@@ -659,29 +684,6 @@ class GrammarCompiler {
         // of the grammar tree may be visited/executed at runtime
         grammar.version = Grammar_1.GrammarVersion;
         grammar.text = text;
-        grammar.callbacks = Object.assign({ pivot: (value) => {
-                if (!Array.isArray(value)) {
-                    throw new Error("Invalid pivot argment: " + value);
-                }
-                value.map((item) => {
-                    if (!Array.isArray(item)) {
-                        throw new Error("Invalid pivot argument: " + JSON.stringify(item));
-                    }
-                    if (item.length != value[0].length) {
-                        throw new Error("All subarrays in a pivot must be of the same length");
-                    }
-                });
-                let ret = [];
-                for (let item of value[0]) {
-                    ret.push([]);
-                }
-                for (let i = 0; i < value.length; i++) {
-                    for (let j = 0; j < value[0].length; j++) {
-                        ret[j][i] = value[i][j];
-                    }
-                }
-                return ret;
-            } }, callbacks);
         let rulesetLookup = grammar.rulesetLookup = {};
         for (let ruleset of grammar.ruleset) {
             if (rulesetLookup[ruleset.name]) {
@@ -1196,11 +1198,13 @@ function buildExpectedTerminals(failedPatterns) {
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpcodeCompiler = void 0;
+const Grammar_1 = require("./Grammar");
 const Error_1 = require("./Error");
 const Interpreter_1 = require("./Interpreter");
 class CompilerContext {
-    constructor() {
+    constructor(callbacks) {
         this.activeRules = [];
+        this.callbacks = Object.assign(Object.assign({}, Grammar_1.GrammarDefaultCallbacks), (callbacks || {}));
     }
     pushRule(rule) {
         if (this.currentRule) {
@@ -1264,8 +1268,8 @@ class OpcodeCompiler {
         }
         return profileOp;
     }
-    compile() {
-        const cctx = new CompilerContext();
+    compile(callbacks) {
+        const cctx = new CompilerContext(callbacks);
         const op = this.compileRuleset(cctx, this.grammar.rulesetLookup.return, this.audit(null, "pass", (ictx, buf) => { ictx.status = Interpreter_1.Pass; return null; }), this.audit(null, "fail", (ictx, buf) => { ictx.status = Interpreter_1.Fail; return null; }));
         let iteration = 0;
         return (ctx, buf) => {
@@ -1720,7 +1724,7 @@ class OpcodeCompiler {
                     }
                 }
             case "call":
-                const callback = this.grammar.callbacks[node.name];
+                const callback = cctx.callbacks[node.name];
                 const argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
                 if (!callback) {
                     Error_1.grammarError(Error_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
@@ -1795,7 +1799,7 @@ class OpcodeCompiler {
 }
 exports.OpcodeCompiler = OpcodeCompiler;
 
-},{"./Error":2,"./Interpreter":5}],7:[function(require,module,exports){
+},{"./Error":2,"./Grammar":3,"./Interpreter":5}],7:[function(require,module,exports){
 "use strict";
 /*
  * Dezent - Powerful pattern matching and parsing that's readable, recursive, and structured.

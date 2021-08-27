@@ -23,11 +23,12 @@
  */
 
 import {
-    Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode, StringTextNode, EscapeNode, RuleRefNode
+    Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode, StringTextNode, EscapeNode, RuleRefNode, GrammarDefaultCallbacks
 } from "./Grammar";
 import { ErrorCode, parserError, grammarError } from "./Error";
 import { Context as InterpreterContext, Pass, Fail, WaitInput, Interpreter } from "./Interpreter";
 import { ParseBuffer } from "./ParseBuffer";
+import { Callbacks } from "./Dezent";
 
 export type Operation = (ictx:InterpreterContext, buf:ParseBuffer) => Operation|null;
 export type ValueBuilder = (ictx:InterpreterContext, buf:ParseBuffer) => any;
@@ -35,6 +36,14 @@ export type ValueBuilder = (ictx:InterpreterContext, buf:ParseBuffer) => any;
 class CompilerContext {
     activeRules:RuleNode[] = [];
     currentRule:RuleNode;
+    callbacks:Callbacks;
+
+    constructor(callbacks?:Callbacks) {
+        this.callbacks = {
+            ...GrammarDefaultCallbacks,
+            ...(callbacks||{})
+        };
+    }
 
     pushRule(rule:RuleNode) {
         if (this.currentRule) {
@@ -107,8 +116,8 @@ export class OpcodeCompiler {
         return profileOp;
     }
 
-    compile():Operation {
-        const cctx = new CompilerContext();
+    compile(callbacks?:Callbacks):Operation {
+        const cctx = new CompilerContext(callbacks);
         const op = this.compileRuleset(
             cctx,
             this.grammar.rulesetLookup.return, 
@@ -572,7 +581,7 @@ export class OpcodeCompiler {
                     }
                 }
             case "call":
-                const callback = this.grammar.callbacks[node.name];
+                const callback = cctx.callbacks[node.name];
                 const argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
 
                 if (!callback) {

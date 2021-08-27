@@ -38,7 +38,6 @@ Powerful pattern matching and parsing that's readable, recursive, and structured
   * [`.` or `[]` property access](#-or--property-access)
   * [`?` collapse](-collapse)
   * [callbacks](#-callbacks)
-* [Epilogue](#Epilogue)
 
 # Introduction
 
@@ -820,5 +819,15 @@ Provide your own custom callback functions to produce special output, or even SA
 ).parse('all foo all the time');
 'all bar all the time'
 ```
+
+Alternatively, callbacks can be late-bound and supplied at the time of parsing:
+```javascript
+> new Dezent(`return {.*} -> translate($1);`).parse(
+    'all foo all the time', 
+    { translate: (txt) => txt.replace("foo", "bar") }
+);
+'all bar all the time'
+```
+
 
 <div align="right"><a href="#table-of-contents">table of contents</a></div>

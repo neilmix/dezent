@@ -27,7 +27,7 @@ exports.findDezentGrammar = exports.buildString = exports.GrammarCompiler = void
 const Grammar_1 = require("./Grammar");
 const Error_1 = require("./Error");
 class GrammarCompiler {
-    static compileGrammar(grammar, text, callbacks) {
+    static compileGrammar(grammar, text) {
         // compile and validate
         // - count the number of backrefs in each rule
         // - validate that all options contain that many backrefs
@@ -37,29 +37,6 @@ class GrammarCompiler {
         // of the grammar tree may be visited/executed at runtime
         grammar.version = Grammar_1.GrammarVersion;
         grammar.text = text;
-        grammar.callbacks = Object.assign({ pivot: (value) => {
-                if (!Array.isArray(value)) {
-                    throw new Error("Invalid pivot argment: " + value);
-                }
-                value.map((item) => {
-                    if (!Array.isArray(item)) {
-                        throw new Error("Invalid pivot argument: " + JSON.stringify(item));
-                    }
-                    if (item.length != value[0].length) {
-                        throw new Error("All subarrays in a pivot must be of the same length");
-                    }
-                });
-                let ret = [];
-                for (let item of value[0]) {
-                    ret.push([]);
-                }
-                for (let i = 0; i < value.length; i++) {
-                    for (let j = 0; j < value[0].length; j++) {
-                        ret[j][i] = value[i][j];
-                    }
-                }
-                return ret;
-            } }, callbacks);
         let rulesetLookup = grammar.rulesetLookup = {};
         for (let ruleset of grammar.ruleset) {
             if (rulesetLookup[ruleset.name]) {

@@ -76,9 +76,9 @@ export class Dezent {
         this.error = null;
     }
 
-    parse(text:string) : any {
+    parse(text:string, callbacks?:Callbacks) : any {
         try {
-            let stream = new DezentStream(this.grammar, this.options);
+            let stream = new DezentStream(this.grammar, { ...this.options, callbacks: callbacks || this.options.callbacks });
             stream.write(text);
             return stream.close();
         } catch (e) {
@@ -101,7 +101,7 @@ export class DezentStream {
         this.options = fillOptions(options);
         this.buffer = new ParseBuffer(this.options.minBufferSizeInMB);
         grammar = typeof grammar == "string" ? parseGrammar(grammar, this.options) : grammar;
-        this.opcode = new OpcodeCompiler(grammar, this.options.enableProfiling).compile();
+        this.opcode = new OpcodeCompiler(grammar, this.options.enableProfiling).compile(this.options.callbacks);
         this.interpreter = new Interpreter(this.opcode, this.buffer);
     }
 
@@ -137,7 +137,7 @@ export function parseGrammar(text:string, options:DezentOptions) : Grammar {
     let interpreter = new Interpreter(dezentOpcode, new ParseBuffer(text));
     try {
         let grammar = interpreter.resume();    
-        GrammarCompiler.compileGrammar(grammar, text, options.callbacks);
+        GrammarCompiler.compileGrammar(grammar, text);
         return grammar;
     } catch(e) {
         if (e["code"] == ErrorCode.TextParsingError) {

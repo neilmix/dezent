@@ -269,6 +269,7 @@ test("access", () => {
 
 test("callbacks", () => {
     expectParse(`return .* -> foo();`, 'anything', { callbacks: { foo: () => 4 } }).toEqual(4);
+    expect(new Dezent(`return .* -> foo();`).parse('anything', { foo: () => 4 })).toEqual(4);
     expectParse(`return .* -> foo(1, 'a', true, [1,2,3], { foo: 'bar' });`, 'anything', 
         { callbacks: { foo: function() { return [].slice.call(arguments) } } })
         .toEqual([1, 'a', true, [1,2,3], { foo: 'bar' }]);

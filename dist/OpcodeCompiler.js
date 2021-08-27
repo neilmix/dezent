@@ -24,11 +24,13 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OpcodeCompiler = void 0;
+const Grammar_1 = require("./Grammar");
 const Error_1 = require("./Error");
 const Interpreter_1 = require("./Interpreter");
 class CompilerContext {
-    constructor() {
+    constructor(callbacks) {
         this.activeRules = [];
+        this.callbacks = Object.assign(Object.assign({}, Grammar_1.GrammarDefaultCallbacks), (callbacks || {}));
     }
     pushRule(rule) {
         if (this.currentRule) {
@@ -92,8 +94,8 @@ class OpcodeCompiler {
         }
         return profileOp;
     }
-    compile() {
-        const cctx = new CompilerContext();
+    compile(callbacks) {
+        const cctx = new CompilerContext(callbacks);
         const op = this.compileRuleset(cctx, this.grammar.rulesetLookup.return, this.audit(null, "pass", (ictx, buf) => { ictx.status = Interpreter_1.Pass; return null; }), this.audit(null, "fail", (ictx, buf) => { ictx.status = Interpreter_1.Fail; return null; }));
         let iteration = 0;
         return (ctx, buf) => {
@@ -548,7 +550,7 @@ class OpcodeCompiler {
                     }
                 }
             case "call":
-                const callback = this.grammar.callbacks[node.name];
+                const callback = cctx.callbacks[node.name];
                 const argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
                 if (!callback) {
                     Error_1.grammarError(Error_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);

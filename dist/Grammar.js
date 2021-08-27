@@ -23,8 +23,33 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createUncompiledDezentGrammar = exports.GrammarVersion = void 0;
+exports.createUncompiledDezentGrammar = exports.GrammarDefaultCallbacks = exports.GrammarVersion = void 0;
 exports.GrammarVersion = 1;
+exports.GrammarDefaultCallbacks = {
+    pivot: (value) => {
+        if (!Array.isArray(value)) {
+            throw new Error("Invalid pivot argment: " + value);
+        }
+        value.map((item) => {
+            if (!Array.isArray(item)) {
+                throw new Error("Invalid pivot argument: " + JSON.stringify(item));
+            }
+            if (item.length != value[0].length) {
+                throw new Error("All subarrays in a pivot must be of the same length");
+            }
+        });
+        let ret = [];
+        for (let item of value[0]) {
+            ret.push([]);
+        }
+        for (let i = 0; i < value.length; i++) {
+            for (let j = 0; j < value[0].length; j++) {
+                ret[j][i] = value[i][j];
+            }
+        }
+        return ret;
+    }
+};
 function createUncompiledDezentGrammar() {
     // This is a mini DSL that allows us to build an AST
     // that our parser uses to parse grammar files.
