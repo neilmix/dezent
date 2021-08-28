@@ -218,7 +218,7 @@ export class Interpreter {
         switch (ctx.status) {
             case Pass:
                 if (ctx.endPos < buf.length) {
-                    parsingError(ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
+                    parsingError(ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
                 }
                 if (!buf.closed) {
                     this.resumeOp = op;
@@ -228,7 +228,7 @@ export class Interpreter {
                 ctx.dumpProfile();
                 return ctx.output;
             case Fail:
-                parsingError(ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
+                parsingError(ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
             case WaitInput:
                 this.resumeOp = op;
                 return;

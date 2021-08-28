@@ -564,7 +564,7 @@ function output(value: any) : ValueNode {
 				if (value.match(/^...\$([0-9]+|[a-zA-Z_]+)/)) {
 					return { type: 'spread', value: ref(RegExp.$1) };
 				} else {
-					throw new Error();
+					throw new Error("unreachable");
 				}
 			} else {
 				return {

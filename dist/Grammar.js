@@ -367,7 +367,7 @@ function output(value) {
                     return { type: 'spread', value: ref(RegExp.$1) };
                 }
                 else {
-                    throw new Error();
+                    throw new Error("unreachable");
                 }
             }
             else {

@@ -617,7 +617,7 @@ function output(value) {
                     return { type: 'spread', value: ref(RegExp.$1) };
                 }
                 else {
-                    throw new Error();
+                    throw new Error("unreachable");
                 }
             }
             else {
@@ -1138,7 +1138,7 @@ class Interpreter {
         switch (ctx.status) {
             case exports.Pass:
                 if (ctx.endPos < buf.length) {
-                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
+                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
                 }
                 if (!buf.closed) {
                     this.resumeOp = op;
@@ -1148,7 +1148,7 @@ class Interpreter {
                 ctx.dumpProfile();
                 return ctx.output;
             case exports.Fail:
-                Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.endPos, buildExpectedTerminals(ctx.failedPatterns));
+                Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
             case exports.WaitInput:
                 this.resumeOp = op;
                 return;

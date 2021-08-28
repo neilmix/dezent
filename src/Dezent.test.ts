@@ -442,6 +442,11 @@ test("errors", () => {
     /* 1012 */ expect(parseError(`$foo = 234; return .* -> $foo[1];`, 'a').char).toEqual(30);
     /* 1013 */ expect(parseError(`$foo = {}; return .* -> [1][$foo];`, 'a').char).toEqual(28);
     /* 1014 */ expect(parseError(`return .* -> {}.foo;`, 'a').char).toEqual(16);
+
+    expect(parseGrammarError(`
+return foo -> $0;
+foo+ = . -> $0;
+`).char).toEqual(4);
 });
 
 test("comments", () => {
