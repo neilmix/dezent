@@ -428,6 +428,14 @@ test("minBufferSize", () => {
     ds.close();
 });
 
+test("position info", () => {
+    let info = Dezent.getPositionInfo(`12345\n\t67890`, 10);
+    expect(info.line).toBe(2);
+    expect(info.char).toBe(5);
+    expect(info.lineText).toBe(   '    67890');
+    expect(info.pointerText).toBe('       ^');
+});
+
 test("errors", () => {
     /* 1001 */ expect(parseGrammarError(`return foo -> null; foo = . -> null; foo = .. -> 1;`).char).toEqual(38);
     /* 1002 */ expect(parseGrammarError(`return . -> 1; return . -> 2;`).char).toEqual(16);

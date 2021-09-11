@@ -49,6 +49,9 @@ class Dezent {
             return undefined;
         }
     }
+    static getPositionInfo(text, pos) {
+        return new ParseBuffer_1.ParseBuffer(text).findLineAndChar(pos);
+    }
 }
 exports.Dezent = Dezent;
 class DezentStream {

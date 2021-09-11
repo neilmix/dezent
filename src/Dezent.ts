@@ -26,7 +26,7 @@
 import { parsingError, ErrorCode } from './Error';
 import { Grammar } from './Grammar';
 import { GrammarCompiler, findDezentGrammar } from './GrammarCompiler';
-import { ParseBuffer } from './ParseBuffer';
+import { ParseBuffer, PositionInfo } from './ParseBuffer';
 import { OpcodeCompiler, Operation } from './OpcodeCompiler';
 import { Interpreter } from './Interpreter';
 
@@ -88,6 +88,10 @@ export class Dezent {
             }
             return undefined;
         }
+    }
+
+    static getPositionInfo(text:string, pos:number) : PositionInfo {
+        return new ParseBuffer(text).findLineAndChar(pos);
     }
 }
 

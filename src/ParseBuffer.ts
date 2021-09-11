@@ -26,6 +26,7 @@
  import { parserError, ErrorCode } from "./Error";
 
  export const ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
+ export type PositionInfo = { line: number|string, char: number, lineText: string, pointerText: string };
 
  export class ParseBuffer {
     private minSize : number = 1 * 1024 * 1024;
@@ -93,7 +94,7 @@
         }
     }
 
-    findLineAndChar(pos:number) : { line: number|string, char: number, lineText: string, pointerText: string } {
+    findLineAndChar(pos:number) : PositionInfo {
         let lineText = '';
         let line = 0;
         pos -= this.offset;
