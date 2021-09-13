@@ -316,10 +316,8 @@ export class OpcodeCompiler {
                     // But, double-check our context iteration so that we don't conflict across parses.
                     let prevIteration = -1;
                     let prevPos = -1;
-                    let leftRecursing = false;
-                    let leftOutput = undefined;
-                    let leftEndPos = 0;
-                    let leftConsumed = 0;
+                    let left:{returning:boolean, calling:boolean, output:any, endPos:number, consumed:number} = null;
+                    let leftStack = [];
 
                     // In order to detect left recursion we need access to prevPos (defined above) in our scope.
                     // But, pass and fail may be different for every invocation of a ruleref. So, we need to use
@@ -330,16 +328,24 @@ export class OpcodeCompiler {
                     if (!this.rulerefOpFactories[name]) {
                         this.rulerefOpFactories[name] = (pass, fail) => {
                             return this.audit(node, "run", (ictx, buf) => {
-                                if (leftRecursing) {
-                                    ictx.output = leftOutput;
-                                    ictx.endPos = leftEndPos;
-                                    ictx.lastConsumed = leftConsumed;
+                                if (left && left.calling) {
+                                    left.calling = false;
+                                    left.returning = true;
+                                    ictx.output = left.output;
+                                    ictx.endPos = left.endPos;
+                                    ictx.lastConsumed = left.consumed;
                                     return pass;
                                 } else if (ictx.iteration == prevIteration && ictx.startPos == prevPos) {
-                                    leftRecursing = true;
-                                    leftOutput = undefined;
-                                    leftEndPos = 0;
-                                    leftConsumed = 0;
+                                    if (left) {
+                                        leftStack.push(left);
+                                    }
+                                    left = {
+                                        returning: true,
+                                        calling: false,
+                                        output: undefined,
+                                        endPos: 0,
+                                        consumed: 0
+                                    };
                                     return fail;
                                 }
                                 prevIteration = ictx.iteration;
@@ -361,17 +367,19 @@ export class OpcodeCompiler {
                             cctx,
                             ruleset,
                             this.audit(node, "pass", (ictx, buf) => { 
-                                if (leftRecursing) {
-                                    if (ictx.lastConsumed > leftConsumed) {
-                                        leftOutput = ictx.output;
-                                        leftEndPos = ictx.endPos;
-                                        leftConsumed = ictx.lastConsumed;
+                                if (left && left.returning) {
+                                    left.returning = false;
+                                    if (ictx.lastConsumed > left.consumed) {
+                                        left.calling = true;
+                                        left.output = ictx.output;
+                                        left.endPos = ictx.endPos;
+                                        left.consumed = ictx.lastConsumed;
                                         return rulesetOps[name];
                                     } else {
-                                        ictx.output = leftOutput;
-                                        ictx.endPos = leftEndPos;
-                                        ictx.lastConsumed = leftConsumed;
-                                        leftRecursing = false;
+                                        ictx.output = left.output;
+                                        ictx.endPos = left.endPos;
+                                        ictx.lastConsumed = left.consumed;
+                                        left = leftStack.pop();
                                         // fall through
                                     }
                                 }
@@ -380,11 +388,11 @@ export class OpcodeCompiler {
                                 return ictx.popFrame().pass; 
                             }),
                             this.audit(node, "fail", (ictx, buf) => { 
-                                if (leftRecursing) {
-                                    leftRecursing = false;
-                                    ictx.output = leftOutput;
-                                    ictx.endPos = leftEndPos;
-                                    ictx.lastConsumed = leftConsumed;
+                                if (left && left.returning) {
+                                    ictx.output = left.output;
+                                    ictx.endPos = left.endPos;
+                                    ictx.lastConsumed = left.consumed;
+                                    left = leftStack.pop();
                                     prevPos = -1;
                                     if (disableFailedPatternTracking) ictx.disableFailedPatternLevel--;
                                     return ictx.popFrame().pass;

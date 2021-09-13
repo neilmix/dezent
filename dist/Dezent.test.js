@@ -258,8 +258,11 @@ test("left recursion", () => {
             {expr} _ '+' _ {mult} -> ['+',$1,$2],
             {mult} -> $1;
         mult =
-            {mult} _ '*' _ {num} -> ['*',$1,$2],
-            num -> $0;
+            {mult} _ '*' _ {group} -> ['*',$1,$2],
+            {group} -> $1;
+        group =
+            '(' {expr} ')' -> $1,
+            {num} -> $1;
         num = [0-9]+ -> $0;
         return _ {expr} _ -> $1;
     `;
@@ -269,6 +272,8 @@ test("left recursion", () => {
     expectParse(grammar, '5+4+3+2').toEqual(['+', ['+', ['+', '5', '4'], '3'], '2']);
     expectParse(grammar, '5*4+3*2').toEqual(['+', ['*', '5', '4'], ['*', '3', '2']]);
     expectParse(grammar, '5*4*3+2').toEqual(['+', ['*', ['*', '5', '4'], '3'], '2']);
+    expectParse(grammar, '1*(2+3)').toEqual(['*', '1', ['+', '2', '3']]);
+    expectParse(grammar, '(2+3)*1').toEqual(['*', ['+', '2', '3'], '1']);
     grammar = `
         rule1 = rule2 -> $0;
         rule2 = rule1 'b' -> $0, 'a' -> $0;
