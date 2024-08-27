@@ -23,7 +23,7 @@
  */
 
 
-global["test"] = async function(name, f, timeout) {
+(global as any)["test"] = async function(name, f, timeout) {
     //if (!name.match(/chunked/)) return;
     try {
         await f();
@@ -33,7 +33,7 @@ global["test"] = async function(name, f, timeout) {
     }
 }
 
-global["expect"] = function(actual) {
+(global as any)["expect"] = function(actual) {
     return {
         toBe: (expected) => { if (actual !== expected) debugger },
         toEqual: (expected) => { if (JSON.stringify(actual) != JSON.stringify(expected)) debugger },

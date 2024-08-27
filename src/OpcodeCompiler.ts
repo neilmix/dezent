@@ -23,7 +23,7 @@
  */
 
 import {
-    Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode, StringTextNode, EscapeNode, RuleRefNode, GrammarDefaultCallbacks
+    Node, DescriptorNode, Grammar, PatternNode, RuleNode, RulesetNode, SelectorNode, TokenNode, ValueNode, StringTextNode, BackRefNode, EscapeNode, RuleRefNode, GrammarDefaultCallbacks
 } from "./Grammar";
 import { ErrorCode, parserError, grammarError } from "./Error";
 import { Context as InterpreterContext, Pass, Fail, WaitInput, Interpreter } from "./Interpreter";
@@ -485,7 +485,11 @@ export class OpcodeCompiler {
                     return Number(n);
                 }
             case "string":
-                const strBuilders = node.tokens.map((node:StringTextNode|EscapeNode) => {
+                const strBuilders = node.tokens.map((node:StringTextNode|BackRefNode|EscapeNode) => {
+                    if (node.type == "backref") {
+                        return this.compileValueBuilder(cctx, node);
+                    }
+
                     const value = node.value;
                     if (node.type == "text") {
                         return () => value;
@@ -500,7 +504,7 @@ export class OpcodeCompiler {
                     }
                 });
                 return (ictx, buf) => {
-                    return strBuilders.map((b) => b()).join('');
+                    return strBuilders.map((b) => b(ictx, buf)).join('');
                 }
             case "constref":
                 return this.compileAccess(cctx, node, this.compileValueBuilder(cctx, this.grammar.vars[node.name]));

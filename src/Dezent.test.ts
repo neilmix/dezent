@@ -121,6 +121,8 @@ test("backref outputs", () => {
         bar = {.}{.} -> { $1: $2 };
     `, 'abcd').toEqual([{a: 'b'}, {c: 'd'}]);
     expectParse(`return ... -> $0;`, 'aaa').toEqual('aaa');
+    expectParse(`return ... -> 'foo\\$0bar';`, 'aaa').toEqual('fooaaabar');
+    expectParse(`return ... -> 'foo$0bar';`, 'aaa').toEqual('foo$0bar');
 });
 
 test("pivot", () => {
@@ -383,12 +385,12 @@ test("chunked parsing", () => {
 });
 
 test("command line util", () => {
-    let stdout = execSync("dezent src/grammar.dezent src/grammar.dezent");
+    let stdout = execSync("npm exec dezent src/grammar.dezent src/grammar.dezent");
     let json = JSON.parse(stdout.toString());
     expect(json).not.toBe(null);
     expect(typeof json).toBe('object');
 
-    stdout = execSync("cat src/grammar.dezent | dezent src/grammar.dezent -");
+    stdout = execSync("cat src/grammar.dezent | npm exec dezent src/grammar.dezent -");
     expect(json).not.toBe(null);
     expect(typeof json).toBe('object');
 });

@@ -134,7 +134,7 @@ export interface RuleRefNode      extends Node         { type: 'ruleref',   name
 export interface ClassNode        extends MatcherNode  { type: 'class',     ranges: [RangeNode, RangeNode][] }
 export interface AnyNode          extends MatcherNode  { type: 'any' }
 export interface StringNode       extends MatcherNode, 
-                                          OutputNode   { type: 'string',    tokens: (EscapeNode|StringTextNode)[] }
+                                          OutputNode   { type: 'string',    tokens: (EscapeNode|BackRefNode|StringTextNode)[] }
 export interface StringTextNode   extends Node         { type: 'text',      value: string }
 export interface EscapeNode       extends RangeNode    { type: 'escape',    value: string }
 export interface CharNode         extends RangeNode    { type: 'char',      value: string }
@@ -307,8 +307,9 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('index', `[0-9]+`,
 				{ type: 'number', value: '$0' }),
 
-			ruleset('escape', `'\\\\' {unicode|charstr}`,
-				{ type: 'escape', value: '$1' }),
+			ruleset('escape', 
+				`'\\\\' {backref}`, '$1',
+				`'\\\\' {unicode|charstr}`,	{ type: 'escape', value: '$1' }),
 
 			ruleset('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`,
 				'$0'),

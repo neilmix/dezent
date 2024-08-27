@@ -27,12 +27,13 @@ import {
     Grammar, GrammarVersion, Node, SelectorNode, Meta, RulesetNode, RuleNode, TokenNode, PatternNode, 
     RuleRefNode, ClassNode, AnyNode, ValueNode, MemberNode, StringNode, CaptureNode,
     createUncompiledDezentGrammar,
-    StringTextNode,
+    StringTextNode, BackRefNode,
     EscapeNode
 } from './Grammar';
 
 import { ErrorCode, grammarError, parserError } from './Error';
 import { Callbacks } from './Dezent';
+import { match } from 'assert';
 
 export class GrammarCompiler {
 
@@ -277,6 +278,8 @@ function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
     } else if (node.type == "member") {
         visitOutputNodes(node.name, data, f);
         items = [node.value];
+    } else if (node.type == "string") {
+        items = node.tokens;
     }
     if (items) {
         for (let item of items) {
@@ -286,9 +289,11 @@ function visitOutputNodes(node:ValueNode|MemberNode, data, f:Function) {
 }
 
 export function buildString(node:StringNode) {
-    return node.tokens.map((node:StringTextNode|EscapeNode) => {
+    return node.tokens.map((node:StringTextNode|BackRefNode|EscapeNode) => {
         if (node.type == "text") {
             return node.value;
+        } else if (node.type == "backref") {
+            throw new Error("backrefs are only allowed in output");
         } else if (node.value[0] == 'u') {
             return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
         } else if(node.value.length > 1) {
