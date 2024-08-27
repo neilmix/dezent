@@ -27,6 +27,12 @@ exports.ParseBuffer = exports.ParseBufferExhaustedError = void 0;
 const Error_1 = require("./Error");
 exports.ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
 class ParseBuffer {
+    get length() {
+        return this._length;
+    }
+    get closed() {
+        return this._closed;
+    }
     constructor(textOrSize) {
         this.minSize = 1 * 1024 * 1024;
         this.text = '';
@@ -41,12 +47,6 @@ class ParseBuffer {
             this.minSize = textOrSize * 1024 * 1024;
         }
     }
-    get length() {
-        return this._length;
-    }
-    get closed() {
-        return this._closed;
-    }
     addChunk(input) {
         let trim = 0;
         if (this.text.length > this.minSize) {
@@ -59,7 +59,7 @@ class ParseBuffer {
     substr(startIdx, length) {
         startIdx -= this.offset;
         if (startIdx < 0) {
-            Error_1.parserError(Error_1.ErrorCode.InputFreed);
+            (0, Error_1.parserError)(Error_1.ErrorCode.InputFreed);
         }
         return this.text.substr(startIdx, length);
     }
@@ -81,7 +81,7 @@ class ParseBuffer {
             throw exports.ParseBufferExhaustedError;
         }
         else if (idx < 0) {
-            Error_1.parserError(Error_1.ErrorCode.InputFreed);
+            (0, Error_1.parserError)(Error_1.ErrorCode.InputFreed);
         }
         else {
             return this.text[idx];

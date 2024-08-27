@@ -441,6 +441,9 @@ class OpcodeCompiler {
                 };
             case "string":
                 const strBuilders = node.tokens.map((node) => {
+                    if (node.type == "backref") {
+                        return this.compileValueBuilder(cctx, node);
+                    }
                     const value = node.value;
                     if (node.type == "text") {
                         return () => value;
@@ -449,7 +452,7 @@ class OpcodeCompiler {
                         return () => String.fromCharCode(Number(`0x${value.substr(1)}`));
                     }
                     else if (node.value.length > 1) {
-                        Error_1.parserError(Error_1.ErrorCode.Unreachable);
+                        (0, Error_1.parserError)(Error_1.ErrorCode.Unreachable);
                     }
                     else if ("bfnrt".indexOf(value) >= 0) {
                         return () => ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[value];
@@ -459,7 +462,7 @@ class OpcodeCompiler {
                     }
                 });
                 return (ictx, buf) => {
-                    return strBuilders.map((b) => b()).join('');
+                    return strBuilders.map((b) => b(ictx, buf)).join('');
                 };
             case "constref":
                 return this.compileAccess(cctx, node, this.compileValueBuilder(cctx, this.grammar.vars[node.name]));
@@ -469,7 +472,7 @@ class OpcodeCompiler {
                     case "position": return (ictx, buf) => ictx.startPos;
                     case "length": return (ictx, buf) => ictx.endPos - ictx.startPos;
                     default:
-                        Error_1.parserError(Error_1.ErrorCode.Unreachable);
+                        (0, Error_1.parserError)(Error_1.ErrorCode.Unreachable);
                         return null;
                 }
             case "array":
@@ -505,7 +508,7 @@ class OpcodeCompiler {
                         return (ictx, buf, retval) => {
                             return tupleBuilder(ictx, buf).reduce((o, tuple) => {
                                 if (!Array.isArray(tuple) || tuple.length != 2) {
-                                    Error_1.grammarError(Error_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
+                                    (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
                                 }
                                 o[tuple[0]] = tuple[1];
                                 return o;
@@ -561,14 +564,14 @@ class OpcodeCompiler {
                 const callback = cctx.callbacks[node.name];
                 const argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
                 if (!callback) {
-                    Error_1.grammarError(Error_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
                 }
                 return (ictx, buf) => {
                     try {
                         return callback.apply(null, argBuilders.map((arg) => arg(ictx, buf)));
                     }
                     catch (e) {
-                        Error_1.grammarError(Error_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
+                        (0, Error_1.grammarError)(Error_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
                     }
                 };
             case "spread":
@@ -576,7 +579,7 @@ class OpcodeCompiler {
                 return (ictx, buf) => {
                     const value = spreader(ictx, buf);
                     if (value === null || value === undefined || (typeof value != 'object' && typeof value != 'string')) {
-                        Error_1.grammarError(Error_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
+                        (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
                     }
                     if (Array.isArray(value)) {
                         return value;
@@ -601,14 +604,14 @@ class OpcodeCompiler {
                         return (ictx, buf) => {
                             let out = prevBuilder(ictx, buf);
                             if (out == null || (typeof out != 'object' && typeof out != 'string')) {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
                             }
                             let index = indexBuilder(ictx, buf);
                             if (typeof index != 'string' && typeof index != 'number') {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
                             }
                             if (!out.hasOwnProperty(index)) {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
                             }
                             return out[index];
                         };
@@ -617,11 +620,11 @@ class OpcodeCompiler {
                         return (ictx, buf) => {
                             let out = prevBuilder(ictx, buf);
                             if (out == null || (typeof out != 'object' && typeof out != 'string')) {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
                             }
                             let index = prop.name;
                             if (!out.hasOwnProperty(index)) {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
                             }
                             return out[index];
                         };

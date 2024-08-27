@@ -32,8 +32,7 @@ global["test"] = async function (name, f, timeout) {
         console.error("EXCEPTION:", name);
         console.error(e.stack);
     }
-};
-global["expect"] = function (actual) {
+}(global)["expect"] = function (actual) {
     return {
         toBe: (expected) => { if (actual !== expected)
             debugger; },

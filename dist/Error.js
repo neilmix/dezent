@@ -23,7 +23,11 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parsingError = exports.grammarError = exports.assert = exports.parserError = exports.errorMessages = exports.ErrorCode = void 0;
+exports.errorMessages = exports.ErrorCode = void 0;
+exports.parserError = parserError;
+exports.assert = assert;
+exports.grammarError = grammarError;
+exports.parsingError = parsingError;
 const ParseBuffer_1 = require("./ParseBuffer");
 var ErrorCode;
 (function (ErrorCode) {
@@ -56,7 +60,7 @@ var ErrorCode;
     ErrorCode[ErrorCode["MultipleOutputsForCapture"] = 2010] = "MultipleOutputsForCapture";
     ErrorCode[ErrorCode["AssertionFailure"] = 2011] = "AssertionFailure";
     ErrorCode[ErrorCode["InputFreed"] = 2012] = "InputFreed";
-})(ErrorCode = exports.ErrorCode || (exports.ErrorCode = {}));
+})(ErrorCode || (exports.ErrorCode = ErrorCode = {}));
 exports.errorMessages = {
     1: "Parse failed: $3\nAt line $1 char $2:\n$4\n$5",
     2: "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5",
@@ -94,14 +98,12 @@ function parserError(code) {
     e["code"] = code;
     throw e;
 }
-exports.parserError = parserError;
 function assert(condition) {
     if (!condition) {
         debugger;
         parserError(ErrorCode.AssertionFailure);
     }
 }
-exports.assert = assert;
 function grammarError(code, text, meta, ...args) {
     let reason = exports.errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index - 1]);
     let msg = `Grammar error ${code}: ${reason}`;
@@ -122,7 +124,6 @@ function grammarError(code, text, meta, ...args) {
     }
     throw e;
 }
-exports.grammarError = grammarError;
 function parsingError(code, buf, pos, expected) {
     expected = expected.map((i) => i.replace(/\n/g, '\\n'));
     let list = [].join.call(expected, '\n\t');
@@ -141,4 +142,3 @@ function parsingError(code, buf, pos, expected) {
     e["expected"] = expected;
     throw e;
 }
-exports.parsingError = parsingError;

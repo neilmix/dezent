@@ -24,7 +24,8 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseGrammar = exports.DezentStream = exports.Dezent = void 0;
+exports.DezentStream = exports.Dezent = void 0;
+exports.parseGrammar = parseGrammar;
 const Error_1 = require("./Error");
 const GrammarCompiler_1 = require("./GrammarCompiler");
 const ParseBuffer_1 = require("./ParseBuffer");
@@ -84,7 +85,7 @@ function fillOptions(options) {
 let dezentOpcode;
 function parseGrammar(text, options) {
     if (!dezentOpcode) {
-        dezentOpcode = new OpcodeCompiler_1.OpcodeCompiler(GrammarCompiler_1.findDezentGrammar(), false).compile();
+        dezentOpcode = new OpcodeCompiler_1.OpcodeCompiler((0, GrammarCompiler_1.findDezentGrammar)(), false).compile();
     }
     let buf = new ParseBuffer_1.ParseBuffer(text);
     let interpreter = new Interpreter_1.Interpreter(dezentOpcode, new ParseBuffer_1.ParseBuffer(text));
@@ -95,14 +96,13 @@ function parseGrammar(text, options) {
     }
     catch (e) {
         if (e["code"] == Error_1.ErrorCode.TextParsingError) {
-            Error_1.parsingError(Error_1.ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
+            (0, Error_1.parsingError)(Error_1.ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
         }
         else {
             throw e;
         }
     }
 }
-exports.parseGrammar = parseGrammar;
 
 },{"./Error":2,"./GrammarCompiler":4,"./Interpreter":5,"./OpcodeCompiler":6,"./ParseBuffer":7}],2:[function(require,module,exports){
 "use strict";
@@ -130,7 +130,11 @@ exports.parseGrammar = parseGrammar;
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parsingError = exports.grammarError = exports.assert = exports.parserError = exports.errorMessages = exports.ErrorCode = void 0;
+exports.errorMessages = exports.ErrorCode = void 0;
+exports.parserError = parserError;
+exports.assert = assert;
+exports.grammarError = grammarError;
+exports.parsingError = parsingError;
 const ParseBuffer_1 = require("./ParseBuffer");
 var ErrorCode;
 (function (ErrorCode) {
@@ -163,7 +167,7 @@ var ErrorCode;
     ErrorCode[ErrorCode["MultipleOutputsForCapture"] = 2010] = "MultipleOutputsForCapture";
     ErrorCode[ErrorCode["AssertionFailure"] = 2011] = "AssertionFailure";
     ErrorCode[ErrorCode["InputFreed"] = 2012] = "InputFreed";
-})(ErrorCode = exports.ErrorCode || (exports.ErrorCode = {}));
+})(ErrorCode || (exports.ErrorCode = ErrorCode = {}));
 exports.errorMessages = {
     1: "Parse failed: $3\nAt line $1 char $2:\n$4\n$5",
     2: "Error parsing grammar: $3\nAt line $1 char $2:\n$4\n$5",
@@ -201,14 +205,12 @@ function parserError(code) {
     e["code"] = code;
     throw e;
 }
-exports.parserError = parserError;
 function assert(condition) {
     if (!condition) {
         debugger;
         parserError(ErrorCode.AssertionFailure);
     }
 }
-exports.assert = assert;
 function grammarError(code, text, meta, ...args) {
     let reason = exports.errorMessages[code].replace(/\$([0-9])/g, (match, index) => args[index - 1]);
     let msg = `Grammar error ${code}: ${reason}`;
@@ -229,7 +231,6 @@ function grammarError(code, text, meta, ...args) {
     }
     throw e;
 }
-exports.grammarError = grammarError;
 function parsingError(code, buf, pos, expected) {
     expected = expected.map((i) => i.replace(/\n/g, '\\n'));
     let list = [].join.call(expected, '\n\t');
@@ -248,7 +249,6 @@ function parsingError(code, buf, pos, expected) {
     e["expected"] = expected;
     throw e;
 }
-exports.parsingError = parsingError;
 
 },{"./ParseBuffer":7}],3:[function(require,module,exports){
 "use strict";
@@ -276,7 +276,8 @@ exports.parsingError = parsingError;
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createUncompiledDezentGrammar = exports.GrammarDefaultCallbacks = exports.GrammarVersion = void 0;
+exports.GrammarDefaultCallbacks = exports.GrammarVersion = void 0;
+exports.createUncompiledDezentGrammar = createUncompiledDezentGrammar;
 exports.GrammarVersion = 1;
 exports.GrammarDefaultCallbacks = {
     pivot: (value) => {
@@ -362,7 +363,7 @@ function createUncompiledDezentGrammar() {
             ruleset('dotAccess', `'.' {identifier}`, { name: '$1', '...$meta': '' }),
             ruleset('bracketAccess', `'[' _ {backref|constref|metaref|string|index} _ ']'`, { value: '$1', '...$meta': '' }),
             ruleset('index', `[0-9]+`, { type: 'number', value: '$0' }),
-            ruleset('escape', `'\\\\' {unicode|charstr}`, { type: 'escape', value: '$1' }),
+            ruleset('escape', `'\\\\' {backref}`, '$1', `'\\\\' {unicode|charstr}`, { type: 'escape', value: '$1' }),
             ruleset('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`, '$0'),
             ruleset('charstr', `!'\\n' .`, '$0'),
             ruleset('identifier', `[_a-zA-Z] [_a-zA-Z0-9]*`, '$0'),
@@ -374,7 +375,6 @@ function createUncompiledDezentGrammar() {
         pragmas: {}
     };
 }
-exports.createUncompiledDezentGrammar = createUncompiledDezentGrammar;
 function returndef(patterns, output) {
     return {
         type: 'ruleset',
@@ -673,7 +673,9 @@ function output(value) {
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.findDezentGrammar = exports.buildString = exports.GrammarCompiler = void 0;
+exports.GrammarCompiler = void 0;
+exports.buildString = buildString;
+exports.findDezentGrammar = findDezentGrammar;
 const Grammar_1 = require("./Grammar");
 const Error_1 = require("./Error");
 class GrammarCompiler {
@@ -691,10 +693,10 @@ class GrammarCompiler {
         for (let ruleset of grammar.ruleset) {
             if (rulesetLookup[ruleset.name]) {
                 if (ruleset.name == 'return') {
-                    Error_1.grammarError(Error_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
                 }
                 else {
-                    Error_1.grammarError(Error_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
                 }
             }
             rulesetLookup[ruleset.name] = ruleset;
@@ -714,7 +716,7 @@ class GrammarCompiler {
             // perform sanity checks
             visitParseNodes("ruleref", ruleset, null, null, (node) => {
                 if (!rulesetLookup[node.name]) {
-                    Error_1.grammarError(Error_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
                 }
             });
             // figure out if our selectors are capable of failing, which helps in
@@ -761,7 +763,7 @@ class GrammarCompiler {
         }
         grammar.maxid = nodeSequence;
         if (!grammar.rulesetLookup["return"]) {
-            Error_1.grammarError(Error_1.ErrorCode.ReturnNotFound, grammar.text);
+            (0, Error_1.grammarError)(Error_1.ErrorCode.ReturnNotFound, grammar.text);
         }
         return grammar;
     }
@@ -785,7 +787,7 @@ class GrammarCompiler {
                     info.repeats--;
             });
             if (lastCount > -1 && lastCount != info.captures.length) {
-                Error_1.grammarError(Error_1.ErrorCode.CaptureCountMismatch, text, rule.meta);
+                (0, Error_1.grammarError)(Error_1.ErrorCode.CaptureCountMismatch, text, rule.meta);
             }
             lastCount = info.captures.length;
             i++;
@@ -850,13 +852,13 @@ class GrammarCompiler {
             }
             if (node.type == "constref") {
                 if (!vars[node.name]) {
-                    Error_1.grammarError(Error_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
         });
         for (let i = 1; i < info.backrefs.length; i++) {
             if (info.backrefs[i].index >= info.captures.length) {
-                Error_1.grammarError(Error_1.ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
+                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
             }
         }
         return info.captures;
@@ -911,6 +913,9 @@ function visitOutputNodes(node, data, f) {
         visitOutputNodes(node.name, data, f);
         items = [node.value];
     }
+    else if (node.type == "string") {
+        items = node.tokens;
+    }
     if (items) {
         for (let item of items) {
             visitOutputNodes(item, data, f);
@@ -922,11 +927,14 @@ function buildString(node) {
         if (node.type == "text") {
             return node.value;
         }
+        else if (node.type == "backref") {
+            throw new Error("backrefs are only allowed in output");
+        }
         else if (node.value[0] == 'u') {
             return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
         }
         else if (node.value.length > 1) {
-            Error_1.parserError(Error_1.ErrorCode.Unreachable);
+            (0, Error_1.parserError)(Error_1.ErrorCode.Unreachable);
         }
         else if ("bfnrt".indexOf(node.value) >= 0) {
             return ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[node.value];
@@ -936,16 +944,14 @@ function buildString(node) {
         }
     }).join("");
 }
-exports.buildString = buildString;
 let dezentGrammar;
 function findDezentGrammar() {
     if (!dezentGrammar) {
-        dezentGrammar = Grammar_1.createUncompiledDezentGrammar();
+        dezentGrammar = (0, Grammar_1.createUncompiledDezentGrammar)();
         GrammarCompiler.compileGrammar(dezentGrammar);
     }
     return dezentGrammar;
 }
-exports.findDezentGrammar = findDezentGrammar;
 
 },{"./Error":2,"./Grammar":3}],5:[function(require,module,exports){
 "use strict";
@@ -1044,9 +1050,9 @@ class Context {
             }
             else {
                 let out = stack.pop();
-                Error_1.assert(!!out);
-                Error_1.assert(out.name == this.profileRules[i]);
-                Error_1.assert(out.position == this.profilePositions[i]);
+                (0, Error_1.assert)(!!out);
+                (0, Error_1.assert)(out.name == this.profileRules[i]);
+                (0, Error_1.assert)(out.position == this.profilePositions[i]);
                 out.endTime = this.profileTimes[i];
                 out.duration = out.endTime - out.startTime;
                 out.result = this.profileActions[i];
@@ -1076,7 +1082,7 @@ class Context {
                 summary.passTime += call.duration;
             }
             else {
-                Error_1.assert(call.result == "fail");
+                (0, Error_1.assert)(call.result == "fail");
                 summary.failCount++;
                 summary.failTime += call.duration;
             }
@@ -1141,7 +1147,7 @@ class Interpreter {
         switch (ctx.status) {
             case exports.Pass:
                 if (ctx.endPos < buf.length) {
-                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
+                    (0, Error_1.parsingError)(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
                 }
                 if (!buf.closed) {
                     this.resumeOp = op;
@@ -1151,12 +1157,12 @@ class Interpreter {
                 ctx.dumpProfile();
                 return ctx.output;
             case exports.Fail:
-                Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
+                (0, Error_1.parsingError)(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
             case exports.WaitInput:
                 this.resumeOp = op;
                 return;
             default:
-                Error_1.parserError(Error_1.ErrorCode.Unreachable);
+                (0, Error_1.parserError)(Error_1.ErrorCode.Unreachable);
         }
     }
 }
@@ -1618,6 +1624,9 @@ class OpcodeCompiler {
                 };
             case "string":
                 const strBuilders = node.tokens.map((node) => {
+                    if (node.type == "backref") {
+                        return this.compileValueBuilder(cctx, node);
+                    }
                     const value = node.value;
                     if (node.type == "text") {
                         return () => value;
@@ -1626,7 +1635,7 @@ class OpcodeCompiler {
                         return () => String.fromCharCode(Number(`0x${value.substr(1)}`));
                     }
                     else if (node.value.length > 1) {
-                        Error_1.parserError(Error_1.ErrorCode.Unreachable);
+                        (0, Error_1.parserError)(Error_1.ErrorCode.Unreachable);
                     }
                     else if ("bfnrt".indexOf(value) >= 0) {
                         return () => ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[value];
@@ -1636,7 +1645,7 @@ class OpcodeCompiler {
                     }
                 });
                 return (ictx, buf) => {
-                    return strBuilders.map((b) => b()).join('');
+                    return strBuilders.map((b) => b(ictx, buf)).join('');
                 };
             case "constref":
                 return this.compileAccess(cctx, node, this.compileValueBuilder(cctx, this.grammar.vars[node.name]));
@@ -1646,7 +1655,7 @@ class OpcodeCompiler {
                     case "position": return (ictx, buf) => ictx.startPos;
                     case "length": return (ictx, buf) => ictx.endPos - ictx.startPos;
                     default:
-                        Error_1.parserError(Error_1.ErrorCode.Unreachable);
+                        (0, Error_1.parserError)(Error_1.ErrorCode.Unreachable);
                         return null;
                 }
             case "array":
@@ -1682,7 +1691,7 @@ class OpcodeCompiler {
                         return (ictx, buf, retval) => {
                             return tupleBuilder(ictx, buf).reduce((o, tuple) => {
                                 if (!Array.isArray(tuple) || tuple.length != 2) {
-                                    Error_1.grammarError(Error_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
+                                    (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidObjectTuple, this.grammar.text, member.meta, JSON.stringify(tuple));
                                 }
                                 o[tuple[0]] = tuple[1];
                                 return o;
@@ -1738,14 +1747,14 @@ class OpcodeCompiler {
                 const callback = cctx.callbacks[node.name];
                 const argBuilders = node.args.map((arg) => this.compileValueBuilder(cctx, arg));
                 if (!callback) {
-                    Error_1.grammarError(Error_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.FunctionNotFound, this.grammar.text, node.meta, node.name);
                 }
                 return (ictx, buf) => {
                     try {
                         return callback.apply(null, argBuilders.map((arg) => arg(ictx, buf)));
                     }
                     catch (e) {
-                        Error_1.grammarError(Error_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
+                        (0, Error_1.grammarError)(Error_1.ErrorCode.CallbackError, this.grammar.text, node.meta, String(e));
                     }
                 };
             case "spread":
@@ -1753,7 +1762,7 @@ class OpcodeCompiler {
                 return (ictx, buf) => {
                     const value = spreader(ictx, buf);
                     if (value === null || value === undefined || (typeof value != 'object' && typeof value != 'string')) {
-                        Error_1.grammarError(Error_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
+                        (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidSpread, this.grammar.text, node.meta, JSON.stringify(value));
                     }
                     if (Array.isArray(value)) {
                         return value;
@@ -1778,14 +1787,14 @@ class OpcodeCompiler {
                         return (ictx, buf) => {
                             let out = prevBuilder(ictx, buf);
                             if (out == null || (typeof out != 'object' && typeof out != 'string')) {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
                             }
                             let index = indexBuilder(ictx, buf);
                             if (typeof index != 'string' && typeof index != 'number') {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessIndex, this.grammar.text, prop.meta, JSON.stringify(index));
                             }
                             if (!out.hasOwnProperty(index)) {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
                             }
                             return out[index];
                         };
@@ -1794,11 +1803,11 @@ class OpcodeCompiler {
                         return (ictx, buf) => {
                             let out = prevBuilder(ictx, buf);
                             if (out == null || (typeof out != 'object' && typeof out != 'string')) {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessRoot, this.grammar.text, prop.meta, JSON.stringify(out));
                             }
                             let index = prop.name;
                             if (!out.hasOwnProperty(index)) {
-                                Error_1.grammarError(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
+                                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidAccessProperty, this.grammar.text, prop.meta, index);
                             }
                             return out[index];
                         };
@@ -1840,6 +1849,12 @@ exports.ParseBuffer = exports.ParseBufferExhaustedError = void 0;
 const Error_1 = require("./Error");
 exports.ParseBufferExhaustedError = new Error("ParseBufferExhaustedError");
 class ParseBuffer {
+    get length() {
+        return this._length;
+    }
+    get closed() {
+        return this._closed;
+    }
     constructor(textOrSize) {
         this.minSize = 1 * 1024 * 1024;
         this.text = '';
@@ -1854,12 +1869,6 @@ class ParseBuffer {
             this.minSize = textOrSize * 1024 * 1024;
         }
     }
-    get length() {
-        return this._length;
-    }
-    get closed() {
-        return this._closed;
-    }
     addChunk(input) {
         let trim = 0;
         if (this.text.length > this.minSize) {
@@ -1872,7 +1881,7 @@ class ParseBuffer {
     substr(startIdx, length) {
         startIdx -= this.offset;
         if (startIdx < 0) {
-            Error_1.parserError(Error_1.ErrorCode.InputFreed);
+            (0, Error_1.parserError)(Error_1.ErrorCode.InputFreed);
         }
         return this.text.substr(startIdx, length);
     }
@@ -1894,7 +1903,7 @@ class ParseBuffer {
             throw exports.ParseBufferExhaustedError;
         }
         else if (idx < 0) {
-            Error_1.parserError(Error_1.ErrorCode.InputFreed);
+            (0, Error_1.parserError)(Error_1.ErrorCode.InputFreed);
         }
         else {
             return this.text[idx];

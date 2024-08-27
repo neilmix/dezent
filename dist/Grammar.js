@@ -23,7 +23,8 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createUncompiledDezentGrammar = exports.GrammarDefaultCallbacks = exports.GrammarVersion = void 0;
+exports.GrammarDefaultCallbacks = exports.GrammarVersion = void 0;
+exports.createUncompiledDezentGrammar = createUncompiledDezentGrammar;
 exports.GrammarVersion = 1;
 exports.GrammarDefaultCallbacks = {
     pivot: (value) => {
@@ -109,7 +110,7 @@ function createUncompiledDezentGrammar() {
             ruleset('dotAccess', `'.' {identifier}`, { name: '$1', '...$meta': '' }),
             ruleset('bracketAccess', `'[' _ {backref|constref|metaref|string|index} _ ']'`, { value: '$1', '...$meta': '' }),
             ruleset('index', `[0-9]+`, { type: 'number', value: '$0' }),
-            ruleset('escape', `'\\\\' {unicode|charstr}`, { type: 'escape', value: '$1' }),
+            ruleset('escape', `'\\\\' {backref}`, '$1', `'\\\\' {unicode|charstr}`, { type: 'escape', value: '$1' }),
             ruleset('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`, '$0'),
             ruleset('charstr', `!'\\n' .`, '$0'),
             ruleset('identifier', `[_a-zA-Z] [_a-zA-Z0-9]*`, '$0'),
@@ -121,7 +122,6 @@ function createUncompiledDezentGrammar() {
         pragmas: {}
     };
 }
-exports.createUncompiledDezentGrammar = createUncompiledDezentGrammar;
 function returndef(patterns, output) {
     return {
         type: 'ruleset',

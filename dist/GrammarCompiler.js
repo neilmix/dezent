@@ -23,7 +23,9 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.findDezentGrammar = exports.buildString = exports.GrammarCompiler = void 0;
+exports.GrammarCompiler = void 0;
+exports.buildString = buildString;
+exports.findDezentGrammar = findDezentGrammar;
 const Grammar_1 = require("./Grammar");
 const Error_1 = require("./Error");
 class GrammarCompiler {
@@ -41,10 +43,10 @@ class GrammarCompiler {
         for (let ruleset of grammar.ruleset) {
             if (rulesetLookup[ruleset.name]) {
                 if (ruleset.name == 'return') {
-                    Error_1.grammarError(Error_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.MultipleReturn, text, ruleset.meta, ruleset.name);
                 }
                 else {
-                    Error_1.grammarError(Error_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.DuplicateDefine, text, ruleset.meta, ruleset.name);
                 }
             }
             rulesetLookup[ruleset.name] = ruleset;
@@ -64,7 +66,7 @@ class GrammarCompiler {
             // perform sanity checks
             visitParseNodes("ruleref", ruleset, null, null, (node) => {
                 if (!rulesetLookup[node.name]) {
-                    Error_1.grammarError(Error_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.RuleNotFound, text, node.meta, node.name);
                 }
             });
             // figure out if our selectors are capable of failing, which helps in
@@ -111,7 +113,7 @@ class GrammarCompiler {
         }
         grammar.maxid = nodeSequence;
         if (!grammar.rulesetLookup["return"]) {
-            Error_1.grammarError(Error_1.ErrorCode.ReturnNotFound, grammar.text);
+            (0, Error_1.grammarError)(Error_1.ErrorCode.ReturnNotFound, grammar.text);
         }
         return grammar;
     }
@@ -135,7 +137,7 @@ class GrammarCompiler {
                     info.repeats--;
             });
             if (lastCount > -1 && lastCount != info.captures.length) {
-                Error_1.grammarError(Error_1.ErrorCode.CaptureCountMismatch, text, rule.meta);
+                (0, Error_1.grammarError)(Error_1.ErrorCode.CaptureCountMismatch, text, rule.meta);
             }
             lastCount = info.captures.length;
             i++;
@@ -200,13 +202,13 @@ class GrammarCompiler {
             }
             if (node.type == "constref") {
                 if (!vars[node.name]) {
-                    Error_1.grammarError(Error_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
+                    (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidConstRef, text, node.meta, node.name);
                 }
             }
         });
         for (let i = 1; i < info.backrefs.length; i++) {
             if (info.backrefs[i].index >= info.captures.length) {
-                Error_1.grammarError(Error_1.ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
+                (0, Error_1.grammarError)(Error_1.ErrorCode.InvalidBackRef, text, info.backrefs[i].meta, info.backrefs[i].index);
             }
         }
         return info.captures;
@@ -261,6 +263,9 @@ function visitOutputNodes(node, data, f) {
         visitOutputNodes(node.name, data, f);
         items = [node.value];
     }
+    else if (node.type == "string") {
+        items = node.tokens;
+    }
     if (items) {
         for (let item of items) {
             visitOutputNodes(item, data, f);
@@ -272,11 +277,14 @@ function buildString(node) {
         if (node.type == "text") {
             return node.value;
         }
+        else if (node.type == "backref") {
+            throw new Error("backrefs are only allowed in output");
+        }
         else if (node.value[0] == 'u') {
             return String.fromCharCode(Number(`0x${node.value.substr(1)}`));
         }
         else if (node.value.length > 1) {
-            Error_1.parserError(Error_1.ErrorCode.Unreachable);
+            (0, Error_1.parserError)(Error_1.ErrorCode.Unreachable);
         }
         else if ("bfnrt".indexOf(node.value) >= 0) {
             return ({ b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' })[node.value];
@@ -286,13 +294,11 @@ function buildString(node) {
         }
     }).join("");
 }
-exports.buildString = buildString;
 let dezentGrammar;
 function findDezentGrammar() {
     if (!dezentGrammar) {
-        dezentGrammar = Grammar_1.createUncompiledDezentGrammar();
+        dezentGrammar = (0, Grammar_1.createUncompiledDezentGrammar)();
         GrammarCompiler.compileGrammar(dezentGrammar);
     }
     return dezentGrammar;
 }
-exports.findDezentGrammar = findDezentGrammar;

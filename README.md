@@ -609,7 +609,10 @@ The $0 back reference returns the entire string matched during rule processing, 
 'xyz'
 > new Dezent(`return .{...}. -> $0;`).parse('abcde');
 'abcde'
+> new Dezent(`return ... -> 'foo\\$0baz';`).parse('bar');
+'foobarbaz'
 ```
+
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---
@@ -621,6 +624,8 @@ Back references refer to sequences captured during a rule's parse. Each referenc
 ```javascript
 > new Dezent(`return {.} {.} -> [$1, $2];`).parse('ab');
 [ 'a', 'b' ]
+> new Dezent(`return {.} {.} -> 'a\\$1c\\$2e';`).parse('bd');
+'abcde'
 ```
 A repeated capture will always return an array as output, regardless of how many times the token matches.
 
@@ -668,6 +673,7 @@ If a capture matches multiple tokens, the matching string segment is always retu
 `).parse('ab');
 'ab'
 ```
+
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---

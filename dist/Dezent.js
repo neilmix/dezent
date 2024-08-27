@@ -23,7 +23,8 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseGrammar = exports.DezentStream = exports.Dezent = void 0;
+exports.DezentStream = exports.Dezent = void 0;
+exports.parseGrammar = parseGrammar;
 const Error_1 = require("./Error");
 const GrammarCompiler_1 = require("./GrammarCompiler");
 const ParseBuffer_1 = require("./ParseBuffer");
@@ -83,7 +84,7 @@ function fillOptions(options) {
 let dezentOpcode;
 function parseGrammar(text, options) {
     if (!dezentOpcode) {
-        dezentOpcode = new OpcodeCompiler_1.OpcodeCompiler(GrammarCompiler_1.findDezentGrammar(), false).compile();
+        dezentOpcode = new OpcodeCompiler_1.OpcodeCompiler((0, GrammarCompiler_1.findDezentGrammar)(), false).compile();
     }
     let buf = new ParseBuffer_1.ParseBuffer(text);
     let interpreter = new Interpreter_1.Interpreter(dezentOpcode, new ParseBuffer_1.ParseBuffer(text));
@@ -94,11 +95,10 @@ function parseGrammar(text, options) {
     }
     catch (e) {
         if (e["code"] == Error_1.ErrorCode.TextParsingError) {
-            Error_1.parsingError(Error_1.ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
+            (0, Error_1.parsingError)(Error_1.ErrorCode.GrammarParsingError, buf, e["pos"], e["expected"]);
         }
         else {
             throw e;
         }
     }
 }
-exports.parseGrammar = parseGrammar;

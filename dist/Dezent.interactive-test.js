@@ -23,7 +23,7 @@
  * SOFTWARE.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-global["test"] = async function (name, f, timeout) {
+global.test = async function (name, f, timeout) {
     //if (!name.match(/chunked/)) return;
     try {
         await f();
@@ -32,8 +32,7 @@ global["test"] = async function (name, f, timeout) {
         console.error("EXCEPTION:", name);
         console.error(e.stack);
     }
-};
-global["expect"] = function (actual) {
+}(global)["expect"] = function (actual) {
     return {
         toBe: (expected) => { if (actual !== expected)
             debugger; },

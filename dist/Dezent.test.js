@@ -65,7 +65,7 @@ function expectParseFail(grammar, text, options) {
 }
 function parseGrammarError(grammar, options) {
     try {
-        Dezent_1.parseGrammar(grammar, options || {});
+        (0, Dezent_1.parseGrammar)(grammar, options || {});
         fail();
     }
     catch (e) {
@@ -110,6 +110,8 @@ test("backref outputs", () => {
         bar = {.}{.} -> { $1: $2 };
     `, 'abcd').toEqual([{ a: 'b' }, { c: 'd' }]);
     expectParse(`return ... -> $0;`, 'aaa').toEqual('aaa');
+    expectParse(`return ... -> 'foo\\$0bar';`, 'aaa').toEqual('fooaaabar');
+    expectParse(`return ... -> 'foo$0bar';`, 'aaa').toEqual('foo$0bar');
 });
 test("pivot", () => {
     expectParse(`return .* -> pivot([[1,2,3],[4,5,6]]);`).toEqual([[1, 4], [2, 5], [3, 6]]);
@@ -288,9 +290,9 @@ test("left recursion", () => {
     expectParse(grammar, 'ab').toEqual('ab');
 });
 test("dezent grammar documentation", () => {
-    let uncompiledDezent = Grammar_1.createUncompiledDezentGrammar();
-    let textDezent = fs_1.readFileSync("./src/grammar.dezent").toString();
-    let hackedGrammar = GrammarCompiler_1.findDezentGrammar();
+    let uncompiledDezent = (0, Grammar_1.createUncompiledDezentGrammar)();
+    let textDezent = (0, fs_1.readFileSync)("./src/grammar.dezent").toString();
+    let hackedGrammar = (0, GrammarCompiler_1.findDezentGrammar)();
     // Our bootstrap grammar does not contain any metas because it's created
     // somewhat manually, not parsed from source. But it does contain rules
     // that do insert metas into our documented grammar. To mitigate this,
@@ -318,7 +320,7 @@ test("chunked parsing", () => {
         expect(actual).toEqual(expected);
     }
     compare("return [a]* -> $0;", "aa");
-    let textDezent = fs_1.readFileSync("./src/grammar.dezent").toString();
+    let textDezent = (0, fs_1.readFileSync)("./src/grammar.dezent").toString();
     compare(textDezent, textDezent);
     // ensure we receive errors as soon as possible...
     ds = new Dezent_1.DezentStream(`return 'a' -> $0;`);
@@ -336,11 +338,11 @@ test("chunked parsing", () => {
     catch (e) { }
 });
 test("command line util", () => {
-    let stdout = child_process_1.execSync("dezent src/grammar.dezent src/grammar.dezent");
+    let stdout = (0, child_process_1.execSync)("npm exec dezent src/grammar.dezent src/grammar.dezent");
     let json = JSON.parse(stdout.toString());
     expect(json).not.toBe(null);
     expect(typeof json).toBe('object');
-    stdout = child_process_1.execSync("cat src/grammar.dezent | dezent src/grammar.dezent -");
+    stdout = (0, child_process_1.execSync)("cat src/grammar.dezent | npm exec dezent src/grammar.dezent -");
     expect(json).not.toBe(null);
     expect(typeof json).toBe('object');
 });

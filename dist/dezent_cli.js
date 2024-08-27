@@ -29,14 +29,14 @@ const Dezent_1 = require("./Dezent");
 const process_1 = require("process");
 function usage() {
     console.error("usage: dezent [grammar path] [text path]");
-    process_1.exit(1);
+    (0, process_1.exit)(1);
 }
 function read(path) {
     if (path == '-') {
-        return fs_1.readFileSync(0);
+        return (0, fs_1.readFileSync)(0);
     }
     else {
-        return fs_1.readFileSync(path);
+        return (0, fs_1.readFileSync)(path);
     }
 }
 if (typeof process.argv[2] != 'string' || typeof process.argv[3] != 'string') {

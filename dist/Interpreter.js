@@ -94,9 +94,9 @@ class Context {
             }
             else {
                 let out = stack.pop();
-                Error_1.assert(!!out);
-                Error_1.assert(out.name == this.profileRules[i]);
-                Error_1.assert(out.position == this.profilePositions[i]);
+                (0, Error_1.assert)(!!out);
+                (0, Error_1.assert)(out.name == this.profileRules[i]);
+                (0, Error_1.assert)(out.position == this.profilePositions[i]);
                 out.endTime = this.profileTimes[i];
                 out.duration = out.endTime - out.startTime;
                 out.result = this.profileActions[i];
@@ -126,7 +126,7 @@ class Context {
                 summary.passTime += call.duration;
             }
             else {
-                Error_1.assert(call.result == "fail");
+                (0, Error_1.assert)(call.result == "fail");
                 summary.failCount++;
                 summary.failTime += call.duration;
             }
@@ -191,7 +191,7 @@ class Interpreter {
         switch (ctx.status) {
             case exports.Pass:
                 if (ctx.endPos < buf.length) {
-                    Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
+                    (0, Error_1.parsingError)(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
                 }
                 if (!buf.closed) {
                     this.resumeOp = op;
@@ -201,12 +201,12 @@ class Interpreter {
                 ctx.dumpProfile();
                 return ctx.output;
             case exports.Fail:
-                Error_1.parsingError(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
+                (0, Error_1.parsingError)(Error_1.ErrorCode.TextParsingError, buf, ctx.errorPos, buildExpectedTerminals(ctx.failedPatterns));
             case exports.WaitInput:
                 this.resumeOp = op;
                 return;
             default:
-                Error_1.parserError(Error_1.ErrorCode.Unreachable);
+                (0, Error_1.parserError)(Error_1.ErrorCode.Unreachable);
         }
     }
 }
