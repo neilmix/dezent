@@ -293,6 +293,60 @@ test("callbacks", () => {
     expectParseFail(`return .* -> foo();`);
 });
 
+test("weird callback/parsing bug", () => {
+    function str(x) {
+        if (x === null || x === undefined) {
+            return "";
+        } else if (typeof x == "object") {
+            return Object.values(x).map(x => str(x)).join("");
+        } else {
+            return String(x);
+        }		
+    }
+    expectParse(`
+        return {mainBody} -> $1;
+
+        mainBody		= {topLevelMarkup|topLevelText}* 				-> str($1);
+        topLevelMarkup	= {div|divMarkup}		 				-> $1;
+        topLevelText	= (!topLevelMarkup {textItem})*		 			-> str($1);
+
+        div		 		= sol tdiv eol {divBody} sol tdiv eol 			-> '<div>\\$1</div>\\n';
+        divBody 		= {divMarkup|divText}* 							-> str($1);
+        divMarkup		= {blockquote} 			-> $1;
+        divText 		= (!(divMarkup|sol tdiv) {textItem})* 			-> str($1);
+
+        blockquote		= (sol tblockquote {rolText} eol)+				-> '<blockquote>\\$1</blockquote>\\n';
+
+        textItem		= {textMarkup|char} 							-> $1;
+        rolText			= (!eol {textItem})*							-> str($1);
+        textMarkup		= {strong|em} 									-> $1;
+        char			= .												-> $0;
+
+        // The bug is triggered by the lines below -- the parameter to str() should
+        // be an array of the arguments. Passing in extra arguments to str() causes
+        // something to go awry.
+        strong			= tstrong (!tstrong {textItem})* tstrong 		-> str('<strong>',$1,'</strong>');
+        em				= tem (!tem {textItem})* tem			 		-> str('<em>',$1,'</em>');
+
+
+        tdiv		= '...'	-> null;
+        tblockquote	= '>'	-> null;
+        tstrong		= '**'	-> null;
+        tem			= '*'	-> null;
+
+        sol = nl ws* -> null;
+        eol = ws* &nl -> null;
+        nl = '\\n' -> null;
+        ws = [ \\t]+ -> null;
+    `,
+    `
+        ...
+        > ***shrug***
+        ...
+    `,
+    { callbacks: { str: str } }).toEqual("<div><blockquote><strong><em>shrug</em></strong></blockquote></div>");
+});
+
 test("left recursion", () => {
     let grammar = `
         _ = [ \\n]* -> null;
