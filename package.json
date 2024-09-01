@@ -1,6 +1,6 @@
 {
   "name": "dezent",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Powerful pattern matching and parsing that's readable, recursive, and structured.",
   "keywords": [
     "parse",
