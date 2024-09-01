@@ -112,6 +112,7 @@ test("backref outputs", () => {
     expectParse(`return ... -> $0;`, 'aaa').toEqual('aaa');
     expectParse(`return ... -> 'foo\\$0bar';`, 'aaa').toEqual('fooaaabar');
     expectParse(`return ... -> 'foo$0bar';`, 'aaa').toEqual('foo$0bar');
+    expectParse(`return {foo} -> '\\$1'; foo = . -> [1, {bar: 'baz', bee: 'bat'}, 'a'];`, 'a').toEqual('1bazbata');
 });
 test("pivot", () => {
     expectParse(`return .* -> pivot([[1,2,3],[4,5,6]]);`).toEqual([[1, 4], [2, 5], [3, 6]]);
@@ -174,6 +175,8 @@ test('capture and groups', () => {
         .toEqual('b'.repeat(8).split(""));
     expectParse(`foo = {.} -> { foo: $1 }; return { foo . } -> $1;`, 'ab').toEqual('ab');
     expectParse(`return {(. .)+} -> $1;`, 'aaaa').toEqual('aaaa');
+    // bug found during user testing
+    expectParse(`return {bar} -> $1; bar = {foo|.} -> $1; foo = . -> 'y';`, 'x').toEqual('y');
     expectParseFail(`return {(. .)+} -> 1;`, 'aaaaa');
     expectGrammarFail(`return {{.}} -> null;`);
     expectGrammarFail(`return {({.})} -> null;`);

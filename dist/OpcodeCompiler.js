@@ -30,6 +30,7 @@ const Interpreter_1 = require("./Interpreter");
 class CompilerContext {
     constructor(callbacks) {
         this.activeRules = [];
+        this.renderStringOutput = false;
         this.callbacks = Object.assign(Object.assign({}, Grammar_1.GrammarDefaultCallbacks), (callbacks || {}));
     }
     pushRule(rule) {
@@ -442,7 +443,10 @@ class OpcodeCompiler {
             case "string":
                 const strBuilders = node.tokens.map((node) => {
                     if (node.type == "backref") {
-                        return this.compileValueBuilder(cctx, node);
+                        cctx.renderStringOutput = true;
+                        let retval = this.compileValueBuilder(cctx, node);
+                        cctx.renderStringOutput = false;
+                        return retval;
                     }
                     const value = node.value;
                     if (node.type == "text") {
@@ -554,9 +558,14 @@ class OpcodeCompiler {
                         }
                     }
                     else {
+                        let inString = cctx.renderStringOutput;
                         return this.compileAccess(cctx, node, (ictx, buf) => {
                             let cap = ictx.captures.find((cap) => cap.index == index);
-                            return cap ? cap.value : null;
+                            let retval = cap ? cap.value : null;
+                            if (inString) {
+                                retval = stringifyOutput(retval);
+                            }
+                            return retval;
                         });
                     }
                 }
@@ -635,3 +644,14 @@ class OpcodeCompiler {
     }
 }
 exports.OpcodeCompiler = OpcodeCompiler;
+function stringifyOutput(x) {
+    if (x === null || x === undefined) {
+        return '';
+    }
+    else if (typeof x == 'object') {
+        return Object.values(x).map((v) => stringifyOutput(v)).join('');
+    }
+    else {
+        return String(x);
+    }
+}
