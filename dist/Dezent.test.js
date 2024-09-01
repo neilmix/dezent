@@ -113,6 +113,7 @@ test("backref outputs", () => {
     expectParse(`return ... -> 'foo\\$0bar';`, 'aaa').toEqual('fooaaabar');
     expectParse(`return ... -> 'foo$0bar';`, 'aaa').toEqual('foo$0bar');
     expectParse(`return {foo} -> '\\$1'; foo = . -> [1, {bar: 'baz', bee: 'bat'}, 'a'];`, 'a').toEqual('1bazbata');
+    expectParse(`return {foo} -> $1; foo = {.}* -> 'foo\\$1bar';`, 'aaa').toEqual('fooaaabar');
 });
 test("pivot", () => {
     expectParse(`return .* -> pivot([[1,2,3],[4,5,6]]);`).toEqual([[1, 4], [2, 5], [3, 6]]);
@@ -203,8 +204,8 @@ test('array collapse', () => {
     expectParse(`return {'a'} {'b'}? {'a'} -> [$1, $2?, $3 ];`, 'aa').toEqual(['a', 'a']);
     expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2 ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', null, 'b']);
     expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2? ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', 'b']);
-    //expectParse(`letter = {[a-d]|[f-i]} -> $1, 'e' -> null; return {letter}* -> $1?;`, 'abcdefghi').toEqual(['a','b','c','d','f','g','h','i']);
-    //expectParse(`return {rule}? -> $1?; rule = . -> [1, null];`, 'a').toEqual([1, null]);
+    expectParse(`letter = {[a-d]|[f-i]} -> $1, 'e' -> null; return {letter}* -> $1?;`, 'abcdefghi').toEqual(['a', 'b', 'c', 'd', 'f', 'g', 'h', 'i']);
+    expectParse(`return {rule}? -> $1?; rule = . -> [1, null];`, 'a').toEqual([1, null]);
 });
 test("variables", () => {
     expectParse(`$foo = 5; return .* -> $foo;`).toEqual(5);
