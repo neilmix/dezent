@@ -37,6 +37,7 @@ class CompilerContext {
     activeRules:RuleNode[] = [];
     currentRule:RuleNode;
     callbacks:Callbacks;
+    renderStringOutput:boolean = false;
 
     constructor(callbacks?:Callbacks) {
         this.callbacks = {
@@ -487,7 +488,10 @@ export class OpcodeCompiler {
             case "string":
                 const strBuilders = node.tokens.map((node:StringTextNode|BackRefNode|EscapeNode) => {
                     if (node.type == "backref") {
-                        return this.compileValueBuilder(cctx, node);
+                        cctx.renderStringOutput = true;
+                        let retval = this.compileValueBuilder(cctx, node);
+                        cctx.renderStringOutput = false;
+                        return retval;
                     }
 
                     const value = node.value;
@@ -586,9 +590,14 @@ export class OpcodeCompiler {
                             });
                         }
                     } else {
+                        let inString = cctx.renderStringOutput;
                         return this.compileAccess(cctx, node, (ictx, buf) => {
                             let cap = ictx.captures.find((cap) => cap.index == index);
-                            return cap ? cap.value : null;
+                            let retval = cap ? cap.value : null;
+                            if (inString) {
+                                retval = stringifyOutput(retval);
+                            }
+                            return retval;
                         });
                     }
                 }
@@ -663,5 +672,15 @@ export class OpcodeCompiler {
             })(builder, prop);
         }
         return builder;
+    }
+}
+
+function stringifyOutput(x) {
+    if (x === null || x === undefined) {
+        return '';
+    } else if (typeof x == 'object') {
+        return Object.values(x).map((v) => stringifyOutput(v)).join('');
+    } else {
+        return String(x);
     }
 }

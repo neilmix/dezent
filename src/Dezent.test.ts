@@ -123,6 +123,7 @@ test("backref outputs", () => {
     expectParse(`return ... -> $0;`, 'aaa').toEqual('aaa');
     expectParse(`return ... -> 'foo\\$0bar';`, 'aaa').toEqual('fooaaabar');
     expectParse(`return ... -> 'foo$0bar';`, 'aaa').toEqual('foo$0bar');
+    expectParse(`return {foo} -> '\\$1'; foo = . -> [1, {bar: 'baz', bee: 'bat'}, 'a'];`, 'a').toEqual('1bazbata');
 });
 
 test("pivot", () => {
