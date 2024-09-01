@@ -200,7 +200,7 @@ test('capture and groups', () => {
     expectGrammarFail(`return {({.})} -> null;`);
 
     // bug found during user testing
-    //expectParse(`return {bar} -> $1; bar = {foo|.} -> $1; foo = . -> 'y';`,'x').toEqual('y');
+    expectParse(`return {bar} -> $1; bar = {foo|.} -> $1; foo = . -> 'y';`,'x').toEqual('y');
 });
 
 test('predicates', () => {
