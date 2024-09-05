@@ -45,7 +45,7 @@ ruleset = {identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'
 constant = '$' {identifier} _ '=' _ {value} _ ';'
 	-> [$1, $2];
 
-rule = {patterns} _ '->' _ {value} 
+rule = {patterns} _ ( '->' _ {value} )?
 	-> { type: 'rule', ...$1, value: $2, ...$meta };
 
 patterns = {pattern} _ ( '|' _ {pattern} _ )* 

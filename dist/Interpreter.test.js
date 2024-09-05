@@ -51,7 +51,7 @@ test("basic execution", () => {
 });
 test("array output", () => {
     expectParse("return . -> [$0, $0];", "a").toEqual(["a", "a"]);
-    expectParse("return {.} {.} -> [$2, $1];", "ab").toEqual(["b", "a"]);
+    expectParse("return {char} {char} -> [$2, $1]; char = . -> $0;", "ab").toEqual(["b", "a"]);
 });
 test("string tokens", () => {
     expectParse("return 'foo' 'bar' -> $0;", "foobar").toBe("foobar");
@@ -89,15 +89,15 @@ test("multiple rules", () => {
     expectException("return rule -> $0; rule = 'a' -> null, 'b' -> null, 'c' -> null;", "d");
 });
 test("character classes", () => {
-    expectParse("return {[x]} -> $1;", "x").toBe('x');
-    expectParse("return {[a-z]} -> $1;", "x").toBe('x');
-    expectParse("return {[0-9a-zA-Z]} -> $1;", "x").toBe('x');
-    expectParse("return {[x0-9]} -> $1;", "x").toBe('x');
-    expectParse("return {[qwertyx]} -> $1;", "x").toBe('x');
+    expectParse("cl = [x] -> $0;return {cl} -> $1;", "x").toBe('x');
+    expectParse("cl = [a-z] -> $0;return {cl} -> $1;", "x").toBe('x');
+    expectParse("cl = [0-9a-zA-Z] -> $0;return {cl} -> $1;", "x").toBe('x');
+    expectParse("cl = [x0-9] -> $0;return {cl} -> $1;", "x").toBe('x');
+    expectParse("cl = [qwertyx] -> $0;return {cl} -> $1;", "x").toBe('x');
     expectParse("return [\\t] -> $0;", "\t").toBe('\t');
     expectParse("return [\\ua1b2] -> $0;", "\ua1b2").toBe('\ua1b2');
     expect(parse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2")).toBe("\n\r\t\f\b\ua2a2");
 });
 test("capture", () => {
-    expectParse("return ( {'a'} ',' )* {'a'}? -> [$1, $2?];", "a").toEqual([[], "a"]);
+    expectParse("return ( {a} ',' )* {a}? -> [$1, $2?]; a = 'a' -> $0; ", "a").toEqual([[], "a"]);
 });

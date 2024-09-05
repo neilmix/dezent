@@ -103,17 +103,18 @@ test("object outputs", () => {
     expectParse("return .* -> [ 1, null, 1 ];").toEqual([1, null, 1]);
 });
 test("backref outputs", () => {
-    expectParse("return {.} {.} -> [$1, $2];", 'ab').toEqual(['a', 'b']);
+    expectParse("any=.->$0; return {any} {any} -> [$1, $2];", 'ab').toEqual(['a', 'b']);
     expectParse(`
         return {foo} {bar} -> [$1, $2];
-        foo = {.}{.} -> { $1: $2 };
-        bar = {.}{.} -> { $1: $2 };
+        any = . -> $0;
+        foo = {any}{any} -> { $1: $2 };
+        bar = {any}{any} -> { $1: $2 };
     `, 'abcd').toEqual([{ a: 'b' }, { c: 'd' }]);
     expectParse(`return ... -> $0;`, 'aaa').toEqual('aaa');
     expectParse(`return ... -> 'foo\\$0bar';`, 'aaa').toEqual('fooaaabar');
     expectParse(`return ... -> 'foo$0bar';`, 'aaa').toEqual('foo$0bar');
     expectParse(`return {foo} -> '\\$1'; foo = . -> [1, {bar: 'baz', bee: 'bat'}, 'a'];`, 'a').toEqual('1bazbata');
-    expectParse(`return {foo} -> $1; foo = {.}* -> 'foo\\$1bar';`, 'aaa').toEqual('fooaaabar');
+    expectParse(`return {foo} -> $1; any = . -> $0; foo = {any}* -> 'foo\\$1bar';`, 'aaa').toEqual('fooaaabar');
 });
 test("pivot", () => {
     expectParse(`return .* -> pivot([[1,2,3],[4,5,6]]);`).toEqual([[1, 4], [2, 5], [3, 6]]);
@@ -128,14 +129,14 @@ test("spread", () => {
     expectParse(`return .* -> { a: 1, ...[['b',2], ['c',3]], d: 4 };`).toEqual({ a: 1, b: 2, c: 3, d: 4 });
     expectParse(`return .* -> { a: 1, ...{b: 2, c: 3 }, d: 4 };`).toEqual({ a: 1, b: 2, c: 3, d: 4 });
     expectParse(`return .* -> [ ...'foo' ];`).toEqual(['f', 'o', 'o']);
-    expectParse(`return {'a'}* {'b'}* -> [...$1, ...$2];`, 'aaabbb').toEqual(['a', 'a', 'a', 'b', 'b', 'b']);
+    expectParse(`return {a}* {b}* -> [...$1, ...$2]; a = 'a' -> $0; b = 'b' -> $0;`, 'aaabbb').toEqual(['a', 'a', 'a', 'b', 'b', 'b']);
     expectParse(`
         return {foo} -> [...$1];
-        foo = {.}{.}{.}{.}{.}{.} -> { $1: $4, $2: $5, $3: $6 };
+        any = . -> $0; foo = {any}{any}{any}{any}{any}{any} -> { $1: $4, $2: $5, $3: $6 };
     `, 'abcdef').toEqual([['a', 'd'], ['b', 'e'], ['c', 'f']]);
 });
 test("the 'any' terminal", () => {
-    expectParse("return {.} -> $1;", "x").toEqual('x');
+    expectParse("any = . -> $0; return {any} -> $1;", "x").toEqual('x');
 });
 test("strings", () => {
     expectParse("return 'x' -> $0;", "x").toEqual('x');
@@ -144,22 +145,26 @@ test("strings", () => {
     expectParse("return '\\n\\r\\t\\b\\f\\\\\\a' -> $0;", "\n\r\t\b\f\\a").toEqual("\n\r\t\b\f\\a");
 });
 test("character classes", () => {
-    expectParse("return {[x]} -> $1;", "x").toEqual('x');
-    expectParse("return {[a-z]} -> $1;", "x").toEqual('x');
-    expectParse("return {[0-9a-zA-Z]} -> $1;", "x").toEqual('x');
-    expectParse("return {[x0-9]} -> $1;", "x").toEqual('x');
-    expectParse("return {[qwertyx]} -> $1;", "x").toEqual('x');
+    expectParse("cl = [x] -> $0;return {cl} -> $1;", "x").toBe('x');
+    expectParse("cl = [a-z] -> $0;return {cl} -> $1;", "x").toBe('x');
+    expectParse("cl = [0-9a-zA-Z] -> $0;return {cl} -> $1;", "x").toBe('x');
+    expectParse("cl = [x0-9] -> $0;return {cl} -> $1;", "x").toBe('x');
+    expectParse("cl = [qwertyx] -> $0;return {cl} -> $1;", "x").toBe('x');
     expectParse("return [\\t] -> $0;", "\t").toEqual('\t');
     expectParse("return [\\ua1b2] -> $0;", "\ua1b2").toEqual('\ua1b2');
     expectParse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2").toEqual("\n\r\t\f\b\ua2a2");
 });
+test("rules without yield", () => {
+    expectParse("return foo -> $0; foo = 'x';", "x").toBe('x');
+});
 test('whitespace', () => {
     expectParse(`
+        any = . -> $0;
         return // single line comment
-            {.} /* multi
+            {any} /* multi
                    line
                    comment
-                */ {.} -> [$1, $2];
+                */ {any} -> [$1, $2];
     `, 'ab').toEqual(['a', 'b']);
 });
 test('identifiers', () => {
@@ -168,19 +173,15 @@ test('identifiers', () => {
     expectGrammarFail('return .* -> null; foo$ = . -> null;');
 });
 test('capture and groups', () => {
-    expectParse(`return {.} {[a]}+ -> [$1, $2];`, 'aaaa')
+    expectParse(`return {any} {a}+ -> [$1, $2]; any = . -> $0; a = [a] -> $0; `, 'aaaa')
         .toEqual(['a', ['a', 'a', 'a']]);
-    expectParse(`return {.} {'x'}? {[b]}* {[a]}+ -> [$1, $2, $3, $4];`, 'aaaa')
+    expectParse(`return {any} {x}? {b}* {a}+ -> [$1, $2, $3, $4]; any=.->$0; a=[a]->$0; b=[b]->$0; x='x'->$0;`, 'aaaa')
         .toEqual(['a', null, [], ['a', 'a', 'a']]);
-    expectParse(`return ('a'+ ({'b'})+ )+ -> $1;`, 'abaabbabbbabb')
+    expectParse(`return ('a'+ ({b})+ )+ -> $1; b = 'b' -> $0;`, 'abaabbabbbabb')
         .toEqual('b'.repeat(8).split(""));
-    expectParse(`foo = {.} -> { foo: $1 }; return { foo . } -> $1;`, 'ab').toEqual('ab');
-    expectParse(`return {(. .)+} -> $1;`, 'aaaa').toEqual('aaaa');
-    expectParseFail(`return {(. .)+} -> 1;`, 'aaaaa');
+    expectParseFail(`return (. .)+ -> 1;`, 'aaaaa');
     expectGrammarFail(`return {{.}} -> null;`);
     expectGrammarFail(`return {({.})} -> null;`);
-    // bug found during user testing
-    //expectParse(`return {bar} -> $1; bar = {foo|.} -> $1; foo = . -> 'y';`,'x').toEqual('y');
 });
 test('predicates', () => {
     expectParse(`return !'a' .* -> $0;`, 'bbb').toEqual('bbb');
@@ -200,17 +201,17 @@ test('modifiers', () => {
     expectParseFail(`return 'a' 'b'? 'a'? 'a'* 'c'+ -> $0;`, 'abaaa');
 });
 test('array collapse', () => {
-    expectParse(`return {'a'} {'b'}? {'a'} -> [$1, $2, $3 ];`, 'aa').toEqual(['a', null, 'a']);
-    expectParse(`return {'a'} {'b'}? {'a'} -> [$1, $2?, $3 ];`, 'aa').toEqual(['a', 'a']);
-    expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2 ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', null, 'b']);
-    expectParse(`return ({'a'} {'b'}?)+ -> [ ...$1, ...$2? ];`, 'abaab').toEqual(['a', 'a', 'a', 'b', 'b']);
-    expectParse(`letter = {[a-d]|[f-i]} -> $1, 'e' -> null; return {letter}* -> $1?;`, 'abcdefghi').toEqual(['a', 'b', 'c', 'd', 'f', 'g', 'h', 'i']);
+    expectParse(`return {a} {b}? {a} -> [$1, $2, $3 ]; a='a'->$0;b='b'->$0;`, 'aa').toEqual(['a', null, 'a']);
+    expectParse(`return {a} {b}? {a} -> [$1, $2?, $3 ]; a='a'->$0;b='b'->$0;`, 'aa').toEqual(['a', 'a']);
+    expectParse(`return ({a} {b}?)+ -> [ ...$1, ...$2 ]; a='a'->$0;b='b'->$0;`, 'abaab').toEqual(['a', 'a', 'a', 'b', null, 'b']);
+    expectParse(`return ({a} {b}?)+ -> [ ...$1, ...$2? ]; a='a'->$0;b='b'->$0;`, 'abaab').toEqual(['a', 'a', 'a', 'b', 'b']);
+    expectParse(`letter = [a-d]|[f-i] -> $0, 'e' -> null; return {letter}* -> $1?;`, 'abcdefghi').toEqual(['a', 'b', 'c', 'd', 'f', 'g', 'h', 'i']);
     expectParse(`return {rule}? -> $1?; rule = . -> [1, null];`, 'a').toEqual([1, null]);
 });
 test("variables", () => {
     expectParse(`$foo = 5; return .* -> $foo;`).toEqual(5);
     expectParse(`$foo = ['bar', {baz: true}]; return .* -> $foo;`).toEqual(['bar', { baz: true }]);
-    expectParse(`$foo = $1; return {.*} -> $foo;`, 'blah').toEqual('blah');
+    expectParse(`$foo = $1; return {all} -> $foo; all = .* -> $0;`, 'blah').toEqual('blah');
     expectParse(`$foo = { foo: 'a', bar: 'b' }; return .* -> { baz: 'c', ...$foo, bee: [...$foo] };`)
         .toEqual({ baz: 'c', foo: 'a', bar: 'b', bee: [['foo', 'a'], ['bar', 'b']] });
     expectGrammarFail(`return .* -> $foo;`);
@@ -310,7 +311,7 @@ test("dezent grammar documentation", () => {
     expect(parsedDezent).toEqual(uncompiledDezent);
 });
 test("chunked parsing", () => {
-    let ds = new Dezent_1.DezentStream(`return {[a-zA-Z]+} ' '+ {[a-zA-Z]+} {[!.?]} -> [$1, $2, $3];`);
+    let ds = new Dezent_1.DezentStream(`return {word} ' '+ {word} {notpunc} -> [$1, $2, $3]; word = [a-zA-Z]+ -> $0; notpunc = [!.?] -> $0;`);
     ds.write("Hello w");
     ds.write("orld!");
     expect(ds.close()).toEqual(["Hello", "world", "!"]);
@@ -353,7 +354,7 @@ test("command line util", () => {
 test("expected grammar terminals", () => {
     //expect(parseGrammarError('return . -> {}').expected.sort()).toEqual([';']);
     //expect(parseGrammarError('return {.}').expected.sort()).toEqual(["'", "(", "->", ".", "[", "_ a-z A-Z", "{", "|"]);
-    //expect(parseGrammarError(`return ( . ([ab] {'f'} 'foo)) -> $1;`).expected.sort()).toEqual(["'", "\\", "not: ' \\"]);
+    //expect(parseGrammarError(`return ( . ([ab] {f} 'foo)) -> $1; f='f'->$0;`).expected.sort()).toEqual(["'", "\\", "not: ' \\"]);
     expect(parseError(`return (!'a' .)+ -> $0;`, 'a').expected.sort()).toEqual(['not: a']);
 });
 test("minBufferSize", () => {
@@ -400,8 +401,8 @@ test("errors", () => {
     /* 1003 */ expect(parseGrammarError(`return foo -> true;`).char).toEqual(8);
     /* 1004 */ expect(parseError(`foo = . -> 1; return {foo} -> [...$1];`, 'a').char).toEqual(32);
     /* 1005 */ expect(parseError(`foo = . -> true;`, 'a').code).toEqual(1005);
-    /* 1006 */ expect(parseGrammarError(`return {.} | {.} {.} -> true;`).char).toEqual(8);
-    /* 1007 */ expect(parseGrammarError(`return {.} -> $2;`).char).toEqual(15);
+    /* 1006 */ expect(parseGrammarError(`return {x} | {x} {x} -> true; x = . -> $0;`).char).toEqual(8);
+    /* 1007 */ expect(parseGrammarError(`return {x} -> $2; x = . -> $0;`).char).toEqual(15);
     /* 1008 */ expect(parseGrammarError(`return . -> $foo;`).char).toEqual(13);
     /* 1009 */ expect(parseError(`return .* -> foo();`, 'a').char).toEqual(14);
     /* 1011 */ expect(parseError(`return . -> { ...[1] };`, 'a').char).toEqual(15);

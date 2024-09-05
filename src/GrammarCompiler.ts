@@ -129,6 +129,10 @@ export class GrammarCompiler {
         let info = { captures: [null], repeats: 0, backrefs: [null] };
         let i = 0;
         let lastCount = -1;
+        if (!rule.value) {
+            // value is optional and defaults to $0
+            rule.value = { type: "backref", index: "0", collapse: false, meta: rule.meta };
+        }
         do {
             info.captures = [null];
             visitParseNodes(

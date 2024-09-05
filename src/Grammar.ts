@@ -186,7 +186,7 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('constant', `'$' {identifier} _ '=' _ {value} _ ';'`,
 				['$1', '$2']),
 
-			ruleset('rule', `{patterns} _ '->' _ {value}`,
+			ruleset('rule', `{patterns} _ ( '->' _ {value} )?`,
 				{ type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
 			
 			ruleset('patterns', `{pattern} _ ( '|' _ {pattern} _ )*`,

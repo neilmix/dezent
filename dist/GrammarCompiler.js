@@ -80,15 +80,6 @@ class GrammarCompiler {
                 }
                 node.canFail = false;
             });
-            visitParseNodes(["capture"], ruleset, null, null, (node) => {
-                for (let pattern of node.patterns) {
-                    if (pattern.tokens.length > 1 || pattern.tokens[0].repeat || pattern.tokens[0].descriptor.type != "ruleref") {
-                        node.useOutput = false;
-                        return;
-                    }
-                }
-                node.useOutput = true;
-            });
             visitParseNodes(["capture", "group", "rule"], ruleset, null, null, (node) => {
                 node.canFail = true;
                 for (let pattern of node.patterns) {
@@ -123,6 +114,10 @@ class GrammarCompiler {
         let info = { captures: [null], repeats: 0, backrefs: [null] };
         let i = 0;
         let lastCount = -1;
+        if (!rule.value) {
+            // value is optional and defaults to $0
+            rule.value = { type: "backref", index: "0", collapse: false, meta: rule.meta };
+        }
         do {
             info.captures = [null];
             visitParseNodes("token", rule.patterns[i], info, (node, info) => {

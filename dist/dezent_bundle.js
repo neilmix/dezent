@@ -326,16 +326,15 @@ function createUncompiledDezentGrammar() {
             ruleset('returndef', `'return' whitespace _ {rule} _ ';'`, { type: 'ruleset', name: 'return', rules: ['$1'], '...$meta': '' }),
             ruleset('ruleset', `{identifier} _ '=' _ {rule} ( _ ',' _ {rule} )* _ ';'`, { type: 'ruleset', name: '$1', rules: ['$2', '...$3'], '...$meta': '' }),
             ruleset('constant', `'$' {identifier} _ '=' _ {value} _ ';'`, ['$1', '$2']),
-            ruleset('rule', `{patterns} _ '->' _ {value}`, { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
+            ruleset('rule', `{patterns} _ ( '->' _ {value} )?`, { type: 'rule', '...$1': '', value: '$2', '...$meta': '' }),
             ruleset('patterns', `{pattern} _ ( '|' _ {pattern} _ )*`, { patterns: ['$1', '...$2'] }),
             ruleset('pattern', `( {token} _ )+`, { type: 'pattern', tokens: '$1' }),
             ruleset('token', `{predicate} {capture|group|string|class|ruleref|any} {modifier}`, { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
             ruleset('capture', `'{' _ {capturePatterns} _ '}'`, { type: 'capture', '...$1': '' }),
             ruleset('group', `'(' _ {patterns} _ ')'`, { type: 'group', '...$1': '' }),
             ruleset('capturePatterns', `{capturePattern} _ ( '|' _ {capturePattern} _ )*`, { patterns: ['$1', '...$2'] }),
-            ruleset('capturePattern', `( {captureToken} _ )+`, { type: 'pattern', tokens: '$1' }),
-            ruleset('captureToken', `{predicate} {captureGroup|string|class|ruleref|any} {modifier}`, { type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
-            ruleset('captureGroup', `'(' _ {capturePatterns} _ ')'`, { type: 'group', '...$1': '' }),
+            ruleset('capturePattern', `{captureToken}`, { type: 'pattern', tokens: ['$1'] }),
+            ruleset('captureToken', `{ruleref}`, { type: 'token', and: false, not: false, repeat: false, required: true, descriptor: '$1' }),
             ruleset('class', `'[' {classComponent}* ']'`, { type: 'class', ranges: '$1' }),
             ruleset('classComponent', `{classChar} '-' {classChar}`, ['$1', '$2'], `{classChar}`, ['$1', '$1']),
             ruleset('classChar', `!']' {escape|char}`, '$1'),
@@ -345,9 +344,11 @@ function createUncompiledDezentGrammar() {
             ruleset('predicate', `'&'`, { and: true, not: false }, `'!'`, { and: false, not: true }, `''`, { and: false, not: false }),
             ruleset('modifier', `'*'`, { repeat: true, required: false }, `'+'`, { repeat: true, required: true }, `'?'`, { repeat: false, required: false }, `''`, { repeat: false, required: true }),
             ruleset('value', `{backref|constref|metaref|object|array|call|string|number|boolean|null}`, '$1'),
-            ruleset('backref', `'$' {[0-9]+} '?' {access}`, { type: 'backref', index: '$1', collapse: true, access: '$2', '...$meta': '' }, `'$' {[0-9]+} {access}`, { type: 'backref', index: '$1', collapse: false, access: '$2', '...$meta': '' }),
+            ruleset('backref', `'$' {indexStr} '?' {access}`, { type: 'backref', index: '$1', collapse: true, access: '$2', '...$meta': '' }, `'$' {indexStr} {access}`, { type: 'backref', index: '$1', collapse: false, access: '$2', '...$meta': '' }),
             ruleset('constref', `'$' {identifier} {access}`, { type: 'constref', name: '$1', access: '$2', '...$meta': '' }),
-            ruleset('metaref', `'@' {'position'|'length'}`, { type: 'metaref', name: '$1' }),
+            ruleset('metaref', `'@' {position|length}`, { type: 'metaref', name: '$1' }),
+            ruleset('position', `'position'`, '$0'),
+            ruleset('length', `'length'`, '$0'),
             ruleset('spread', `'...' {backref|constref|object|array|string|call}`, { type: 'spread', value: '$1', '...$meta': '' }),
             ruleset('object', `'{' ( _ {member} _ ',' )* _ {member}? _ '}' {access}`, { type: 'object', members: ['...$1', '$2?'], access: '$3' }),
             ruleset('member', `{spread}`, '$1', `{backref|string|identifierAsStringNode} _ ':' _ {value}`, { type: 'member', name: '$1', value: '$2' }),
@@ -362,7 +363,8 @@ function createUncompiledDezentGrammar() {
             ruleset('access', `{dotAccess|bracketAccess}*`, '$1'),
             ruleset('dotAccess', `'.' {identifier}`, { name: '$1', '...$meta': '' }),
             ruleset('bracketAccess', `'[' _ {backref|constref|metaref|string|index} _ ']'`, { value: '$1', '...$meta': '' }),
-            ruleset('index', `[0-9]+`, { type: 'number', value: '$0' }),
+            ruleset('index', `indexStr`, { type: 'number', value: '$0' }),
+            ruleset('indexStr', `[0-9]+`, '$0'),
             ruleset('escape', `'\\\\' {backref}`, '$1', `'\\\\' {unicode|charstr}`, { type: 'escape', value: '$1' }),
             ruleset('unicode', `'u' [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9] [A-Fa-f0-9]`, '$0'),
             ruleset('charstr', `!'\\n' .`, '$0'),
@@ -730,15 +732,6 @@ class GrammarCompiler {
                 }
                 node.canFail = false;
             });
-            visitParseNodes(["capture"], ruleset, null, null, (node) => {
-                for (let pattern of node.patterns) {
-                    if (pattern.tokens.length > 1 || pattern.tokens[0].repeat || pattern.tokens[0].descriptor.type != "ruleref") {
-                        node.useOutput = false;
-                        return;
-                    }
-                }
-                node.useOutput = true;
-            });
             visitParseNodes(["capture", "group", "rule"], ruleset, null, null, (node) => {
                 node.canFail = true;
                 for (let pattern of node.patterns) {
@@ -773,6 +766,10 @@ class GrammarCompiler {
         let info = { captures: [null], repeats: 0, backrefs: [null] };
         let i = 0;
         let lastCount = -1;
+        if (!rule.value) {
+            // value is optional and defaults to $0
+            rule.value = { type: "backref", index: "0", collapse: false, meta: rule.meta };
+        }
         do {
             info.captures = [null];
             visitParseNodes("token", rule.patterns[i], info, (node, info) => {
@@ -1416,18 +1413,12 @@ class OpcodeCompiler {
                 }
             case "capture":
                 { // new scope
-                    const useOutput = node.useOutput;
                     const captureIndex = node.index;
                     let id = cctx.currentRule.id;
-                    const newPass = useOutput ?
-                        (ictx, buf) => {
-                            ictx.captures.push({ index: captureIndex, value: ictx.output });
-                            return pass;
-                        }
-                        : (ictx, buf) => {
-                            ictx.captures.push({ index: captureIndex, value: buf.substr(ictx.endPos - ictx.lastConsumed, ictx.lastConsumed) });
-                            return pass;
-                        };
+                    const newPass = (ictx, buf) => {
+                        ictx.captures.push({ index: captureIndex, value: ictx.output });
+                        return pass;
+                    };
                     if (node.canFail) {
                         return this.compilePatterns(cctx, node, newPass, fail);
                     }

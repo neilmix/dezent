@@ -260,12 +260,18 @@ pattern _ ( '|' _ pattern _ )* _ '->' _ value
 Rules are the core of Dezent's pattern matching power. Each rule consists of one or more patterns that may match and produce output. Patterns are evaluated in order from first to last, and the first pattern that matches will trigger the rule to return its output, thereby terminating matching for this rule. If no patterns successfully match, the rule itself fails to match.
 
 ```javascript
-> new Dezent(`return 'ab' | 'cd' -> $0;`).parse('cd');
+> new Dezent(`myRule = 'ab' | 'cd' -> $0; return myRule -> $0;`).parse('cd');
 'cd'
 
-> new Dezent(`return 'a'|'b'|'c' -> $0;`).parse('d'); // does not match
+> new Dezent(`myRule = 'a'|'b'|'c' -> $0; return myRule -> $0;`).parse('d'); // does not match
 undefined
 ```
+The yield of a rule is optional and defaults to $0. (The yield of a return is mandatory.)
+```javascript
+> new Dezent(`myRule = 'ab' | 'cd'; return myRule -> $0;`).parse('cd');
+'cd'
+```
+
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
 ---

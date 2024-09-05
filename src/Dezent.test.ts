@@ -171,6 +171,10 @@ test("character classes", () => {
     expectParse("return [\\n\\r\\t\\f\\b\\ua2a2]* -> $0;", "\n\r\t\f\b\ua2a2").toEqual("\n\r\t\f\b\ua2a2");
 });
 
+test("rules without yield", () => {
+    expectParse("return foo -> $0; foo = 'x';", "x").toBe('x');
+});
+
 test('whitespace', () => {
     expectParse(`
         any = . -> $0;
