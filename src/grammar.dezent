@@ -66,15 +66,12 @@ group = '(' _ {patterns} _ ')'
 capturePatterns = {capturePattern} _ ( '|' _ {capturePattern} _ )*
 	-> { patterns: [$1, ...$2] };
 
-capturePattern = ( { captureToken } _ )+
-	-> { type: 'pattern', tokens: $1 };
+capturePattern = { captureToken }
+	-> { type: 'pattern', tokens: [$1] };
 
-captureToken = {predicate} { captureGroup | string | class | ruleref | any } {modifier}
-	-> { type: 'token', ...$3, ...$1, descriptor: $2 };
+captureToken = { ruleref }
+	-> { type: 'token', and: false, not: false, repeat: false, required: true, descriptor: $1 };
 	
-captureGroup = '(' _ {capturePatterns} _ ')'
-	-> { type: 'group', ...$1 };
-
 class = '[' { classComponent }* ']'
 	-> { type: 'class', ranges: $1 };
 
@@ -109,14 +106,17 @@ value = { backref | constref | metaref | object | array | call | string | number
 	-> $1;
 
 backref = 
-	'$' { [0-9]+ } '?' {access} -> { type: 'backref', index: $1, collapse: true, access: $2, ...$meta },
-	'$' { [0-9]+ } {access} -> { type: 'backref', index: $1, collapse: false, access: $2, ...$meta };
+	'$' { indexStr } '?' {access} -> { type: 'backref', index: $1, collapse: true, access: $2, ...$meta },
+	'$' { indexStr } {access} -> { type: 'backref', index: $1, collapse: false, access: $2, ...$meta };
 
 constref = '$' { identifier } {access}
 	-> { type: 'constref', name: $1, access: $2, ...$meta };
 
-metaref = '@' { 'position' | 'length' }
+metaref = '@' { position | length }
 	-> { type: 'metaref', name: $1 };
+
+position = 'position' -> $0;
+length = 'length' -> $0;
 
 spread = '...' {backref|constref|object|array|string|call} 
 	-> { type: 'spread', value: $1, ...$meta };
@@ -163,8 +163,11 @@ dotAccess = '.' {identifier}
 bracketAccess = '[' _ {backref|constref|metaref|string|index} _ ']' 
 	-> { value: $1, ...$meta };
 
-index = [0-9]+
+index = indexStr
 	-> { type: 'number', value: $0 };
+
+indexStr = [0-9]+
+	-> $0;
 
 escape = 
 	'\\' { backref } -> $1,

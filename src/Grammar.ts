@@ -207,14 +207,11 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('capturePatterns', `{capturePattern} _ ( '|' _ {capturePattern} _ )*`,
 				{ patterns: ['$1', '...$2'] }),
 
-			ruleset('capturePattern', `( {captureToken} _ )+`,
-				{ type: 'pattern', tokens: '$1' }),
+			ruleset('capturePattern', `{captureToken}`,
+				{ type: 'pattern', tokens: ['$1'] }),
 
-			ruleset('captureToken', `{predicate} {captureGroup|string|class|ruleref|any} {modifier}`,
-				{ type: 'token', '...$3': '', '...$1': '', descriptor: '$2' }),
-
-			ruleset('captureGroup', `'(' _ {capturePatterns} _ ')'`,
-				{ type: 'group', '...$1': '' }),
+			ruleset('captureToken', `{ruleref}`,
+				{ type: 'token', and: false, not: false, repeat: false, required: true, descriptor: '$1' }),
 
 			ruleset('class', `'[' {classComponent}* ']'`,
 				{ type: 'class', ranges: '$1' }),
@@ -250,14 +247,17 @@ export function createUncompiledDezentGrammar():Grammar {
 				'$1'),
 
 			ruleset('backref', 
-				`'$' {[0-9]+} '?' {access}`, { type: 'backref', index: '$1', collapse: true, access: '$2', '...$meta': '' },
-				`'$' {[0-9]+} {access}`, { type: 'backref', index: '$1', collapse: false, access: '$2', '...$meta': '' }),
+				`'$' {indexStr} '?' {access}`, { type: 'backref', index: '$1', collapse: true, access: '$2', '...$meta': '' },
+				`'$' {indexStr} {access}`, { type: 'backref', index: '$1', collapse: false, access: '$2', '...$meta': '' }),
 
 			ruleset('constref', `'$' {identifier} {access}`,
 				{ type: 'constref', name: '$1', access: '$2', '...$meta': '' }),
 
-			ruleset('metaref', `'@' {'position'|'length'}`,
+			ruleset('metaref', `'@' {position|length}`,
 				{ type: 'metaref', name: '$1' }),
+
+			ruleset('position', `'position'`, '$0'),
+			ruleset('length', `'length'`, '$0'),
 
 			ruleset('spread', `'...' {backref|constref|object|array|string|call}`, 
 				{ type: 'spread', value: '$1', '...$meta': '' }),
@@ -304,8 +304,11 @@ export function createUncompiledDezentGrammar():Grammar {
 			ruleset('bracketAccess', `'[' _ {backref|constref|metaref|string|index} _ ']'`,
 				{ value: '$1', '...$meta': '' }),
 
-			ruleset('index', `[0-9]+`,
+			ruleset('index', `indexStr`,
 				{ type: 'number', value: '$0' }),
+
+			ruleset('indexStr', `[0-9]+`,
+				'$0'),
 
 			ruleset('escape', 
 				`'\\\\' {backref}`, '$1',
