@@ -276,18 +276,12 @@ export class OpcodeCompiler {
                 }
             case "capture":
                 { // new scope
-                    const useOutput = node.useOutput;
                     const captureIndex = node.index;
                     let id = cctx.currentRule.id;
-                    const newPass = useOutput ? 
-                        (ictx, buf) => { 
-                            ictx.captures.push({index: captureIndex, value: ictx.output});
-                            return pass; 
-                        }
-                        : (ictx, buf) => {
-                            ictx.captures.push({index: captureIndex, value: buf.substr(ictx.endPos - ictx.lastConsumed, ictx.lastConsumed)});
-                            return pass; 
-                        }
+                    const newPass = (ictx, buf) => { 
+                        ictx.captures.push({index: captureIndex, value: ictx.output});
+                        return pass; 
+                    }
                     
                     if (node.canFail) {
                         return this.compilePatterns(cctx, node, newPass, fail);

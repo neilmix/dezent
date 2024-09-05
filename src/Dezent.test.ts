@@ -199,9 +199,6 @@ test('capture and groups', () => {
     expectParseFail(`return (. .)+ -> 1;`, 'aaaaa');
     expectGrammarFail(`return {{.}} -> null;`);
     expectGrammarFail(`return {({.})} -> null;`);
-
-    // bug found during user testing
-    //expectParse(`return {bar} -> $1; bar = {foo|.} -> $1; foo = . -> 'y';`,'x').toEqual('y');
 });
 
 test('predicates', () => {
