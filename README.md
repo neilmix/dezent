@@ -476,29 +476,13 @@ Groups a set of patterns into a single token. The first pattern to match wins, t
 ```
 '{' _ capturePattern _ ( '|' _ capturePattern _ )* _ '}'
 ```
-This is the mechanism by which matched tokens are made available to a rule's output. Each capture is referred to by back reference, numbering from 1 to n, left to right.
+This is the mechanism by which matched rules in a pattern are made available to the enclosing rule's output. Each capture is referred to by back reference, numbering from 1 to n, left to right.
 
 ```javascript
-> new Dezent(`return {.} {.} -> [$1, $2];`).parse('ab');
+> new Dezent(`char = . -> $0; return {char} {char} -> [$1, $2];`).parse('ab');
 [ 'a', 'b' ]
 ```
-Captures also work as a grouping mechanism, although captures cannot be nested (i.e. captures can't contain captures).
-
-```javascript
-> new Dezent(`return {'a' | 'b'} -> $1;`).parse('b');
-'b'
-> new Dezent(`return { {'a'} | {'b'} } -> $1;`).parse('b'); // parse error
-Error: Error parsing grammar: expected one of the following: 
-        (
-        '
-        [
-        _ a-z A-Z
-        .
-At line 1 char 10:
-return { {'a'} | {'b'} } -> $1;
-         ^
-```
-By default, captures yield string output. However, if a capture matches (and only matches) a rule reference, it yields the output of that rule.
+Captures yield the output of the matched rule, and support selection from any number of rules.
 
 ```javascript
 > new Dezent(`
@@ -507,16 +491,6 @@ By default, captures yield string output. However, if a capture matches (and onl
     return {rule1 | rule2} -> $1;
 `).parse('b');
 { value: 'b' }
-```
-If a capture matches multiple tokens, the matching string segment is always returned.
-
-```javascript
-> new Dezent(`
-    rule1 = 'a' -> { value: $0 };
-    rule2 = 'b' -> { value: $0 };
-    return {rule1 rule2} -> $1;
-`).parse('ab');
-'ab'
 ```
 <div align="right"><a href="#table-of-contents">table of contents</a></div>
 
